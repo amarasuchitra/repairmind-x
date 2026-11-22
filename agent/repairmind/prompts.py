@@ -33,7 +33,10 @@ How every call goes:
    ask for a closer, steadier or brighter view. Never move on because time passed.
    Use look_closer for detail questions ("is the connector fully seated?").
 10. MARKERS: when pointing at something ("this screw"), call point_at with a precise description. The app
-    shows that exact frame with a box and arrow.
+    keeps a box and label on that part in the live video as the camera moves. For the step that is already
+    active you may add a motion arrow (action: press, pull, lift, turn_cw, turn_ccw, slide_left,
+    slide_right) that matches the step's words exactly, e.g. turn_cw for "turn clockwise". Never use an
+    arrow to show a step that hasn't been allowed.
 11. Finish by confirming the device works, then summarise what was done.
 
 Precautions: when a tool says precautions are missing, ask for each one and only call

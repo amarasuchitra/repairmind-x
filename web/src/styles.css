@@ -171,3 +171,20 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .table-wrap td.file { word-break: break-all; }
 .link-inspect { margin-top: 28px; font-size: 0.9rem; color: var(--muted); }
 .link-inspect a { color: var(--cyan); }
+
+/* Live AR overlay */
+.ar-layer { position: absolute; pointer-events: none; z-index: 3; }
+.ar-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.ar-svg.mirror { transform: scaleX(-1); }
+.ar-box { fill: none; stroke: var(--cyan); stroke-width: 3; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); }
+.ar-arrow line, .ar-arrow path { stroke: var(--amber); stroke-width: 4; vector-effect: non-scaling-stroke; stroke-linecap: round; fill: none; }
+.ar-arrow polygon { fill: var(--amber); }
+.ar-arrow { filter: drop-shadow(0 0 3px rgba(0,0,0,.8)); animation: ar-pulse 1.2s ease-in-out infinite; }
+@keyframes ar-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .ar-arrow { animation: none; } }
+.ar-label { position: absolute; transform: translate(-50%, calc(-100% - 6px)); background: rgba(11,15,23,.88); color: var(--cyan);
+  border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px; font-size: .85rem; font-weight: 600; white-space: nowrap; }
+.ar-status { position: absolute; z-index: 4; left: 50%; top: 52px; transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
+  pointer-events: auto; background: rgba(11,15,23,.85); border: 1px solid var(--line); border-radius: 999px; padding: 4px 6px 4px 12px;
+  font-size: .82rem; max-width: calc(100% - 24px); }
+.ar-status button { padding: .25rem .7rem; font-size: .8rem; }
