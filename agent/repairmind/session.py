@@ -103,6 +103,8 @@ class RepairSession:
     precautions_confirmed: list[str] = field(default_factory=list)
 
     steps: list[Step] = field(default_factory=list)
+    reviews: dict = field(default_factory=dict)  # normalised step text -> {"status", "reason"}
+    review_required: bool = True
     hazard_stop: str = ""
     escalated: bool = False
     escalation_reason: str = ""
@@ -238,6 +240,23 @@ class RepairSession:
     def missing_precautions(self) -> list[str]:
         return [p for p in self.precautions_required if p not in self.precautions_confirmed]
 
+    # ---------------------------------------------------------------- reviews
+    @staticmethod
+    def _key(text: str) -> str:
+        return re.sub(r"\W+", " ", text.lower()).strip()
+
+    def needs_review(self, text: str, source_kind: str) -> bool:
+        """Second-model cross-check before the first real step and every amber or irreversible step."""
+        if not self.review_required or source_kind == "general_safe":
+            return False
+        first_real = not any(s.source_kind != "general_safe" for s in self.steps)
+        level = safety.assess(text, base=self.assessment).level
+        return first_real or level >= RiskLevel.AMBER or bool(safety.irreversible_actions(text))
+
+    def record_review(self, text: str, status: str, reason: str) -> None:
+        self.reviews[self._key(text)] = {"status": status, "reason": reason}
+        self._record("review", text=text, status=status, reason=reason)
+
     # ------------------------------------------------------------------ steps
     def propose_step(self, text: str, source_kind: SourceKind, source_ref: str,
                      expected_result: str) -> GateResult:
@@ -296,6 +315,20 @@ class RepairSession:
             return GateResult(False, "Before this step the user must do these, and you must see them on camera: "
                               + "; ".join(safety.PRECAUTION_TEXT[p] for p in missing),
                               "precautions_missing", {"missing": missing})
+
+        if self.needs_review(text, source_kind):
+            review = self.reviews.get(self._key(text))
+            if review is None:
+                return GateResult(False, "This step needs the second-model cross-check first.", "needs_review")
+            if review["status"] == "unavailable":
+                return GateResult(False, "The cross-check is unavailable, so this step can't be given. Tell the "
+                                  "user, and offer a human expert. Reason: " + review["reason"], "review_unavailable")
+            if review["status"] == "escalate":
+                return GateResult(False, "The reviewer says this needs a human expert: " + review["reason"]
+                                  + " Call escalate.", "review_escalate")
+            if review["status"] != "approve":
+                return GateResult(False, "The reviewer disagreed: " + review["reason"] + " Gather what it asks "
+                                  "for, then try again. Do not pick a side.", "review_revise")
 
         step = Step(id=f"s{len(self.steps) + 1}", text=text, source_kind=source_kind, source_ref=source_ref,
                     risk=level.label, irreversible=irreversible, expected_result=expected_result)
@@ -422,7 +455,8 @@ class RepairSession:
             "confidence": self.diagnosis_confidence,
             "hypotheses": [{"cause": h.cause, "confidence": h.confidence} for h in self.hypotheses[:3]],
             "steps": [{"id": s.id, "text": s.text, "status": s.status, "risk": s.risk,
-                       "irreversible": s.irreversible, "source": s.source_ref or s.source_kind}
+                       "irreversible": s.irreversible, "source": s.source_ref or s.source_kind,
+                       "cross_checked": self.reviews.get(self._key(s.text), {}).get("status") == "approve"}
                       for s in self.steps],
             "hazard": self.hazard_stop,
             "escalated": self.escalated,

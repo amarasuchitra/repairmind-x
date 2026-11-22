@@ -1,4 +1,4 @@
-# RepairMind X: Phase 1 (live repair call MVP)
+# RepairMind X
 
 A live video call with an AI mechanic, on phone, tablet or desktop. The user points the camera at the
 broken thing and talks; the mechanic diagnoses by asking questions and running safe tests, then talks
@@ -23,16 +23,25 @@ Browser (phone / desktop)  ──WebRTC──>  LiveKit room  <──  Mechanic 
 | Token server | `agent/repairmind/token_server.py` | Issues LiveKit join tokens, dispatches the mechanic, and lets a dropped call resume in the same room. |
 | Web app | `web/` | React + LiveKit. Safety and privacy notice, rear camera by default, camera switch, mute, live captions, agent state, risk banner, diagnosis with confidence, precautions and step checklist, freeze-frame arrows, hazard and refusal alerts, resume last repair. Installable as a PWA. |
 
+## Phase 2: grounded steps
+
+| Part | Where | What it does |
+|---|---|---|
+| Second-model cross-check | `agent/repairmind/reviewer.py` | Before the first repair step and every amber or irreversible step, Claude (a different model from the Gemini voice) reviews the evidence, the step, its source excerpt and the latest camera frame. It answers approve, revise or escalate. If it disagrees, the step is blocked. If it can't run (no key, network, refusal), risky steps are blocked: it fails closed. |
+| Speech guard | `agent/repairmind/speech_guard.py` | Reads every finished mechanic utterance. If it gave a hands-on instruction with no active step, an irreversible action without confirmation, or anything for a red-level job, the agent interrupts itself and corrects out loud. |
+| Service manuals | `agent/repairmind/manuals.py`, `POST /api/manual` | Upload the device's PDF manual during the call ("Add manual" button). It is split into page-tagged passages and searched with BM25, so steps cite "manual p.N". |
+| Full-resolution frames | `agent/repairmind/frames.py` | Keeps the newest full camera frame for the reviewer (and Phase 3 close-ups). |
+
 ## Run it
 
-You need: a free LiveKit Cloud project (URL, API key, secret) and a Google AI Studio API key.
+You need: a free LiveKit Cloud project (URL, API key, secret), a Google AI Studio API key, and an Anthropic API key for the cross-check.
 
 ```bash
 # 1. Agent + token server
 cd agent
 cp .env.example .env            # fill in the keys
 uv venv && uv pip install -e ".[dev]"
-.venv/bin/python -m pytest      # 60 tests
+.venv/bin/python -m pytest
 .venv/bin/python -m repairmind.agent dev          # terminal 1: the mechanic
 .venv/bin/uvicorn repairmind.token_server:app --port 8000   # terminal 2
 
@@ -50,11 +59,13 @@ static host) or use a tunnel such as `cloudflared tunnel --url http://localhost:
 - **Not yet tested against live services.** The safety rules, gates and token server are covered by
   unit tests, and the web app builds. The end-to-end call needs the LiveKit and Gemini keys, and the
   iFixit lookup was not reachable from the build machine.
-- **The model could still say a step without calling the tool.** The prompt forbids it and the
-  checklist only shows gated steps; Phase 2 adds a check on the mechanic's own speech and a second
-  model cross-checking the plan.
+- **The speech guard acts after the sentence is spoken.** It interrupts and corrects within about a
+  second, but the words were already heard. It also allows any instruction while a step is active.
 - **Markers use freeze-frame.** The arrow is drawn on a still frame, because the live camera moves.
   Coordinates come from the model and can be off; tracking comes in Phase 3.
 - **iFixit licence.** Guides are CC BY-NC-SA. Fine for this prototype; a commercial launch needs
   iFixit's paid API plan, and their content may not be used to train models.
 - **Safety keywords are English only** for now.
+- **Manuals must have a text layer.** Scanned PDFs are rejected; OCR would come later.
+- **The token server and agent share a disk** for uploaded manuals, so run them on the same machine
+  (or point `RMX_SESSIONS_DIR` at shared storage).
