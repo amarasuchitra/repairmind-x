@@ -45,3 +45,34 @@ export const TOPIC_STATE = "rmx.state";
 export const TOPIC_MARKER = "rmx.marker";
 export const TOPIC_ALERT = "rmx.alert";
 export const TOPIC_ESCALATION = "rmx.escalation";
+
+export const TOPIC_3D = "rmx.3d";
+
+export interface Step3D {
+  product_id: string;
+  procedure_id: string;
+  step_id: string;
+  highlight: string[];
+  move: Record<string, number[]>;
+  hide: string[];
+  caption: string;
+  illustrative: boolean;
+}
+
+export interface Part3D {
+  name: string;
+  label: string;
+  shape: "box" | "cylinder" | "sphere" | "torus";
+  size: number[];
+  position: number[];
+  rotation: number[];
+  color: string;
+}
+
+export interface Product3D {
+  id: string;
+  name: string;
+  illustrative: boolean;
+  model_url: string;
+  parts: Part3D[];
+}

@@ -17,6 +17,7 @@ from livekit import api
 from pydantic import BaseModel
 
 from .agent import AGENT_NAME, SESSIONS_DIR
+from .expert import products as expert_products
 from .manuals import ManualIndex, manual_path
 
 load_dotenv()
@@ -48,6 +49,22 @@ class TokenResponse(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True}
+
+
+@app.get("/api/products/{product_id}")
+def product(product_id: str) -> dict:
+    """Public product data for the 3D viewer: parts and the steps' highlight/move/hide (no detector paths)."""
+    p = expert_products.load_all().get(product_id)
+    if p is None:
+        raise HTTPException(404, "unknown product")
+    procs = expert_products.usable_procedures(p)
+    return {
+        "id": p.id, "name": p.name, "illustrative": p.illustrative_3d, "model_url": p.model_url,
+        "parts": [part.model_dump() for part in p.parts],
+        "procedures": [{"id": pr.id, "title": pr.title, "reviewed": pr.reviewed,
+                        "steps": [{"id": st.id, "text": st.text, "highlight": st.highlight, "move": st.move,
+                                   "hide": st.hide} for st in pr.steps]} for pr in procs],
+    }
 
 
 @app.post("/api/token", response_model=TokenResponse)

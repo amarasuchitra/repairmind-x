@@ -1,0 +1,60 @@
+# EXAMPLE product for demos and tests. It is not a real model, its procedure has NOT been reviewed by a
+# qualified technician, and its 3D model is illustrative. It only loads with RMX_ALLOW_UNREVIEWED=1.
+# Copy this folder to add a real product: replace the patterns, parts (or set model_url to a GLB made
+# from real CAD), procedures and their source, and have a qualified person fill reviewed_by/reviewed_on.
+id: example-desk-fan
+name: Example 30 cm desk fan
+category: desk fan
+brands: [Example]
+model_patterns: ["EX-?DF30.*"]
+illustrative_3d: true
+model_url: ""
+parts:
+  - {name: base, label: Base, shape: cylinder, size: [1.4, 1.4, 0.15], position: [0, 0, 0], color: "#4b5568"}
+  - {name: stand, label: Stand, shape: cylinder, size: [0.12, 0.12, 1.6], position: [0, 0.85, 0], color: "#6b768a"}
+  - {name: motor, label: Motor housing, shape: cylinder, size: [0.45, 0.45, 0.6], position: [0, 1.75, -0.15], rotation: [1.5708, 0, 0], color: "#8a96a8"}
+  - {name: rear_guard, label: Rear guard, shape: torus, size: [1.0, 0.03], position: [0, 1.75, 0.2], color: "#c7d0dc"}
+  - {name: blade, label: Blade, shape: cylinder, size: [0.9, 0.9, 0.04], position: [0, 1.75, 0.35], rotation: [1.5708, 0, 0], color: "#38d6e8"}
+  - {name: blade_cap, label: Blade cap (left-hand thread), shape: cylinder, size: [0.12, 0.12, 0.12], position: [0, 1.75, 0.43], rotation: [1.5708, 0, 0], color: "#f5b544"}
+  - {name: front_guard, label: Front guard, shape: torus, size: [1.0, 0.03], position: [0, 1.75, 0.5], color: "#c7d0dc"}
+  - {name: guard_clip, label: Guard clips, shape: box, size: [0.12, 0.08, 0.1], position: [0, 0.78, 0.35], color: "#f5b544"}
+detector: null
+procedures:
+  - id: clean-blade
+    title: Clean a wobbling or noisy blade
+    fault: Dust build-up or a loose blade makes the fan wobble or rattle
+    symptoms: [wobble, rattling, noisy, clicking, dusty blade]
+    source: "Illustrative example procedure (not from a manufacturer manual)"
+    reviewed_by: ""
+    reviewed_on: ""
+    steps:
+      - id: s1
+        text: Switch the fan off and unplug it from the wall.
+        expected_result: The plug is out of the socket and the blade is not moving.
+        precautions: [unplugged]
+        highlight: [base]
+      - id: s2
+        text: Undo the guard clips and lift the front guard off.
+        expected_result: The front guard is off and the blade is visible.
+        tools: []
+        highlight: [guard_clip, front_guard]
+        move: {front_guard: [0, 0, 0.9], guard_clip: [0, -0.3, 0.5]}
+      - id: s3
+        text: Turn the blade cap clockwise to loosen it, because it has a left-hand thread, then take it off.
+        expected_result: The blade cap is off and the centre of the blade is visible.
+        caution: Turning it the usual way tightens it.
+        highlight: [blade_cap]
+        move: {front_guard: [0, 0, 0.9], guard_clip: [0, -0.3, 0.5], blade_cap: [0, 0, 1.4]}
+      - id: s4
+        text: Slide the blade off the shaft and wipe both sides with a damp cloth, then dry it.
+        expected_result: The blade is clean and dry, with no cracks.
+        highlight: [blade]
+        move: {front_guard: [0, 0, 0.9], guard_clip: [0, -0.3, 0.5], blade_cap: [0, 0, 1.4], blade: [0, 0, 0.9]}
+      - id: s5
+        text: Refit the blade, tighten the blade cap anticlockwise by hand, and refit the front guard and clips.
+        expected_result: The guard is closed all round and the blade spins freely by hand.
+        highlight: [blade, blade_cap, front_guard]
+      - id: s6
+        text: Plug the fan in and run it on the lowest speed.
+        expected_result: The fan runs smoothly without wobble or rattling.
+        highlight: [motor]
