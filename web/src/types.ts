@@ -32,6 +32,8 @@ export interface Marker {
   w: number;
   h: number;
   label: string;
+  precise?: boolean;
+  image?: string; // the exact frame the mechanic analysed, as a data URL
 }
 
 export interface Alert {
