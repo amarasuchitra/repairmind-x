@@ -1,395 +1,353 @@
 import { useEffect, useRef } from "react";
+import * as THREE from "three";
 import { prefersReducedMotion } from "../fx/motion";
+import { additive, arcMesh, createStage, glowTexture, radialBlocks, webglAvailable } from "../fx/gl/core";
+import { NOISE3D } from "../fx/gl/noise";
+import { VoiceOrb2D } from "./VoiceOrb2D";
 
 export type OrbState = "idle" | "connecting" | "listening" | "thinking" | "speaking";
 
-const RGB: Record<OrbState, string> = {
-  speaking: "70,226,255",
-  listening: "62,207,142",
-  thinking: "150,130,255",
-  connecting: "90,160,220",
-  idle: "70,200,255",
+const HEX: Record<OrbState, number> = {
+  speaking: 0x48e6ff,
+  listening: 0x3ee8a0,
+  thinking: 0x9a86ff,
+  connecting: 0x4f8fd8,
+  idle: 0x48d2ff,
 };
 
-/**
- * The mechanic's presence: a layered instrument dial drawn on canvas, driven by audio.
- *
- * From the outside in: a slow tick dial, counter-rotating bracket arcs, a radial spectrum of the
- * voice, an oscilloscope ring that ripples with it, an aperture of six blades that opens as the
- * voice gets louder, and a bright core with a rotating hexagon. The "full" detail level (used at
- * large sizes) adds a calibrated scale arc and a side level meter.
- *
- * Speaking follows the mechanic's voice, listening follows your mic (green), thinking sweeps a
- * violet scanner, connecting chases two arcs. State is also exposed as text for screen readers.
- */
-export function VoiceOrb({
-  state,
-  bands,
-  size = 96,
-  detail,
-  voice,
-}: {
+interface Props {
   state: OrbState;
   bands: number[];
   size?: number;
   detail?: "compact" | "full";
   /** Optional per-frame band source (used by demos) instead of the bands prop. */
   voice?: () => number[];
-}) {
+}
+
+/**
+ * The mechanic's presence, rendered in WebGL with bloom.
+ *
+ * A cluster of instrument layers sits at different depths on a tilted plane, so the camera sees it
+ * in perspective and the layers parallax as it sways. At the centre is a plasma core: a sphere whose
+ * surface is displaced by 3D noise in proportion to the voice, with a Fresnel rim and a hot inner
+ * light. Around it a shell of particles breathes with the frequency bands, a radial spectrum follows
+ * the voice, aperture blades open with loudness, and segment meters light up block by block.
+ *
+ * Cyan while the mechanic speaks (its own audio), green while it listens (your mic), violet with a
+ * scanning sweep while it thinks. Falls back to the 2D canvas dial without WebGL.
+ */
+export function VoiceOrb(props: Props) {
+  const ok = useRef<boolean | null>(null);
+  if (ok.current === null) ok.current = webglAvailable();
+  return ok.current ? <VoiceOrbGL {...props} /> : <VoiceOrb2D {...props} />;
+}
+
+function VoiceOrbGL({ state, bands, size = 96, detail, voice }: Props) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const bandsRef = useRef<number[]>(bands);
-  const stateRef = useRef<OrbState>(state);
-  const voiceRef = useRef(voice);
-  bandsRef.current = bands;
-  stateRef.current = state;
-  voiceRef.current = voice;
+  const live = useRef({ state, bands, voice });
+  live.current = { state, bands, voice };
   const full = (detail ?? (size >= 180 ? "full" : "compact")) === "full";
 
   useEffect(() => {
     const canvas = ref.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.round(size * dpr);
-    canvas.height = Math.round(size * dpr);
+    if (!canvas) return;
     const reduced = prefersReducedMotion();
-    const N = full ? 96 : 60;
-    const bars = new Float32Array(N);
+    const pr = Math.min(window.devicePixelRatio || 1, 2);
+    let stage: ReturnType<typeof createStage>;
+    try {
+      stage = createStage({
+        canvas,
+        fov: 32,
+        pixelRatio: pr,
+        bloom: full ? { strength: 1.1, radius: 0.0, threshold: 0.42 } : { strength: 0.9, radius: 0.0, threshold: 0.4 },
+        bloomFactors: [1.0, 0.7, 0.22, 0.04, 0.0],
+        grade: { vignette: 0, grain: 0, aberration: full ? 0.0025 : 0, lift: [0, 0, 0] },
+      });
+    } catch {
+      return;
+    }
+    const { scene, camera } = stage;
+    stage.resize(size, size);
+    camera.position.set(0, 0, full ? 10.6 : 7.6);
+
+    const colour = new THREE.Color(HEX[live.current.state]);
+    const white = new THREE.Color(0xeafcff);
+    const rig = new THREE.Group();
+    scene.add(rig);
+    const tilt = new THREE.Group();
+    rig.add(tilt);
+    tilt.rotation.set(full ? -0.48 : -0.25, full ? 0.42 : 0.15, 0);
+
+    const mats: { m: THREE.Material & { color?: THREE.Color }; k: number }[] = [];
+    const tinted = (k: number, opacity = 1) => {
+      const m = additive(colour.clone(), opacity);
+      mats.push({ m, k });
+      return m;
+    };
+
+    /* ---- core ---- */
+    const BANDS = 16;
+    const coreU = {
+      uTime: { value: 0 },
+      uLevel: { value: 0 },
+      uColor: { value: colour.clone() },
+      uBands: { value: new Array(BANDS).fill(0) },
+    };
+    const core = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.78, full ? 24 : 12),
+      new THREE.ShaderMaterial({
+        uniforms: coreU,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          ${NOISE3D}
+          uniform float uTime, uLevel;
+          varying vec3 vN; varying vec3 vView; varying float vDisp;
+          void main() {
+            float n = snoise(position * 1.7 + vec3(0.0, uTime * 0.35, uTime * 0.2));
+            float n2 = snoise(position * 4.2 - vec3(uTime * 0.6));
+            float d = n * (0.04 + uLevel * 0.3) + n2 * (0.015 + uLevel * 0.08);
+            vDisp = d;
+            vec3 p = position + normal * d;
+            vec4 mv = modelViewMatrix * vec4(p, 1.0);
+            vN = normalize(normalMatrix * normal);
+            vView = normalize(-mv.xyz);
+            gl_Position = projectionMatrix * mv;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform vec3 uColor; uniform float uLevel;
+          varying vec3 vN; varying vec3 vView; varying float vDisp;
+          void main() {
+            float f = 1.0 - max(dot(normalize(vN), normalize(vView)), 0.0);
+            float rim = pow(f, 2.2);
+            float facing = pow(1.0 - f, 3.0);
+            vec3 col = uColor * (rim * (0.9 + uLevel * 1.4) + 0.015) + vec3(0.85, 0.97, 1.0) * pow(1.0 - f, 8.0) * (0.04 + uLevel * 0.25);
+            col += uColor * max(vDisp, 0.0) * 2.0 * rim;
+            gl_FragColor = vec4(col, 1.0);
+          }
+        `,
+      }),
+    );
+    tilt.add(core);
+    const coreGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: white, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+    coreGlow.scale.setScalar(1.6);
+    tilt.add(coreGlow);
+
+    /* ---- particle shell ---- */
+    const PN = full ? 1400 : 500;
+    const pPos = new Float32Array(PN * 3);
+    const pSeed = new Float32Array(PN);
+    for (let i = 0; i < PN; i++) {
+      // fibonacci sphere: an even, non-random distribution reads as engineered
+      const y = 1 - (i / (PN - 1)) * 2;
+      const r = Math.sqrt(1 - y * y);
+      const th = i * 2.399963;
+      pPos.set([Math.cos(th) * r, y, Math.sin(th) * r], i * 3);
+      pSeed[i] = Math.random();
+    }
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute("position", new THREE.BufferAttribute(pPos, 3));
+    pGeo.setAttribute("seed", new THREE.BufferAttribute(pSeed, 1));
+    const shellU = { uTime: coreU.uTime, uLevel: coreU.uLevel, uColor: coreU.uColor, uBands: coreU.uBands, uPx: { value: pr * (full ? 1 : 0.8) } };
+    const shell = new THREE.Points(
+      pGeo,
+      new THREE.ShaderMaterial({
+        uniforms: shellU,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        vertexShader: /* glsl */ `
+          ${NOISE3D}
+          uniform float uTime, uLevel, uPx; uniform float uBands[${BANDS}];
+          attribute float seed; varying float vA;
+          void main() {
+            float lat = acos(clamp(position.y, -1.0, 1.0)) / 3.14159;
+            int bi = int(clamp(abs(lat - 0.5) * 2.0 * ${BANDS - 1}.0, 0.0, ${BANDS - 1}.0));
+            float b = 0.0;
+            for (int i = 0; i < ${BANDS}; i++) if (i == bi) b = uBands[i];
+            float n = snoise(position * 2.3 + uTime * 0.3);
+            float r = 1.22 + n * 0.05 + b * 0.55 + uLevel * 0.12;
+            vec4 mv = modelViewMatrix * vec4(position * r, 1.0);
+            vA = 0.06 + b * 0.3 + 0.35 * step(0.96, fract(seed + uTime * 0.15));
+            gl_PointSize = uPx * (1.2 + b * 2.0) * (6.0 / -mv.z);
+            gl_Position = projectionMatrix * mv;
+          }
+        `,
+        fragmentShader: /* glsl */ `
+          uniform vec3 uColor; varying float vA;
+          void main() {
+            float d = length(gl_PointCoord - 0.5);
+            if (d > 0.5) discard;
+            gl_FragColor = vec4(mix(uColor, vec3(0.9, 0.98, 1.0), 0.35) * vA * smoothstep(0.5, 0.0, d), 1.0);
+          }
+        `,
+      }),
+    );
+    tilt.add(shell);
+
+    /* ---- flat instrument layers, each at its own depth ---- */
+    const layer = (z: number) => {
+      const g = new THREE.Group();
+      g.position.z = z;
+      tilt.add(g);
+      return g;
+    };
+
+    // aperture blades
+    const blades = layer(0.05);
+    for (let k = 0; k < 6; k++) blades.add(arcMesh(1.0, 0.13, (k / 6) * Math.PI * 2, 0.78, tinted(1, 0.55), 48));
+    // thin inner ring
+    const inner = layer(0.12);
+    inner.add(arcMesh(1.12, 0.012, 0, Math.PI * 2, tinted(1, 0.9)));
+
+    // radial spectrum
+    const SPEC = full ? 96 : 64;
+    const blocks = (m: THREE.InstancedMesh, k = 1) => {
+      mats.push({ m: m.material as THREE.MeshBasicMaterial, k });
+      return m;
+    };
+    const spec = radialBlocks(SPEC, 1.62, 1, full ? 0.028 : 0.04, 0xffffff);
+    (spec.material as THREE.MeshBasicMaterial).opacity = 0.95;
+    const specL = layer(0);
+    specL.add(spec);
+    const specVal = new Float32Array(SPEC);
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3();
+    const Z = new THREE.Vector3(0, 0, 1);
+
+    // dashed ring and tick dial
+    const ticksL = layer(-0.18);
+    ticksL.add(blocks(radialBlocks(full ? 144 : 72, 2.18, 0.07, 0.014, 0xffffff), 0.55));
+    ticksL.add(blocks(radialBlocks(full ? 24 : 12, 2.12, 0.15, 0.03, 0xffffff), 1));
+    const dash = layer(0.22);
+    dash.add(blocks(radialBlocks(60, 1.36, 0.04, 0.055, 0xffffff, { skip: (i) => i % 5 === 4 }), 0.7));
+
+    // bracket arcs (counter-rotating), with heavy end caps
+    const brackets = layer(0.32);
+    for (let k = 0; k < 4; k++) {
+      const a0 = k * (Math.PI / 2) + 0.2, len = k % 2 ? 0.8 : 1.05;
+      brackets.add(arcMesh(1.95, 0.03, a0, len, tinted(1, 1)));
+      brackets.add(arcMesh(1.95, 0.11, a0, 0.05, tinted(1, 1)));
+      brackets.add(arcMesh(1.95, 0.11, a0 + len - 0.05, 0.05, tinted(1, 1)));
+    }
+
+    // scanner sweep for "thinking"
+    const sweepMat = additive(colour.clone(), 0);
+    mats.push({ m: sweepMat, k: 1 });
+    const sweep = arcMesh(1.65, 0.62, 0, 0.7, sweepMat, 32);
+    sweep.position.z = 0.02;
+    tilt.add(sweep);
+
+    // full detail: outer scale with ticks, segment meter, and side readouts
+    let meter: THREE.InstancedMesh | null = null;
+    const METER = 22;
+    const meterLit = new THREE.Color(), meterDim = new THREE.Color();
+    if (full) {
+      const outer = layer(-0.5);
+      outer.add(arcMesh(2.75, 0.012, Math.PI * 0.18, Math.PI * 0.64, tinted(0.7, 0.7)));
+      outer.add(blocks(radialBlocks(13, 2.75, 0.14, 0.018, 0xffffff, { arc: Math.PI * 0.64, start: Math.PI * 0.18 }), 0.9));
+      outer.add(blocks(radialBlocks(61, 2.75, 0.07, 0.01, 0xffffff, { arc: Math.PI * 0.64, start: Math.PI * 0.18 }), 0.5));
+      outer.add(arcMesh(2.95, 0.05, Math.PI * 0.2, Math.PI * 0.1, tinted(1, 0.8)));
+      const m = layer(-0.3);
+      meter = radialBlocks(METER, 2.4, 0.26, 0.11, colour, { arc: 1.25, start: -0.62 });
+      m.add(meter);
+      const left = layer(-0.25);
+      left.add(arcMesh(2.42, 0.02, Math.PI - 0.5, 1.0, tinted(0.6, 0.6)));
+      left.add(blocks(radialBlocks(9, 2.5, 0.08, 0.05, 0xffffff, { arc: 0.8, start: Math.PI - 0.4 }), 0.8));
+    }
+
+    /* ---- animation ---- */
+    const raw = new Float32Array(BANDS);
+    const sm = new Float32Array(BANDS);
     let level = 0, t = 0, last = 0, raf = 0;
-    let colour = RGB[stateRef.current].split(",").map(Number);
+    const target = new THREE.Color();
 
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
       last = now;
-      if (canvas.offsetParent === null) return; // hidden by layout: don't spend the battery
+      if (canvas.offsetParent === null) return; // hidden by layout
       if (!reduced) t += dt;
-      const st = stateRef.current;
-      // ease the colour between states instead of snapping
-      const target = RGB[st].split(",").map(Number);
-      colour = colour.map((c, i) => c + (target[i] - c) * Math.min(1, dt * 6));
-      const rgb = colour.map((c) => Math.round(c)).join(",");
-
-      const live = voiceRef.current ? voiceRef.current() : bandsRef.current;
-      const src = live.length ? live : [0];
-      const gain = st === "speaking" ? 1 : st === "listening" ? 0.7 : 0;
+      const { state: st, bands: b, voice: v } = live.current;
+      const src = v ? v() : b;
+      const gain = st === "speaking" ? 1 : st === "listening" ? 0.75 : 0;
       let sum = 0;
-      for (let i = 0; i < N; i++) {
-        // mirror the bands around the ring so it's balanced left/right
-        const k = i < N / 2 ? i : N - 1 - i;
-        const v = (src[Math.floor((k / (N / 2)) * src.length) % src.length] ?? 0) * gain;
-        const shimmer = 0.03 * (Math.sin(t * 7 + i * 0.9) + 1) * (gain > 0 ? 1 : 0.4);
-        const targetV = Math.min(1, v * 2.6 + shimmer);
-        bars[i] += (targetV - bars[i]) * (targetV > bars[i] ? 0.5 : 0.12);
-        sum += bars[i];
+      for (let i = 0; i < BANDS; i++) {
+        const x = src.length ? src[Math.floor((i / BANDS) * src.length)] ?? 0 : 0;
+        raw[i] = Math.min(1, x * 2.0 * gain);
+        sm[i] += (raw[i] - sm[i]) * (raw[i] > sm[i] ? 0.45 : 0.1);
+        sum += sm[i];
+        coreU.uBands.value[i] = sm[i];
       }
-      let target01 = sum / N;
-      if (st === "idle" || st === "connecting") target01 = 0.08 + 0.05 * Math.sin(t * 1.6);
-      if (st === "thinking") target01 = 0.12 + 0.06 * Math.sin(t * 4);
-      level += (target01 - level) * (target01 > level ? 0.35 : 0.08);
-      draw(ctx, size, dpr, t, st, rgb, bars, Math.min(1, level * 1.6), full);
+      let lv = sum / BANDS;
+      if (st === "idle" || st === "connecting") lv = 0.06 + 0.04 * Math.sin(t * 1.5);
+      if (st === "thinking") lv = 0.1 + 0.05 * Math.sin(t * 5);
+      level += (lv - level) * (lv > level ? 0.3 : 0.07);
+      const L = Math.min(1, level * 1.3);
+      coreU.uTime.value = t;
+      coreU.uLevel.value = L;
+
+      target.setHex(HEX[st]);
+      colour.lerp(target, Math.min(1, dt * 5));
+      coreU.uColor.value.copy(colour);
+      for (const { m, k } of mats) m.color?.copy(colour).multiplyScalar(k);
+      (spec.material as THREE.MeshBasicMaterial).color.copy(colour);
+
+      // spectrum bars: mirrored around the ring
+      for (let i = 0; i < SPEC; i++) {
+        const k = i < SPEC / 2 ? i : SPEC - 1 - i;
+        const bi = Math.floor((k / (SPEC / 2)) * BANDS) % BANDS;
+        const shimmer = 0.025 * (Math.sin(t * 6 + i * 0.8) + 1);
+        specVal[i] += (sm[bi] + shimmer - specVal[i]) * 0.5;
+        const a = (i / SPEC) * Math.PI * 2 + Math.PI / 2;
+        pv.set(Math.cos(a) * 1.62, Math.sin(a) * 1.62, 0);
+        q.setFromAxisAngle(Z, a - Math.PI / 2);
+        sv.set(1, 0.04 + specVal[i] * 0.42, 1);
+        mtx.compose(pv, q, sv);
+        spec.setMatrixAt(i, mtx);
+      }
+      spec.instanceMatrix.needsUpdate = true;
+
+      if (meter) {
+        meterDim.copy(colour).multiplyScalar(0.12);
+        meterLit.copy(colour).lerp(white, 0.25);
+        for (let i = 0; i < METER; i++) meter.setColorAt(i, i / METER < L * 1.1 ? meterLit : meterDim);
+        if (meter.instanceColor) meter.instanceColor.needsUpdate = true;
+      }
+
+      blades.rotation.z = -t * 0.35 + L * 0.8;
+      blades.scale.setScalar(1 + L * 0.12);
+      inner.rotation.z = t * 0.2;
+      ticksL.rotation.z = t * 0.05;
+      dash.rotation.z = t * 0.45;
+      brackets.rotation.z = -t * (st === "connecting" ? 2.2 : 0.3);
+      sweep.rotation.z = -t * 3.2;
+      sweepMat.opacity += ((st === "thinking" ? 0.55 : 0) - sweepMat.opacity) * Math.min(1, dt * 6);
+      shell.rotation.y = t * 0.12;
+      core.rotation.y = t * 0.2;
+      coreGlow.scale.setScalar(0.55 + L * 0.9);
+      (coreGlow.material as THREE.SpriteMaterial).opacity = 0.45 + L * 0.5;
+      // the whole cluster sways a little in 3D so the depth reads
+      rig.rotation.y = Math.sin(t * 0.35) * 0.18;
+      rig.rotation.x = Math.cos(t * 0.27) * 0.08;
+
+      stage.render(t);
     };
     raf = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      stage.dispose();
+    };
   }, [size, full]);
 
   return (
     <canvas
       ref={ref}
-      className={`orb orb-${state}`}
+      className={`orb orb-gl orb-${state}`}
       style={{ width: size, height: size }}
       role="img"
       aria-label={`Mechanic is ${state}`}
     />
   );
-}
-
-const TAU = Math.PI * 2;
-
-function draw(
-  ctx: CanvasRenderingContext2D,
-  size: number,
-  dpr: number,
-  t: number,
-  st: OrbState,
-  rgb: string,
-  bars: Float32Array,
-  L: number,
-  full: boolean,
-) {
-  const R = size / 2;
-  const lw = Math.max(1, R / 90); // base line width that stays crisp at small sizes
-  const c = (a: number) => `rgba(${rgb},${Math.max(0, Math.min(1, a)).toFixed(3)})`;
-  ctx.setTransform(dpr, 0, 0, dpr, R * dpr, R * dpr);
-  ctx.clearRect(-R, -R, size, size);
-  ctx.globalCompositeOperation = "lighter";
-  ctx.lineCap = "butt";
-
-  // halo
-  const halo = ctx.createRadialGradient(0, 0, R * 0.2, 0, 0, R * (0.78 + 0.2 * L));
-  halo.addColorStop(0, c(0.22 + 0.4 * L));
-  halo.addColorStop(0.5, c(0.06 + 0.12 * L));
-  halo.addColorStop(1, c(0));
-  ctx.fillStyle = halo;
-  ctx.beginPath();
-  ctx.arc(0, 0, R, 0, TAU);
-  ctx.fill();
-
-  const ring = (r: number, a0: number, a1: number, w: number, a: number, glow = true) => {
-    ctx.beginPath();
-    ctx.arc(0, 0, r, a0, a1);
-    if (glow) {
-      ctx.lineWidth = w * 3.2;
-      ctx.strokeStyle = c(a * 0.13);
-      ctx.stroke();
-    }
-    ctx.lineWidth = w;
-    ctx.strokeStyle = c(a);
-    ctx.stroke();
-  };
-
-  // outer tick dial
-  const rTick = full ? 0.86 : 0.95;
-  ctx.save();
-  ctx.rotate(t * 0.06);
-  const ticks = full ? 144 : 72;
-  for (let i = 0; i < ticks; i++) {
-    const a = (i / ticks) * TAU;
-    const major = i % (full ? 12 : 6) === 0;
-    const r0 = R * rTick, r1 = R * (rTick - (major ? 0.06 : 0.03));
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
-    ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1);
-    ctx.lineWidth = major ? lw * 1.4 : lw * 0.8;
-    ctx.strokeStyle = c(major ? 0.75 : 0.32);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  if (full) scaleAndMeter(ctx, R, lw, c, L, t);
-
-  // counter-rotating bracket arcs with end caps
-  const rBr = R * (full ? 0.79 : 0.87);
-  ctx.save();
-  ctx.rotate(-t * 0.35);
-  for (let q = 0; q < 4; q++) {
-    const a0 = q * (TAU / 4) + 0.18, a1 = a0 + (q % 2 ? 0.9 : 1.15);
-    ring(rBr, a0, a1, lw * 1.6, 0.8);
-    for (const a of [a0, a1]) {
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * (rBr - R * 0.035), Math.sin(a) * (rBr - R * 0.035));
-      ctx.lineTo(Math.cos(a) * (rBr + R * 0.035), Math.sin(a) * (rBr + R * 0.035));
-      ctx.lineWidth = lw * 1.4;
-      ctx.strokeStyle = c(0.9);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-
-  if (st === "connecting") {
-    ctx.save();
-    ctx.rotate(t * 3);
-    ring(rBr, 0, 0.9, lw * 2.4, 0.9);
-    ring(rBr, Math.PI, Math.PI + 0.9, lw * 2.4, 0.9);
-    ctx.restore();
-  }
-
-  // radial spectrum
-  const r0 = R * (full ? 0.56 : 0.6);
-  const maxLen = R * (full ? 0.19 : 0.24);
-  ctx.lineCap = "round";
-  for (let i = 0; i < bars.length; i++) {
-    const a = (i / bars.length) * TAU - Math.PI / 2;
-    const v = bars[i];
-    const len = R * 0.025 + v * maxLen;
-    const cs = Math.cos(a), sn = Math.sin(a);
-    ctx.beginPath();
-    ctx.moveTo(cs * r0, sn * r0);
-    ctx.lineTo(cs * (r0 + len), sn * (r0 + len));
-    ctx.lineWidth = lw * (full ? 3.6 : 3.2);
-    ctx.strokeStyle = c(0.1 + v * 0.18);
-    ctx.stroke();
-    ctx.lineWidth = lw * (full ? 1.5 : 1.6);
-    ctx.strokeStyle = c(0.45 + v * 0.55);
-    ctx.stroke();
-    if (v > 0.55) {
-      ctx.fillStyle = `rgba(235,252,255,${((v - 0.55) * 1.8).toFixed(3)})`;
-      ctx.beginPath();
-      ctx.arc(cs * (r0 + len), sn * (r0 + len), lw * 1.1, 0, TAU);
-      ctx.fill();
-    }
-  }
-  ctx.lineCap = "butt";
-
-  // oscilloscope ring: two traces with different phase for depth
-  const rw = R * (full ? 0.5 : 0.53);
-  for (let pass = 0; pass < 2; pass++) {
-    ctx.beginPath();
-    const steps = 120;
-    for (let s = 0; s <= steps; s++) {
-      const a = (s / steps) * TAU;
-      const bi = Math.floor((s / steps) * bars.length) % bars.length;
-      const wob =
-        Math.sin(a * 6 + t * (pass ? -2.2 : 3.1)) * 0.5 + Math.sin(a * 11 - t * 4.3 + pass) * 0.3 + bars[bi] * 0.9;
-      const r = rw + wob * R * 0.035 * (0.25 + L * 1.6);
-      const x = Math.cos(a) * r, y = Math.sin(a) * r;
-      if (s === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.lineWidth = lw * (pass ? 0.8 : 1.2);
-    ctx.strokeStyle = c(pass ? 0.35 : 0.75);
-    ctx.stroke();
-  }
-
-  // dashed rotating ring
-  ctx.save();
-  ctx.rotate(t * 0.5);
-  ctx.setLineDash([R * 0.02, R * 0.03]);
-  ring(R * 0.455, 0, TAU, lw, 0.5, false);
-  ctx.setLineDash([]);
-  ctx.restore();
-
-  // aperture: six blades that open with the voice
-  const bIn = R * 0.3, bOut = R * 0.42;
-  ctx.save();
-  ctx.rotate(-t * 0.4 + L * 0.6);
-  const span = (TAU / 6) * (0.78 - 0.28 * L);
-  for (let k = 0; k < 6; k++) {
-    const a0 = k * (TAU / 6), a1 = a0 + span;
-    ctx.beginPath();
-    ctx.arc(0, 0, bOut, a0, a1);
-    ctx.arc(0, 0, bIn, a1 - span * 0.12, a0 + span * 0.12, true);
-    ctx.closePath();
-    ctx.fillStyle = c(0.1 + 0.35 * L);
-    ctx.fill();
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = c(0.8);
-    ctx.stroke();
-  }
-  ctx.restore();
-
-  // thinking: a rotating scanner wedge
-  if (st === "thinking" && "createConicGradient" in ctx) {
-    const g = ctx.createConicGradient(t * 2.4, 0, 0);
-    g.addColorStop(0, c(0.45));
-    g.addColorStop(0.12, c(0));
-    g.addColorStop(1, c(0));
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(0, 0, rBr, 0, TAU);
-    ctx.arc(0, 0, bIn, 0, TAU, true);
-    ctx.fill();
-  }
-
-  // core
-  ring(R * 0.27, 0, TAU, lw * 1.2, 0.85);
-  const cr = R * 0.25 * (0.82 + 0.35 * L);
-  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, cr);
-  core.addColorStop(0, "rgba(245,253,255,0.95)");
-  core.addColorStop(0.35, c(0.75 + 0.25 * L));
-  core.addColorStop(0.75, c(0.22));
-  core.addColorStop(1, c(0));
-  ctx.fillStyle = core;
-  ctx.beginPath();
-  ctx.arc(0, 0, cr, 0, TAU);
-  ctx.fill();
-
-  // hexagon in the core
-  ctx.save();
-  ctx.rotate(t * 0.8);
-  ctx.beginPath();
-  for (let k = 0; k <= 6; k++) {
-    const a = (k / 6) * TAU;
-    const r = R * 0.14 * (0.9 + 0.25 * L);
-    if (k === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
-    else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
-  }
-  ctx.lineWidth = lw * 1.1;
-  ctx.strokeStyle = "rgba(240,252,255,0.75)";
-  ctx.stroke();
-  ctx.restore();
-
-  // orbiting sparks with short trails
-  const orbit = (r: number, speed: number, phase: number) => {
-    const a = t * speed + phase;
-    ctx.beginPath();
-    ctx.arc(0, 0, r, a - 0.5 * Math.sign(speed), a, speed < 0);
-    ctx.lineWidth = lw * 1.4;
-    ctx.strokeStyle = c(0.35);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(240,252,255,0.95)";
-    ctx.beginPath();
-    ctx.arc(Math.cos(a) * r, Math.sin(a) * r, lw * 1.6, 0, TAU);
-    ctx.fill();
-  };
-  orbit(rBr, 0.9, 0);
-  orbit(R * 0.455, -1.4, 2);
-  if (full) orbit(R * 0.86, 0.4, 4);
-
-  ctx.globalCompositeOperation = "source-over";
-}
-
-/** Large sizes only: a calibrated scale arc across the top and a segmented level meter on the right. */
-function scaleAndMeter(
-  ctx: CanvasRenderingContext2D,
-  R: number,
-  lw: number,
-  c: (a: number) => string,
-  L: number,
-  t: number,
-) {
-  const rS = R * 0.97;
-  const a0 = Math.PI * 1.18, a1 = Math.PI * 1.82;
-  ctx.beginPath();
-  ctx.arc(0, 0, rS, a0, a1);
-  ctx.lineWidth = lw;
-  ctx.strokeStyle = c(0.5);
-  ctx.stroke();
-  ctx.font = `600 ${Math.max(7, R * 0.045)}px ui-monospace, "JetBrains Mono", monospace`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  for (let i = 0; i <= 6; i++) {
-    const a = a0 + ((a1 - a0) * i) / 6;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * rS, Math.sin(a) * rS);
-    ctx.lineTo(Math.cos(a) * (rS - R * 0.04), Math.sin(a) * (rS - R * 0.04));
-    ctx.lineWidth = lw * 1.3;
-    ctx.strokeStyle = c(0.8);
-    ctx.stroke();
-    ctx.fillStyle = c(0.6);
-    ctx.fillText(String(i * 10), Math.cos(a) * (rS - R * 0.085), Math.sin(a) * (rS - R * 0.085));
-  }
-  // needle on the scale follows the level
-  const na = a0 + (a1 - a0) * Math.min(1, L * 1.1);
-  ctx.beginPath();
-  ctx.moveTo(Math.cos(na) * (rS + R * 0.02), Math.sin(na) * (rS + R * 0.02));
-  ctx.lineTo(Math.cos(na) * (rS - R * 0.06), Math.sin(na) * (rS - R * 0.06));
-  ctx.lineWidth = lw * 2;
-  ctx.strokeStyle = "rgba(240,252,255,0.9)";
-  ctx.stroke();
-
-  // right-side meter: segments light up with the level
-  const segs = 14;
-  const m0 = -0.42, m1 = 0.42;
-  for (let i = 0; i < segs; i++) {
-    const a = m0 + ((m1 - m0) * i) / (segs - 1);
-    const lit = i / segs < L * 1.15;
-    const len = R * (0.04 + 0.05 * (i / segs));
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(a) * (R * 0.9), Math.sin(-a) * (R * 0.9));
-    ctx.lineTo(Math.cos(a) * (R * 0.9 + len), Math.sin(-a) * (R * 0.9 + len));
-    ctx.lineWidth = lw * 2.6;
-    ctx.strokeStyle = c(lit ? 0.95 : 0.15);
-    ctx.stroke();
-  }
-  // left-side bracket with a blinking status pip
-  ctx.beginPath();
-  ctx.arc(0, 0, R * 0.92, Math.PI - 0.35, Math.PI + 0.35);
-  ctx.lineWidth = lw * 1.2;
-  ctx.strokeStyle = c(0.55);
-  ctx.stroke();
-  ctx.fillStyle = c(0.5 + 0.5 * Math.round((Math.sin(t * 4) + 1) / 2));
-  ctx.beginPath();
-  ctx.arc(-R * 0.96, 0, lw * 2, 0, TAU);
-  ctx.fill();
 }

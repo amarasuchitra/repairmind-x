@@ -1,93 +1,278 @@
 import { useEffect, useRef } from "react";
+import * as THREE from "three";
 import { prefersReducedMotion } from "./motion";
+import { additive, createStage, glowTexture, perfGuard, ribbonGeometry, ribbonMaterial, webglAvailable } from "./gl/core";
 
 /**
- * The layered backdrop: a slow-drifting node network (plexus) in the back, and neon circuit traces
- * that draw themselves in, glow, and fade out in front, each with a soft halo behind it.
+ * The layered backdrop, rendered in WebGL with real bloom:
+ *  - far: a slow 3D node network fading into fog, with pointer/gyro parallax for depth
+ *  - near: neon circuit glyphs (buses, 45-degree jogs, pad rings) that draw themselves in with a
+ *    hot leading edge, glow, and fade, each with a soft halo behind it
+ *  - lens: navy-lifted blacks, vignette and film grain from the shared grade pass
  *
- * One 2D canvas, no libraries. Glow is faked with stacked strokes in additive blending instead of
- * shadowBlur (which is slow on phones). Element counts scale with screen area, the device pixel
- * ratio is capped, phones run at ~30 fps, and the loop stops while the tab is hidden. With
- * prefers-reduced-motion it paints a single still frame.
+ * Performance: pixel ratio capped (1 on phones), element counts scale with screen area, a frame-time
+ * watchdog halves resolution if a device can't keep up, and it stops while the tab is hidden.
+ * Reduced motion renders one still frame. Without WebGL the CSS base layer stands alone.
  */
 export function NetworkBackground({ intensity = 1 }: { intensity?: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    let w = 0, h = 0, dpr = 1, raf = 0, last = 0, t = 0;
+    if (!canvas || !webglAvailable()) return;
+    const small = window.innerWidth < 700;
     const reduced = prefersReducedMotion();
-    let small = false;
-    let nodes: Node[] = [];
-    let traces: Trace[] = [];
+    let stage: ReturnType<typeof createStage>;
+    try {
+      stage = createStage({
+        canvas,
+        fov: 45,
+        pixelRatio: Math.min(window.devicePixelRatio || 1, small ? 1.25 : 1.5),
+        bloom: { strength: 1.0, radius: 0.0, threshold: 0.0 },
+        bloomFactors: [1.0, 0.85, 0.55, 0.3, 0.12],
+        grade: { vignette: 1, grain: 0.045, aberration: 0.0005, lift: [0.002, 0.008, 0.026] },
+      });
+    } catch {
+      return;
+    }
+    const { scene, camera } = stage;
+    scene.fog = new THREE.FogExp2(0x01040c, 0.06);
+    // deep-space fill: a huge faint blue glow far behind everything, off-centre like a key light
+    const fill = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x0b2d8a, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    fill.scale.set(60, 40, 1);
+    fill.position.set(6, 3, -30);
+    scene.add(fill);
 
-    function resize() {
-      small = window.innerWidth < 700;
-      dpr = Math.min(window.devicePixelRatio || 1, small ? 1.5 : 1.75);
-      w = window.innerWidth;
-      h = window.innerHeight;
-      canvas!.width = Math.round(w * dpr);
-      canvas!.height = Math.round(h * dpr);
-      const area = w * h;
-      const nodeCount = Math.round(Math.min(110, Math.max(28, area / 16000)) * intensity);
-      nodes = Array.from({ length: nodeCount }, () => makeNode(w, h));
-      const traceCount = Math.round(Math.min(14, Math.max(5, area / 90000)) * intensity);
-      traces = Array.from({ length: traceCount }, () => makeTrace(w, h, Math.random() * 4));
+    let W = window.innerWidth, H = window.innerHeight;
+    let px = 1; // world units per CSS pixel at z = 0
+    const measure = () => {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      stage.resize(W, H);
+      px = (2 * camera.position.z * Math.tan((camera.fov * Math.PI) / 360)) / H;
+    };
+    measure();
+
+    /* ---------- far layer: 3D node network ---------- */
+    const area = W * H;
+    const N = Math.round(Math.min(110, Math.max(45, area / 15000)) * (0.6 + 0.4 * intensity));
+    const nodes = Array.from({ length: N }, () => ({
+      p: new THREE.Vector3((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 18, -4 - Math.random() * 16),
+      v: new THREE.Vector3((Math.random() - 0.5) * 0.25, (Math.random() - 0.5) * 0.18, (Math.random() - 0.5) * 0.1),
+    }));
+    const maxPairs = (N * (N - 1)) / 2;
+    const linePos = new Float32Array(maxPairs * 6);
+    const lineCol = new Float32Array(maxPairs * 6);
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute("position", new THREE.BufferAttribute(linePos, 3).setUsage(THREE.DynamicDrawUsage));
+    lineGeo.setAttribute("color", new THREE.BufferAttribute(lineCol, 3).setUsage(THREE.DynamicDrawUsage));
+    const lines = new THREE.LineSegments(
+      lineGeo,
+      new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: true }),
+    );
+    scene.add(lines);
+    const ptPos = new Float32Array(N * 3);
+    const ptGeo = new THREE.BufferGeometry();
+    ptGeo.setAttribute("position", new THREE.BufferAttribute(ptPos, 3).setUsage(THREE.DynamicDrawUsage));
+    const points = new THREE.Points(
+      ptGeo,
+      new THREE.PointsMaterial({ size: 0.16, map: glowTexture(), color: 0x5aa8ff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }),
+    );
+    scene.add(points);
+    const blue = new THREE.Color(0x2f7dff);
+
+    function stepNetwork(dt: number) {
+      for (const n of nodes) {
+        n.p.addScaledVector(n.v, dt);
+        if (n.p.x < -15) n.p.x = 15; else if (n.p.x > 15) n.p.x = -15;
+        if (n.p.y < -9) n.p.y = 9; else if (n.p.y > 9) n.p.y = -9;
+        if (n.p.z < -20) n.p.z = -4; else if (n.p.z > -4) n.p.z = -20;
+      }
+      let k = 0;
+      const maxD = 3.4, maxD2 = maxD * maxD;
+      for (let i = 0; i < N; i++) {
+        const a = nodes[i].p;
+        ptPos[i * 3] = a.x; ptPos[i * 3 + 1] = a.y; ptPos[i * 3 + 2] = a.z;
+        for (let j = i + 1; j < N; j++) {
+          const b = nodes[j].p;
+          const d2 = a.distanceToSquared(b);
+          if (d2 > maxD2) continue;
+          const f = 1 - Math.sqrt(d2) / maxD;
+          const s = f * f * 0.55;
+          linePos.set([a.x, a.y, a.z, b.x, b.y, b.z], k * 6);
+          lineCol.set([blue.r * s, blue.g * s, blue.b * s, blue.r * s, blue.g * s, blue.b * s], k * 6);
+          k++;
+        }
+      }
+      lineGeo.setDrawRange(0, k * 2);
+      lineGeo.attributes.position.needsUpdate = true;
+      lineGeo.attributes.color.needsUpdate = true;
+      ptGeo.attributes.position.needsUpdate = true;
     }
 
-    function frame(now: number) {
+    /* ---------- near layer: circuit glyphs ---------- */
+    interface Glyph {
+      group: THREE.Group;
+      mats: THREE.ShaderMaterial[];
+      pads: THREE.MeshBasicMaterial[];
+      halo: THREE.Sprite;
+      age: number; grow: number; hold: number; fade: number;
+      drift: number;
+    }
+    const glyphs: Glyph[] = [];
+    const traceCount = Math.round(Math.min(10, Math.max(4, area / 140000)) * intensity);
+    const DIRS: [number, number][] = [[0, 1], [0.7071, 0.7071], [-0.7071, 0.7071], [1, 0], [-1, 0]];
+
+    function makeGlyph(delay: number): Glyph {
+      const group = new THREE.Group();
+      const scale = (0.8 + Math.random() * 0.5) * (small ? 0.85 : 1);
+      const cell = 10 * scale * px;
+      const lanes = 1 + Math.floor(Math.random() * 4);
+      const gap = 6.5 * scale * px;
+      const steps: { dir: [number, number]; n: number }[] = [];
+      let dir: [number, number] = [0, 1];
+      const segs = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < segs; i++) {
+        steps.push({ dir, n: 1 + Math.floor(Math.random() * (dir[0] === 0 ? 7 : 3)) });
+        const choices = DIRS.filter((d) => d !== dir && !(d[0] === -dir[0] && d[1] === -dir[1]));
+        dir = i % 2 === 0 ? choices[Math.floor(Math.random() * choices.length)] : [0, 1];
+      }
+      const mats: THREE.ShaderMaterial[] = [];
+      const pads: THREE.MeshBasicMaterial[] = [];
+      const width = 2.6 * scale * px;
+      for (let l = 0; l < lanes; l++) {
+        const off = (l - (lanes - 1) / 2) * gap;
+        const pts = [new THREE.Vector2(off, (Math.random() - 0.5) * cell * 2)];
+        const cut = steps.length - (l > 0 && Math.random() < 0.5 ? 1 : 0);
+        for (let s = 0; s < cut; s++) {
+          const n = Math.max(1, steps[s].n - (s === cut - 1 ? Math.floor(Math.random() * 2) : 0));
+          const last = pts[pts.length - 1];
+          pts.push(new THREE.Vector2(last.x + steps[s].dir[0] * n * cell, last.y + steps[s].dir[1] * n * cell));
+        }
+        const mat = ribbonMaterial(0xd6efff, 0x1f6bff);
+        mat.uniforms.uProgress.value = 0;
+        mats.push(mat);
+        group.add(new THREE.Mesh(ribbonGeometry(pts, width), mat));
+        const padMat = additive(0x9fd4ff, 0);
+        pads.push(padMat);
+        const end = pts[pts.length - 1];
+        const pad = new THREE.Mesh(new THREE.RingGeometry(2.2 * scale * px, 3.2 * scale * px, 32), padMat);
+        pad.position.set(end.x, end.y, 0);
+        group.add(pad);
+      }
+      const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color: 0x1550ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      halo.scale.setScalar((90 + lanes * 26) * scale * px);
+      halo.position.set(0, cell * 2, -0.01);
+      group.add(halo);
+      const visW = W * px, visH = H * px;
+      const z = (Math.random() - 0.6) * 2.4;
+      const depthScale = (camera.position.z - z) / camera.position.z;
+      group.position.set((Math.random() - 0.5) * visW * depthScale, (Math.random() - 0.55) * visH * depthScale, z);
+      scene.add(group);
+      return { group, mats, pads, halo, age: -delay, grow: 0.8 + Math.random() * 0.9, hold: 1.4 + Math.random() * 2.4, fade: 1.3, drift: (6 + Math.random() * 8) * px };
+    }
+
+    function disposeGlyph(g: Glyph) {
+      scene.remove(g.group);
+      g.group.traverse((o) => {
+        const m = o as THREE.Mesh;
+        m.geometry?.dispose?.();
+        (m.material as THREE.Material | undefined)?.dispose?.();
+      });
+    }
+
+    function stepGlyph(g: Glyph, dt: number) {
+      g.age += dt;
+      g.group.position.y += g.drift * dt;
+      const t = g.age;
+      if (t < 0) return;
+      const grow = Math.min(1, t / g.grow);
+      const e = 1 - Math.pow(1 - grow, 3);
+      const fade = t < g.grow + g.hold ? 1 : Math.max(0, 1 - (t - g.grow - g.hold) / g.fade);
+      // a short electrical flicker while it powers up
+      const flick = t < g.grow ? 0.7 + 0.3 * Math.random() : t < g.grow + 0.25 ? (Math.random() < 0.15 ? 0.55 : 1) : 1;
+      const o = fade * flick;
+      for (const m of g.mats) {
+        m.uniforms.uProgress.value = e;
+        m.uniforms.uOpacity.value = o;
+      }
+      for (const p of g.pads) p.opacity = grow >= 1 ? o * 0.95 : 0;
+      (g.halo.material as THREE.SpriteMaterial).opacity = 0.32 * o * (0.4 + 0.6 * e);
+    }
+
+    for (let i = 0; i < traceCount; i++) glyphs.push(makeGlyph(Math.random() * 3.5));
+
+    /* ---------- camera parallax ---------- */
+    const look = new THREE.Vector2(), lookT = new THREE.Vector2();
+    const onPointer = (e: PointerEvent) => lookT.set((e.clientX / W - 0.5) * 2, (e.clientY / H - 0.5) * 2);
+    const onTilt = (e: DeviceOrientationEvent) => {
+      if (e.gamma == null || e.beta == null) return;
+      lookT.set(Math.max(-1, Math.min(1, e.gamma / 30)), Math.max(-1, Math.min(1, (e.beta - 45) / 30)));
+    };
+    window.addEventListener("pointermove", onPointer, { passive: true });
+    window.addEventListener("deviceorientation", onTilt, { passive: true });
+
+    let raf = 0, last = 0, time = 0, frameSkip = intensity < 1 ? 1 : 0, f = 0;
+    const guard = perfGuard(small ? 22 : 20, () => {
+      stage.setPixelRatio(Math.max(0.6, stage.renderer.getPixelRatio() * 0.65));
+      frameSkip = 1;
+    });
+
+    function step(dt: number) {
+      time += dt;
+      look.lerp(lookT, Math.min(1, dt * 2));
+      camera.position.x = Math.sin(time * 0.05) * 0.4 + look.x * 0.35;
+      camera.position.y = Math.cos(time * 0.04) * 0.25 - look.y * 0.25;
+      camera.lookAt(0, 0, -6);
+      stepNetwork(dt);
+      for (let i = 0; i < glyphs.length; i++) {
+        const g = glyphs[i];
+        stepGlyph(g, dt);
+        if (g.age > g.grow + g.hold + g.fade) {
+          disposeGlyph(g);
+          glyphs[i] = makeGlyph(Math.random() * 0.8);
+        }
+      }
+    }
+
+    const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
-      const minDt = small || intensity < 1 ? 1000 / 32 : 1000 / 61;
-      if (last && now - last < minDt) return;
+      guard(now);
       const dt = last ? Math.min(0.05, (now - last) / 1000) : 0.016;
       last = now;
-      t += dt;
-      draw(dt);
-    }
+      if (frameSkip && (f++ & 1)) return;
+      step(frameSkip ? dt * 2 : dt);
+      stage.render(time);
+    };
 
-    function draw(dt: number) {
-      ctx!.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx!.clearRect(0, 0, w, h);
-      ctx!.globalCompositeOperation = "lighter";
-      drawNetwork(ctx!, nodes, w, h, dt, t);
-      for (let i = 0; i < traces.length; i++) {
-        const tr = traces[i];
-        tr.age += dt;
-        tr.y -= tr.drift * dt;
-        if (tr.age > tr.life) traces[i] = makeTrace(w, h, 0);
-        else drawTrace(ctx!, tr);
-      }
-      ctx!.globalCompositeOperation = "source-over";
-    }
-
-    function onVisibility() {
-      cancelAnimationFrame(raf);
-      last = 0;
-      if (!document.hidden && !reduced) raf = requestAnimationFrame(frame);
-    }
-
-    resize();
     if (reduced) {
-      // One still frame with traces caught mid-life so the scene still reads.
-      traces.forEach((tr) => (tr.age = tr.grow + 0.2));
-      draw(0);
+      for (const g of glyphs) { g.age = g.grow + 0.5; stepGlyph(g, 0); }
+      stepNetwork(0);
+      stage.render(0);
     } else {
       raf = requestAnimationFrame(frame);
     }
+
     const onResize = () => {
-      resize();
-      if (reduced) draw(0);
+      measure();
+      if (reduced) stage.render(0);
+    };
+    const onVis = () => {
+      cancelAnimationFrame(raf);
+      last = 0;
+      if (!document.hidden && !reduced) raf = requestAnimationFrame(frame);
     };
     window.addEventListener("resize", onResize);
-    document.addEventListener("visibilitychange", onVisibility);
+    document.addEventListener("visibilitychange", onVis);
+    canvas.classList.add("ready");
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
-      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pointermove", onPointer);
+      window.removeEventListener("deviceorientation", onTilt);
+      document.removeEventListener("visibilitychange", onVis);
+      glyphs.forEach(disposeGlyph);
+      stage.dispose();
     };
   }, [intensity]);
 
@@ -95,182 +280,6 @@ export function NetworkBackground({ intensity = 1 }: { intensity?: number }) {
     <div className="fx-bg" aria-hidden>
       <div className="fx-bg-base" />
       <canvas ref={ref} className="fx-bg-canvas" />
-      <div className="fx-bg-grain" />
     </div>
   );
-}
-
-/* ---------------------------------------------------------------- node network (back layer) */
-
-interface Node {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  z: number; // depth 0.35..1: far nodes are smaller, dimmer and slower
-  tw: number; // twinkle phase
-}
-
-function makeNode(w: number, h: number): Node {
-  const z = 0.35 + Math.random() * 0.65;
-  const a = Math.random() * Math.PI * 2;
-  const s = (4 + Math.random() * 10) * z;
-  return { x: Math.random() * w, y: Math.random() * h, vx: Math.cos(a) * s, vy: Math.sin(a) * s, z, tw: Math.random() * 6 };
-}
-
-function drawNetwork(ctx: CanvasRenderingContext2D, nodes: Node[], w: number, h: number, dt: number, t: number) {
-  const pad = 40;
-  for (const n of nodes) {
-    n.x += n.vx * dt;
-    n.y += n.vy * dt;
-    if (n.x < -pad) n.x = w + pad; else if (n.x > w + pad) n.x = -pad;
-    if (n.y < -pad) n.y = h + pad; else if (n.y > h + pad) n.y = -pad;
-  }
-  const maxD = Math.min(170, Math.max(110, Math.sqrt(w * h) / 7));
-  const maxD2 = maxD * maxD;
-  ctx.lineWidth = 0.7;
-  for (let i = 0; i < nodes.length; i++) {
-    const a = nodes[i];
-    for (let j = i + 1; j < nodes.length; j++) {
-      const b = nodes[j];
-      const dx = a.x - b.x, dy = a.y - b.y;
-      const d2 = dx * dx + dy * dy;
-      if (d2 > maxD2) continue;
-      const k = 1 - Math.sqrt(d2) / maxD;
-      const alpha = k * k * 0.32 * Math.min(a.z, b.z);
-      ctx.strokeStyle = `rgba(70,150,255,${alpha.toFixed(3)})`;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
-  }
-  for (const n of nodes) {
-    const tw = 0.55 + 0.45 * Math.sin(t * 1.3 + n.tw);
-    const r = 0.7 + n.z * 1.5;
-    ctx.fillStyle = `rgba(120,200,255,${(0.25 + 0.5 * n.z * tw).toFixed(3)})`;
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-    ctx.fill();
-    if (n.z > 0.9 && tw > 0.85) {
-      // the odd bright node gets a small flare
-      ctx.fillStyle = "rgba(90,170,255,0.08)";
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, r * 6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
-
-/* ---------------------------------------------------------------- circuit traces (front layer) */
-
-interface Trace {
-  x: number;
-  y: number;
-  paths: { d: Path2D; len: number; pad: [number, number] }[];
-  halo: number;
-  age: number;
-  grow: number;
-  hold: number;
-  life: number;
-  drift: number;
-  scale: number;
-}
-
-// Mostly vertical runs with 45-degree jogs, like a circuit board.
-const DIRS: [number, number][] = [[0, -1], [0.7071, -0.7071], [-0.7071, -0.7071], [1, 0], [-1, 0]];
-
-function makeTrace(w: number, h: number, delay: number): Trace {
-  const scale = 0.7 + Math.random() * 0.6;
-  const cell = 9 * scale;
-  const lanes = 1 + Math.floor(Math.random() * 4); // a bus of parallel lines
-  const gap = 6 * scale;
-  const steps: { dir: [number, number]; n: number }[] = [];
-  let dir: [number, number] = [0, -1];
-  const segs = 2 + Math.floor(Math.random() * 4);
-  for (let i = 0; i < segs; i++) {
-    steps.push({ dir, n: 1 + Math.floor(Math.random() * (dir[0] === 0 ? 6 : 3)) });
-    const choices = DIRS.filter((d) => d !== dir && !(d[0] === -dir[0] && d[1] === -dir[1]));
-    dir = i % 2 === 0 ? choices[Math.floor(Math.random() * choices.length)] : [0, -1];
-  }
-  const paths = [];
-  for (let l = 0; l < lanes; l++) {
-    const off = (l - (lanes - 1) / 2) * gap;
-    const p = new Path2D();
-    let x = off, y = (Math.random() - 0.5) * cell * 2;
-    p.moveTo(x, y);
-    let len = 0;
-    // lanes end at different lengths so the bus looks hand-routed
-    const cut = steps.length - (l > 0 && Math.random() < 0.5 ? 1 : 0);
-    for (let s = 0; s < cut; s++) {
-      const n = Math.max(1, steps[s].n - (s === cut - 1 ? Math.floor(Math.random() * 2) : 0));
-      const dx = steps[s].dir[0] * n * cell, dy = steps[s].dir[1] * n * cell;
-      x += dx;
-      y += dy;
-      len += Math.hypot(dx, dy);
-      p.lineTo(x, y);
-    }
-    paths.push({ d: p, len, pad: [x, y] as [number, number] });
-  }
-  const grow = 0.7 + Math.random() * 0.8;
-  const hold = 1.2 + Math.random() * 2.2;
-  return {
-    x: Math.random() * w,
-    y: h * 0.15 + Math.random() * h * 0.9,
-    paths,
-    halo: 50 + lanes * 14 * scale,
-    age: -delay,
-    grow,
-    hold,
-    life: grow + hold + 1.2,
-    drift: 4 + Math.random() * 8,
-    scale,
-  };
-}
-
-function drawTrace(ctx: CanvasRenderingContext2D, tr: Trace) {
-  if (tr.age < 0) return;
-  const grown = Math.min(1, tr.age / tr.grow);
-  const ease = 1 - Math.pow(1 - grown, 3);
-  const fade = tr.age < tr.grow + tr.hold ? 1 : Math.max(0, 1 - (tr.age - tr.grow - tr.hold) / 1.2);
-  const flicker = tr.age < tr.grow ? 0.75 + 0.25 * Math.random() : 1;
-  const a = fade * flicker;
-  if (a <= 0.01) return;
-
-  ctx.save();
-  ctx.translate(tr.x, tr.y);
-
-  // soft halo behind the cluster
-  const g = ctx.createRadialGradient(0, -tr.halo * 0.3, 0, 0, -tr.halo * 0.3, tr.halo * 1.6);
-  g.addColorStop(0, `rgba(30,110,255,${(0.16 * a).toFixed(3)})`);
-  g.addColorStop(1, "rgba(30,110,255,0)");
-  ctx.fillStyle = g;
-  ctx.fillRect(-tr.halo * 1.6, -tr.halo * 1.9, tr.halo * 3.2, tr.halo * 3.2);
-
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  for (const p of tr.paths) {
-    const shown = p.len * ease;
-    ctx.setLineDash([shown, p.len + 10]);
-    // three passes: wide faint bloom, mid glow, bright core
-    ctx.strokeStyle = `rgba(25,110,255,${(0.14 * a).toFixed(3)})`;
-    ctx.lineWidth = 7 * tr.scale;
-    ctx.stroke(p.d);
-    ctx.strokeStyle = `rgba(40,150,255,${(0.35 * a).toFixed(3)})`;
-    ctx.lineWidth = 3.2 * tr.scale;
-    ctx.stroke(p.d);
-    ctx.strokeStyle = `rgba(200,235,255,${(0.9 * a).toFixed(3)})`;
-    ctx.lineWidth = 1.1 * tr.scale;
-    ctx.stroke(p.d);
-    if (grown >= 1) {
-      ctx.setLineDash([]);
-      ctx.beginPath();
-      ctx.arc(p.pad[0], p.pad[1], 2.4 * tr.scale, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(170,225,255,${(0.85 * a).toFixed(3)})`;
-      ctx.lineWidth = 1.1 * tr.scale;
-      ctx.stroke();
-    }
-  }
-  ctx.setLineDash([]);
-  ctx.restore();
 }

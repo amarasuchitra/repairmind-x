@@ -93,31 +93,37 @@ a safety-checked repair. Tracking runs on the normal camera stream instead, so i
 
 ![Intro](docs/screenshots/v2-intro.gif)
 
-The web app opens with a short JavaScript intro (about five seconds, once per browser session, skippable
-with a tap or Esc): a point of light ignites, instrument rings sweep in, a segmented ring blasts outward and
-a node network bursts out while the wordmark resolves. Behind every page is a layered, animated background:
-a drifting node network at the back and neon circuit traces that draw themselves in, glow and fade in front.
+Everything visual is rendered in WebGL (three.js) through one shared pipeline (`web/src/fx/gl/core.ts`):
+scene, then bloom, then a grading pass that lifts the blacks toward navy, rolls off highlights, adds a
+vignette, a touch of lens chromatic aberration and animated film grain.
 
-The mechanic's voice is shown as a layered instrument dial on canvas (`web/src/hud/VoiceOrb.tsx`): a tick
-dial, counter-rotating bracket arcs, a radial spectrum of the voice, an oscilloscope ring that ripples with
-it, six aperture blades that open as it gets louder, and a bright core. Cyan when the mechanic speaks, green
-while it listens to you, violet while it thinks. On desktop a large version sits at the top of the side
-panel; on phones a compact one sits in the control bar.
-
-The call screen keeps corner brackets, a scan line, glass panels for the diagnosis gauge, safety status and
-step timeline, and AR markers drawn as targeting brackets.
+- **Intro** (`web/src/fx/Intro.tsx`), about 6.5 s, choreographed on one GSAP timeline: a point of light
+  ignites with an anamorphic streak, instrument rings sweep on at different depths as the camera pushes in,
+  they collapse and a segmented ring blasts past the lens, dust warps by, and the camera flies through a 3D
+  node network while the wordmark resolves. Once per browser session; tap or Esc skips; `/#intro` replays.
+- **Background** (`web/src/fx/NetworkBackground.tsx`): a slow 3D node network in fog at the back, and neon
+  circuit glyphs in front that draw themselves in with a hot leading edge, glow and fade. Pointer or phone
+  tilt gives parallax. It steps back as you scroll so long text stays easy to read.
+- **The mechanic's voice** (`web/src/hud/VoiceOrb.tsx`): a plasma core (a sphere displaced by 3D noise in
+  proportion to the voice, with a Fresnel rim), a particle shell that breathes with the frequency bands, a
+  radial spectrum, aperture blades that open with loudness and segment meters, all on a tilted plane seen in
+  perspective. Cyan when the mechanic speaks, green while it listens, violet with a scanning sweep while it
+  thinks. Without WebGL it falls back to the 2D canvas dial.
+- **Start page** (`web/src/Landing.tsx`): editorial layout on an 8-point spacing scale with Inter Tight,
+  Inter and JetBrains Mono, entrance and scroll choreography with GSAP ScrollTrigger.
 
 Safety banners and the stop alert stay solid amber and red and are never see-through; the hazard banner
-pulses its glow, never its opacity. All animation respects "reduce motion" (the intro is skipped and the
-background is a still frame), canvases cap their pixel ratio, phones run the background at about 30 fps,
-and everything pauses while the tab is hidden. On phones the HUD keeps to the edges so the camera stays clear.
+pulses its glow, never its opacity. With "reduce motion" the intro is skipped and the background and orb
+render still frames. Canvases cap their pixel ratio, a frame-time watchdog drops resolution on a device that
+can't keep up, and rendering stops while the tab is hidden or the element is off screen. On phones the HUD
+keeps to the edges so the camera stays clear.
 
 Open `/#demo` to preview the call screen with sample data and a simulated voice, without a server or camera
 (`#demo-amber` and `#demo-alert` show the safety states). `/#intro` replays the intro.
 
 | Start page | Phone call | Hazard stop | Desktop call |
 |---|---|---|---|
-| ![Start page](docs/screenshots/v2-landing-phone.png) | ![Phone call](docs/screenshots/v2-call-phone-amber.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop](docs/screenshots/v2-call-desktop.png) |
+| ![Start page](docs/screenshots/v2-landing-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop](docs/screenshots/v2-call-desktop.png) |
 
 ![Start page on desktop](docs/screenshots/v2-landing-desktop.png)
 

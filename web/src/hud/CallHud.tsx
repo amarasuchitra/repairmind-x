@@ -127,7 +127,7 @@ export function CallHud(p: CallHudProps) {
         <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
           {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? "Mute" : "Unmute"}</span>
         </button>
-        <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={100} /></div>
+        <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={92} /></div>
         <button className="ctl" onClick={p.onSwitchCamera}><Flip size={18} /><span>Flip cam</span></button>
         <button className="ctl danger" onClick={p.onEnd}><PhoneOff size={18} /><span>End</span></button>
       </footer>
