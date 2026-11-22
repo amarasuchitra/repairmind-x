@@ -1,26 +1,26 @@
 """Second-model cross-check (plan section 13, layer 5).
 
-A different model from the one talking (Claude, while the live voice is Gemini) gets the same evidence
+A different model from the one talking gets the same evidence
 and answers three questions before the first repair step and before every amber or irreversible step:
 is the diagnosis supported, is the step right for this exact model, and is anything unsafe or missing?
 
-If the reviewer can't run (no key, network error, refusal), the result is "unavailable", and the
-session treats that as NOT approved for steps that need review. It fails closed.
+The reviewer is Claude if ANTHROPIC_API_KEY is set, otherwise a separate Gemini model on the free tier
+(see checker.py). If the reviewer can't run (no key, network error, quota), the result is "unavailable",
+and the session treats that as NOT approved for steps that need review. It fails closed. A refusal
+escalates.
 """
 
 from __future__ import annotations
 
 import logging
-import os
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from . import checker
 from .session import RepairSession
 
 log = logging.getLogger("repairmind.reviewer")
-
-REVIEW_MODEL = os.getenv("RMX_REVIEW_MODEL", "claude-opus-5-5")
 
 REVIEWER_SYSTEM = """You are a senior repair technician reviewing a junior colleague's plan before they
 tell a customer to do it. You see the evidence collected on a live call: device, model, symptoms,
@@ -77,38 +77,19 @@ def _evidence(state: RepairSession, step_text: str, source_kind: str, source_ref
 async def review_step(state: RepairSession, step_text: str, source_kind: str, source_ref: str,
                       source_excerpt: str, expected_result: str,
                       frames_jpeg_b64: list[str] | None = None) -> ReviewResult:
-    if not os.getenv("ANTHROPIC_API_KEY") and not os.getenv("ANTHROPIC_AUTH_TOKEN"):
-        return ReviewResult(status="unavailable", reason="No reviewer credentials configured.")
-    try:
-        import anthropic
-    except ImportError:  # pragma: no cover
-        return ReviewResult(status="unavailable", reason="anthropic package not installed.")
-
-    content: list[dict] = []
-    for b64 in (frames_jpeg_b64 or [])[:2]:
-        content.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}})
-    content.append({"type": "text", "text": _evidence(state, step_text, source_kind, source_ref,
-                                                      source_excerpt, expected_result)})
-    try:
-        client = anthropic.AsyncAnthropic(timeout=30.0, max_retries=1)
-        response = await client.messages.parse(
-            model=REVIEW_MODEL,
-            max_tokens=4000,
-            system=REVIEWER_SYSTEM,
-            output_config={"effort": "high"},
-            messages=[{"role": "user", "content": content}],
-            output_format=Review,
-        )
-    except anthropic.APIConnectionError as e:
-        return ReviewResult(status="unavailable", reason=f"Reviewer unreachable: {e}")
-    except anthropic.APIStatusError as e:
-        return ReviewResult(status="unavailable", reason=f"Reviewer error {e.status_code}")
-
-    if response.stop_reason == "refusal":
+    if checker.provider() is None:
+        return ReviewResult(status="unavailable", reason="No reviewer configured (set GOOGLE_API_KEY for the free "
+                                                         "Gemini reviewer, or ANTHROPIC_API_KEY).")
+    evidence = _evidence(state, step_text, source_kind, source_ref, source_excerpt, expected_result)
+    res = await checker.parse(REVIEWER_SYSTEM, (frames_jpeg_b64 or [])[:2], evidence, Review, "review",
+                              effort="high")
+    if res.refused:
         # A refused review is a strong signal: don't route around it, escalate.
         return ReviewResult(status="escalate", reason="The reviewer declined to assess this step.")
-    review = response.parsed_output
-    if review is None:
+    if res.error:
+        return ReviewResult(status="unavailable", reason="Reviewer unavailable: " + res.error)
+    review = res.parsed
+    if not isinstance(review, Review):
         return ReviewResult(status="unavailable", reason="Reviewer returned no verdict.")
     status = review.verdict
     # Belt and braces: an "approve" that contradicts its own checks is not an approval.

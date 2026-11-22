@@ -92,6 +92,8 @@ def test_guard_flags_red_instruction():
 def test_reviewer_fails_closed_without_credentials(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     r = asyncio.run(reviewer.review_step(bike(), "Lift the chain", "manual", "p.12", "", "chain on"))
     assert r.status == "unavailable"
 
