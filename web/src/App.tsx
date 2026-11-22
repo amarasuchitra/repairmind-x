@@ -1,7 +1,13 @@
-import { useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { Call } from "./Call";
 import { Inspect } from "./Inspect";
-import { VoiceOrb } from "./hud/VoiceOrb";
+import { Landing } from "./Landing";
+import { Login, readProfile, writeProfile, type Profile } from "./Login";
+import { NetworkBackground } from "./fx/NetworkBackground";
+import { Intro, shouldPlayIntro } from "./fx/Intro";
+
+// The design preview (a fake call with sample data) only loads when someone opens #demo.
+const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
 
 interface Connection {
   serverUrl: string;
@@ -28,13 +34,26 @@ function writeLastRoom(room: string | null) {
   }
 }
 
+type Page = "call" | "inspect" | "demo";
+const pageFromHash = (): Page =>
+  window.location.hash === "#inspect" ? "inspect" : window.location.hash.startsWith("#demo") ? "demo" : "call";
+
 export default function App() {
   const [accepted, setAccepted] = useState(false);
   const [conn, setConn] = useState<Connection | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [intro, setIntro] = useState(() => pageFromHash() === "call" && shouldPlayIntro());
   const lastRoom = readLastRoom();
-  const [page, setPage] = useState(() => (window.location.hash === "#inspect" ? "inspect" : "call"));
+  const [profile, setProfile] = useState<Profile | null>(readProfile);
+  // set while the quick sign-in is showing: the call it should start afterwards (a room to resume, or a new one)
+  const [signingIn, setSigningIn] = useState<{ room?: string } | null>(null);
+  const [page, setPage] = useState<Page>(pageFromHash);
+  useEffect(() => {
+    const onHash = () => setPage(pageFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   function go(next: "call" | "inspect") {
     window.location.hash = next === "inspect" ? "inspect" : "";
@@ -66,10 +85,15 @@ export default function App() {
     }
   }
 
-  if (page === "inspect" && !conn) return <Inspect onBack={() => go("call")} />;
+  // the flow is intro, start page, quick sign-in (once per device), then the live call
+  const requestStart = (room?: string) => {
+    if (profile) void start(room);
+    else setSigningIn({ room });
+  };
 
+  let content;
   if (conn) {
-    return (
+    content = (
       <Call
         {...conn}
         onEnd={(finished) => {
@@ -78,53 +102,46 @@ export default function App() {
         }}
       />
     );
+  } else if (page === "demo") {
+    content = <Suspense fallback={null}><Demo /></Suspense>;
+  } else if (signingIn) {
+    content = (
+      <Login
+        onBack={() => setSigningIn(null)}
+        onDone={(p) => {
+          writeProfile(p);
+          setProfile(p);
+          const room = signingIn.room;
+          setSigningIn(null);
+          void start(room);
+        }}
+      />
+    );
+  } else if (page === "inspect") {
+    content = <Inspect onBack={() => go("call")} />;
+  } else {
+    content = (
+      <Landing
+        accepted={accepted}
+        setAccepted={setAccepted}
+        loading={loading}
+        error={error}
+        lastRoom={lastRoom}
+        onStart={requestStart}
+        profile={profile}
+        onSignOut={() => { writeProfile(null); setProfile(null); }}
+        onInspect={() => go("inspect")}
+        entering={!intro}
+      />
+    );
   }
 
   return (
-    <main className="landing hud-landing">
-      <div className="hud-brand">
-        <span className="hud-mark" aria-hidden />
-        <span>REPAIRMIND<span className="dim"> // X</span></span>
-      </div>
-      <div className="landing-orb" aria-hidden><VoiceOrb state="idle" bands={[]} size={132} /></div>
-      <h1>Every machine has a solution. Let's find it.</h1>
-      <p className="lede">
-        Start a live video call with an AI mechanic. Show it the problem, answer a few questions, and it
-        will talk you through the fix one checked step at a time.
-      </p>
-
-      <section className="notice" aria-label="Safety and privacy notice">
-        <h2>Before you start</h2>
-        <ul>
-          <li>The mechanic gives guidance, not a guarantee. You stay in control of every step.</li>
-          <li>
-            It will refuse dangerous jobs (microwave internals, mains wiring, gas, airbags, brakes, refrigerant,
-            high-voltage or swollen batteries) and point you to a professional.
-          </li>
-          <li>If you see smoke or sparks, smell gas or burning, or get hurt: stop and step away.</li>
-          <li>Your camera and microphone are streamed to the AI during the call. Video is not recorded.</li>
-        </ul>
-        <label className="check">
-          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-          <span>I understand and want to continue</span>
-        </label>
-      </section>
-
-      <div className="actions">
-        <button className="primary" disabled={!accepted || loading} onClick={() => start()}>
-          {loading ? "Connecting…" : "Start AI Mechanic"}
-        </button>
-        {lastRoom && (
-          <button className="secondary" disabled={!accepted || loading} onClick={() => start(lastRoom)}>
-            Resume last repair
-          </button>
-        )}
-      </div>
-      {error && <p className="error" role="alert">{error}</p>}
-      <p className="link-inspect">
-        Checking many units for a factory or shop?{" "}
-        <a href="#inspect" onClick={(e) => { e.preventDefault(); go("inspect"); }}>Bulk inspection</a>
-      </p>
-    </main>
+    <>
+      {/* the landing page draws its own 3D scene */}
+      {(conn || signingIn || page !== "call") && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
+      {content}
+      {intro && !conn && <Intro onDone={() => setIntro(false)} />}
+    </>
   );
 }

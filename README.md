@@ -91,17 +91,64 @@ a safety-checked repair. Tracking runs on the normal camera stream instead, so i
 
 ## Interface
 
-The call screen is a dark holographic HUD. It has:
-- corner brackets and a scan line over the live camera
-- a voice orb that reacts to the mechanic's voice when it speaks and to your mic when it listens
-- glass panels for the diagnosis confidence gauge, safety status and step timeline
-- AR markers drawn as targeting brackets
+![Intro](docs/screenshots/v2-intro.gif)
 
-Safety banners and the stop alert stay solid amber and red and are never see-through. Animations respect "reduce motion". On phones the HUD keeps to the edges so the camera stays clear.
+Everything visual is rendered in WebGL (three.js) through one shared pipeline (`web/src/fx/gl/core.ts`):
+scene, then bloom, then a grading pass that lifts the blacks toward navy, rolls off highlights, adds a
+vignette, a touch of lens chromatic aberration and animated film grain.
 
-| Phone call | Safety alert | Desktop |
-|---|---|---|
-| ![Phone call](docs/screenshots/hud-phone-call.png) | ![Safety alert](docs/screenshots/hud-phone-safety-alert.png) | ![Desktop](docs/screenshots/hud-desktop-call.png) |
+- **Intro** (`web/src/fx/Intro.tsx`), about 6.5 s, choreographed on one GSAP timeline: a point of light
+  ignites with an anamorphic streak, instrument rings sweep on at different depths as the camera pushes in,
+  they collapse and a segmented ring blasts past the lens, dust warps by, and the camera flies through a 3D
+  node network while the wordmark resolves. It opens on a single point of light and an Enter button: that
+  first tap is what lets the browser play the score. Once per browser session; tap or Esc skips; `/#intro`
+  replays.
+- **Sound** (`web/src/fx/sound.ts`): every sound is synthesised live with the Web Audio API, so there are
+  no audio files. The intro has its own score timed to the animation (ignition, ring ticks, the collapse,
+  the breach boom, the warp rush, a light sweep and a final chord). On the start page a low drone and a
+  vinyl crackle that follows the record's speed run underneath, with cues for each chapter: a whoosh
+  between chapters, a scan sweep, label blips, the platter's servo lift and an AR lock chime, plus quiet
+  ticks on buttons. A switch in the header mutes it, and the choice is remembered on the device.
+- **Quick sign-in** (`web/src/Login.tsx`): between the start page and the call, once per device. It asks
+  for a name and an optional email so the app can greet you, keeps them in this browser only, and offers
+  "Continue as guest". It is not an account system: no password, nothing is sent to the server.
+- **Background** (`web/src/fx/NetworkBackground.tsx`): a slow 3D node network in fog at the back, and neon
+  circuit glyphs in front that draw themselves in with a hot leading edge, glow and fade. Pointer or phone
+  tilt gives parallax. The call and inspection pages use it; the start page has its own 3D scene.
+- **The mechanic's voice** (`web/src/hud/VoiceOrb.tsx`): a plasma core (a sphere displaced by 3D noise in
+  proportion to the voice, with a Fresnel rim), a particle shell that breathes with the frequency bands, a
+  radial spectrum, aperture blades that open with loudness and segment meters, all on a tilted plane seen in
+  perspective. Cyan when the mechanic speaks, green while it listens, violet with a scanning sweep while it
+  thinks. Without WebGL it falls back to the 2D canvas dial.
+- **Start page** (`web/src/Landing.tsx`, `web/src/fx/showroom/`): a fixed 3D stage with five full-height
+  sections scrolling over it (Overview, Show it, Talk it through, Fix it, Start). A belt-drive record player
+  modelled in code sits on a lit platform in a dark studio; drag to turn it. Scrolling drives the camera
+  between composed shots and changes the model: the record spins and the tonearm swings over it, an x-ray
+  scan sweeps across for identification, labels pin to real parts, and in Fix it the platter lifts off to
+  show the glowing drive belt and an AR lock on the motor pulley. Words and the model alternate sides each
+  section; a rail on the right fills as you scroll. Display type is a wide extended face (Michroma) in
+  spaced capitals, and the R.M.X ring mark (`web/src/ui/RingMark.tsx`) breaks where its letters cross it.
+- **Anatomy view** (`web/src/anatomy/`): on the call screen, an isometric figure of the identified device
+  drawn with the [Anatomy kit](https://github.com/wheresryan22/anatomy) (MIT, vendored in
+  `web/vendor/anatomy`). The part the current step is about is lit, the platter lifts off when the step
+  needs it out of the way, and you can tap any part. Rebuild it with `node scripts/anatomy/turntable.mjs`.
+
+Safety banners and the stop alert stay solid amber and red and are never see-through; the hazard banner
+pulses its glow, never its opacity. With "reduce motion" the intro is skipped and the background and orb
+render still frames. Canvases cap their pixel ratio, a frame-time watchdog drops resolution on a device that
+can't keep up, and rendering stops while the tab is hidden or the element is off screen. On phones the HUD
+keeps to the edges so the camera stays clear.
+
+Open `/#demo` to preview the call screen with sample data and a simulated voice, without a server or camera
+(`#demo-amber` and `#demo-alert` show the safety states). `/#intro` replays the intro.
+
+| Overview | Show it | Fix it | Start |
+|---|---|---|---|
+| ![Overview](docs/screenshots/v4-overview.png) | ![Show it](docs/screenshots/v4-show.png) | ![Fix it](docs/screenshots/v4-fix.png) | ![Start](docs/screenshots/v4-start.png) |
+
+| Start page on a phone | Phone call | Hazard stop | Desktop call |
+|---|---|---|---|
+| ![Start page](docs/screenshots/v4-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop call with anatomy view](docs/screenshots/v4-call-desktop.png) |
 
 ## Run it
 
