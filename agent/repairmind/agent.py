@@ -29,6 +29,7 @@ from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
 from . import reviewer, safety, sources, speech_guard, vision
+from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
 from .prompts import GREETING, MECHANIC_INSTRUCTIONS
@@ -43,6 +44,8 @@ AGENT_NAME = "repairmind-mechanic"
 SESSIONS_DIR = Path(os.getenv("RMX_SESSIONS_DIR", "sessions"))
 GEMINI_MODEL = os.getenv("RMX_GEMINI_MODEL", "gemini-3.1-flash-live-preview")
 GEMINI_VOICE = os.getenv("RMX_GEMINI_VOICE", "Charon")
+# google-genai 3.x defaults to the "v1" API, which has no Live endpoint (WebSocket 404).
+GEMINI_API_VERSION = os.getenv("RMX_GEMINI_API_VERSION", "v1beta")
 
 TOPIC_STATE = "rmx.state"
 TOPIC_MARKER = "rmx.marker"
@@ -419,6 +422,8 @@ server = AgentServer()
 
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
+    # Must run before any audio stream exists; see audio_warmup.py (Windows crash).
+    warm_up_resampler()
     await ctx.connect()
 
     # Resume a dropped call: the web app reuses the room name for the same repair.
@@ -434,6 +439,7 @@ async def entrypoint(ctx: JobContext) -> None:
         llm=google.realtime.RealtimeModel(
             model=GEMINI_MODEL,
             voice=GEMINI_VOICE,
+            api_version=GEMINI_API_VERSION,
             temperature=0.4,
         ),
         # ~1 frame/second while the user talks, slower when quiet: enough context, low cost.
