@@ -132,3 +132,15 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .file-btn.busy { opacity: 0.6; }
 .manual-status { color: var(--muted); font-size: 0.85rem; margin: 8px 0 0; }
 .approx { color: var(--amber); font-style: normal; font-weight: 500; }
+
+/* 3D step viewer (expert mode) */
+.viewer3d { border-bottom: 1px solid var(--line); }
+.viewer3d-canvas { position: relative; height: 260px; background: radial-gradient(circle at 50% 40%, var(--surface-2), var(--bg)); }
+.viewer3d-msg { padding: 12px 16px; color: var(--muted); font-size: 0.9rem; }
+.viewer3d-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 8px 12px; flex-wrap: wrap; }
+.viewer3d-caption { font-size: 0.88rem; flex: 1 1 200px; }
+.viewer3d-actions { display: flex; gap: 6px; }
+.badge-illustrative { position: absolute; top: 8px; left: 8px; font-size: 0.72rem; padding: 3px 8px; border-radius: 999px;
+  background: rgba(245, 181, 68, 0.15); color: var(--amber); border: 1px solid rgba(245, 181, 68, 0.4); }
+.part-label { pointer-events: none; font-size: 11px; white-space: nowrap; background: rgba(11, 15, 23, 0.85);
+  color: var(--cyan); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); }

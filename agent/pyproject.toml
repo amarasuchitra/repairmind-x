@@ -12,10 +12,15 @@ dependencies = [
   "anthropic>=2.0",
   "pypdf>=5.0",
   "python-multipart>=0.0.9",
+  "pyyaml>=6.0",
+  "pillow>=10.0",
+  "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+# Trained defect detectors (expert mode). Heavy; only needed on machines that run a detector.
+detector = ["torch>=2.3", "torchvision>=0.18", "anomalib>=2.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -43,6 +43,22 @@ Browser (phone / desktop)  ──WebRTC──>  LiveKit room  <──  Mechanic 
 
 Vision uses the same Anthropic key as the cross-check (`RMX_VISION_MODEL`, default `claude-opus-5-5`). Without it, risky steps can't be verified on camera, so they are blocked.
 
+## Phase 4: expert mode
+
+When the confirmed model matches a supported product, the mechanic switches from general guides to that
+product's own reviewed procedures.
+
+| Part | Where | What it does |
+|---|---|---|
+| Product registry | `agent/products/<id>/product.yaml`, `agent/repairmind/expert/products.py` | How to recognise the product (brand + model regex), its parts for the 3D view, an optional detector, and procedures as structured steps. A step whose text reads irreversible must be flagged so, or the file fails to load. |
+| Reviewed procedures only | `get_expert_procedure` tool, `source_kind="procedure"` | Procedures are served only when `reviewed_by` and `reviewed_on` are filled in by a qualified person. The mechanic must say each step word for word; any paraphrase is blocked. `RMX_ALLOW_UNREVIEWED=1` loads drafts for demos, and they are labelled as unreviewed. |
+| Trained defect detector | `run_defect_detector` tool, `agent/repairmind/expert/detector.py` | Anomalib PatchCore (or the original ResNet-50 + autoencoder weights). Each product has two thresholds from its own validation set: good, defective, and an "uncertain" band in between that means "get a better view". The heatmap is shown on a frozen frame. |
+| Training script | `agent/scripts/train_detector.py` | Trains PatchCore on your own photos of good units, picks both thresholds at 99% coverage, and refuses to write a config if good and defective don't separate. |
+| 3D step viewer | `web/src/Viewer3D.tsx`, `GET /api/products/{id}` | Shows each procedure step on a 3D model: highlighted parts, exploded moves, hidden parts, replay. Uses a GLB from real CAD if `model_url` is set; otherwise simple shapes with an "Illustrative model" badge. |
+
+`agent/products/example-desk-fan` is a made-up example to copy. It is not a real product and its procedure
+is not reviewed. Detector extras: `uv pip install -e ".[detector]"` (torch, torchvision, anomalib).
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret), a Google AI Studio API key, and an Anthropic API key for the cross-check.

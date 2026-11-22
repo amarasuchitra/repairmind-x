@@ -32,6 +32,8 @@ from . import reviewer, safety, sources, speech_guard, vision
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
 from .prompts import GREETING, MECHANIC_INSTRUCTIONS
+from .expert import detector as expert_detector
+from .expert import products as expert_products
 from .session import GateResult, Hypothesis, RepairSession
 
 load_dotenv()
@@ -45,6 +47,7 @@ GEMINI_VOICE = os.getenv("RMX_GEMINI_VOICE", "Charon")
 TOPIC_STATE = "rmx.state"
 TOPIC_MARKER = "rmx.marker"
 TOPIC_ALERT = "rmx.alert"
+TOPIC_3D = "rmx.3d"
 
 
 class Mechanic(Agent):
@@ -66,6 +69,26 @@ class Mechanic(Agent):
         except Exception:  # the UI being gone must never break the call
             log.exception("publish failed")
 
+    def _match_expert(self) -> str:
+        """Switch to expert mode if the confirmed model is a supported product. Returns a note for the model."""
+        if not self.state.model_confirmed or not self.state.model:
+            return ""
+        try:
+            product = expert_products.find_product(self.state.brand, self.state.model)
+        except Exception:  # a broken product file must not break the call
+            log.exception("product registry failed to load")
+            return ""
+        if product is None:
+            self.state.expert_product_id = ""
+            return ""
+        self.state.expert_product_id = product.id
+        usable = expert_products.usable_procedures(product)
+        note = (f" EXPERT MODE: this is a supported product ({product.name}). Call get_expert_procedure before "
+                "using general guides.")
+        if not usable:
+            note += " It has no reviewed procedures yet, so continue in general mode."
+        return note
+
     async def _done(self, result: GateResult) -> str:
         self.state.save(SESSIONS_DIR)
         await self.publish(TOPIC_STATE, self.state.ui_state())
@@ -86,7 +109,9 @@ class Mechanic(Agent):
             model_confirmed: True only if you read it on the label or the user said it.
             how_identified: "label", "user said", or "visual guess".
         """
-        return await self._done(self.state.identify_device(device, brand, model, model_confirmed, how_identified))
+        result = self.state.identify_device(device, brand, model, model_confirmed, how_identified)
+        note = self._match_expert() if result.allowed else ""
+        return await self._done(result) + note
 
     @function_tool
     async def record_symptom(self, context: RunContext, symptom: str) -> str:
@@ -169,20 +194,103 @@ class Mechanic(Agent):
 
         Args:
             text: The exact instruction you intend to say.
-            source_kind: "ifixit", "manual", "label" or "general_safe".
-            source_ref: Guide URL plus step number, or manual page. Empty only for general_safe.
+            source_kind: "procedure" (expert mode), "ifixit", "manual", "label" or "general_safe".
+            source_ref: For procedure: "product/procedure#step". Otherwise guide URL plus step number, or
+                manual page. Empty only for general_safe.
             expected_result: What the camera should show when the step is done.
             source_excerpt: The exact source text this step comes from (guide step or manual passage).
         """
-        if source_kind not in ("ifixit", "manual", "label", "general_safe"):
-            return "BLOCKED (bad_source_kind). Use ifixit, manual, label or general_safe."
+        if source_kind not in ("procedure", "ifixit", "manual", "label", "general_safe"):
+            return "BLOCKED (bad_source_kind). Use procedure, ifixit, manual, label or general_safe."
         key = self.state._key(text)
         if self.state.needs_review(text, source_kind) and self.state.reviews.get(key, {}).get("status") != "approve":
             frame = self.frames.jpeg_b64() if self.frames else None
             result = await reviewer.review_step(self.state, text, source_kind, source_ref, source_excerpt,
                                                 expected_result, [frame] if frame else None)
             self.state.record_review(text, result.status, result.reason)
-        return await self._done(self.state.propose_step(text, source_kind, source_ref, expected_result))  # type: ignore[arg-type]
+        gate = self.state.propose_step(text, source_kind, source_ref, expected_result)  # type: ignore[arg-type]
+        if gate.allowed and source_kind == "procedure":
+            await self._publish_3d(source_ref)
+        return await self._done(gate)
+
+    async def _publish_3d(self, ref: str) -> None:
+        product = expert_products.load_all().get(self.state.expert_product_id)
+        found = product.step(ref) if product else None
+        if not found:
+            return
+        proc, st = found
+        await self.publish(TOPIC_3D, {"product_id": product.id, "procedure_id": proc.id, "step_id": st.id,
+                                      "highlight": st.highlight, "move": st.move, "hide": st.hide,
+                                      "caption": st.text, "illustrative": product.illustrative_3d})
+
+    # ------------------------------------------------------------- expert mode
+    @function_tool
+    async def get_expert_procedure(self, context: RunContext, fault: str = "", procedure_id: str = "") -> str:
+        """Expert mode only: list the reviewed procedures for this product, or get one procedure's steps.
+
+        Args:
+            fault: The diagnosed fault, used to pick the best procedure when procedure_id is empty.
+            procedure_id: A procedure id from the list, to get its exact steps.
+        """
+        product = expert_products.load_all().get(self.state.expert_product_id)
+        if product is None:
+            return "Not in expert mode: no supported product is confirmed. Use general sources."
+        usable = expert_products.usable_procedures(product)
+        if not usable:
+            return "This product has no reviewed procedures. Use general sources."
+        if not procedure_id:
+            words = set(re.findall(r"[a-z]+", fault.lower()))
+            def overlap(p) -> int:
+                return len(words & set(re.findall(r"[a-z]+", " ".join([p.title, p.fault, *p.symptoms]).lower())))
+            ranked = sorted(usable, key=overlap, reverse=True)
+            return "Procedures (pick the one that matches the diagnosis, then call again with its id):\n" + "\n".join(
+                f"- {p.id}: {p.title}. Fault: {p.fault}. Symptoms: {', '.join(p.symptoms)}" for p in ranked)
+        proc = product.procedure(procedure_id)
+        if proc is None or proc not in usable:
+            return "No usable procedure with that id."
+        lines = [f"Procedure {product.id}/{proc.id}: {proc.title} (source: {proc.source}"
+                 + ("" if proc.reviewed else "; UNREVIEWED DEMO, tell the user") + ")."]
+        for st in proc.steps:
+            extra = []
+            if st.precautions:
+                extra.append("precautions: " + ", ".join(st.precautions))
+            if st.tools:
+                extra.append("tools: " + ", ".join(st.tools))
+            if st.irreversible:
+                extra.append("IRREVERSIBLE")
+            if st.caution:
+                extra.append("caution: " + st.caution)
+            lines.append(f"- ref {product.id}/{proc.id}#{st.id}: \"{st.text}\" expected: {st.expected_result}"
+                         + (f" [{'; '.join(extra)}]" if extra else ""))
+        lines.append('Propose each step with source_kind="procedure", that ref, and the text EXACTLY as written.')
+        return "\n".join(lines)
+
+    @function_tool
+    async def run_defect_detector(self, context: RunContext) -> str:
+        """Expert mode only: run this product's trained defect detector on the current full-resolution frame.
+        Ask the user to frame the part clearly in good light first. 'uncertain' means get another view."""
+        product = expert_products.load_all().get(self.state.expert_product_id)
+        if product is None:
+            return "Not in expert mode, so there is no trained detector. Rely on what you see."
+        frame = self.frames.jpeg_b64(max_side=1280) if self.frames else None
+        if frame is None:
+            return "No camera frame yet."
+        import base64
+        import io
+
+        from PIL import Image
+
+        image = Image.open(io.BytesIO(base64.b64decode(frame)))
+        result = await asyncio.to_thread(expert_detector.detect, product,
+                                         expert_products.PRODUCTS_DIR / product.id, image)
+        if result.heatmap_jpeg_b64 and result.hotspot:
+            await self.publish(TOPIC_MARKER, {"x": result.hotspot[0], "y": result.hotspot[1], "w": 0.0, "h": 0.0,
+                                              "label": f"detector: {result.verdict}", "precise": False,
+                                              "image": "data:image/jpeg;base64," + result.heatmap_jpeg_b64})
+        if result.score is not None:
+            self.state.record_test("Trained defect detector on the camera frame", result.for_model())
+            self.state.save(SESSIONS_DIR)
+        return result.for_model()
 
     @function_tool
     async def mark_photo_taken(self, context: RunContext, step_id: str) -> str:
@@ -255,7 +363,8 @@ class Mechanic(Agent):
             return "Label not readable: " + (reading.advice_if_unreadable or "ask for a closer, sharper shot.")
         result = self.state.identify_device(self.state.device or "device", reading.brand or self.state.brand,
                                             reading.model, True, "label (close-up read)")
-        out = await self._done(result)
+        note = self._match_expert() if result.allowed else ""
+        out = await self._done(result) + note
         return f"Label reads: {reading.brand} {reading.model}. Read it back to the user to confirm. " + out
 
     @function_tool

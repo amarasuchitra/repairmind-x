@@ -28,7 +28,7 @@ THRESHOLD_IRREVERSIBLE = 0.90
 MIN_HISTORY_QUESTIONS = 2
 MIN_SAFE_TESTS_BEFORE_IRREVERSIBLE = 1
 
-SourceKind = Literal["ifixit", "manual", "label", "general_safe"]
+SourceKind = Literal["ifixit", "manual", "label", "general_safe", "procedure"]
 VerifyKind = Literal["camera", "user"]
 StepStatus = Literal["pending", "awaiting_confirmation", "active", "done", "failed", "blocked"]
 
@@ -105,6 +105,7 @@ class RepairSession:
     precautions_confirmed: list[str] = field(default_factory=list)
 
     steps: list[Step] = field(default_factory=list)
+    expert_product_id: str = ""
     reviews: dict = field(default_factory=dict)  # normalised step text -> {"status", "reason"}
     review_required: bool = True
     hazard_stop: str = ""
@@ -248,9 +249,12 @@ class RepairSession:
         return re.sub(r"\W+", " ", text.lower()).strip()
 
     def needs_review(self, text: str, source_kind: str) -> bool:
-        """Second-model cross-check before the first real step and every amber or irreversible step."""
+        """Second-model cross-check before the first real step and every amber or irreversible step.
+        Steps from a human-reviewed expert procedure skip it, unless they are irreversible."""
         if not self.review_required or source_kind == "general_safe":
             return False
+        if source_kind == "procedure":
+            return bool(safety.irreversible_actions(text))
         first_real = not any(s.source_kind != "general_safe" for s in self.steps)
         level = safety.assess(text, base=self.assessment).level
         return first_real or level >= RiskLevel.AMBER or bool(safety.irreversible_actions(text))
@@ -293,6 +297,11 @@ class RepairSession:
                                               any(k in text.lower() for k in ("open", "remove", "unscrew", "disassemble"))):
             return GateResult(False, "This step is not a universal safe action. It needs a real source "
                               "(iFixit guide, manufacturer manual or device label).", "needs_source")
+        procedure_precautions: list[str] = []
+        if source_kind == "procedure":
+            check, procedure_precautions = self._check_procedure_step(text, source_ref)
+            if check is not None:
+                return check
         if source_kind in ("ifixit", "manual", "label") and not source_ref.strip():
             return GateResult(False, "Give the source reference (guide URL or manual page) for this step.",
                               "needs_source_ref")
@@ -312,6 +321,9 @@ class RepairSession:
                               "low_confidence", {"needed": needed})
 
         self._apply_assessment(step_assessment)
+        for pc in procedure_precautions:
+            if pc not in self.precautions_required:
+                self.precautions_required.append(pc)
         missing = self.missing_precautions()
         if missing and source_kind != "general_safe":
             return GateResult(False, "Before this step the user must do these, and you must see them on camera: "
@@ -352,6 +364,24 @@ class RepairSession:
         self._record("step_active", id=step.id, text=text)
         return GateResult(True, f"Give this step now, then ask to see the result. Expected: {expected_result}",
                           data={"step_id": step.id})
+
+    def _check_procedure_step(self, text: str, source_ref: str) -> tuple[GateResult | None, list[str]]:
+        from .expert import products
+
+        product = products.load_all().get(self.expert_product_id) if self.expert_product_id else None
+        if product is None:
+            return GateResult(False, "No expert product is active for this device.", "no_expert_product"), []
+        resolved = product.step(source_ref)
+        if resolved is None:
+            return GateResult(False, "Unknown procedure step reference. Use 'product/procedure#step'.", "bad_ref"), []
+        proc, pstep = resolved
+        if not proc.reviewed and not products.allow_unreviewed():
+            return GateResult(False, "That procedure has not been reviewed by a qualified technician.",
+                              "procedure_unreviewed"), []
+        if self._key(text) != self._key(pstep.text):
+            return GateResult(False, "Say the procedure step exactly as written: " + pstep.text,
+                              "procedure_text_mismatch"), []
+        return None, list(pstep.precautions)
 
     def mark_photo_taken(self, step_id: str) -> GateResult:
         s = self._step(step_id)
@@ -485,6 +515,7 @@ class RepairSession:
                        "cross_checked": self.reviews.get(self._key(s.text), {}).get("status") == "approve"}
                       for s in self.steps],
             "hazard": self.hazard_stop,
+            "expert_product": self.expert_product_id,
             "escalated": self.escalated,
         }
 

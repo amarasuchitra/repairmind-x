@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from "react";
 import {
   LiveKitRoom,
   RoomAudioRenderer,
@@ -15,10 +15,15 @@ import {
   Alert,
   Marker,
   SessionView,
+  Step3D,
+  TOPIC_3D,
   TOPIC_ALERT,
   TOPIC_MARKER,
   TOPIC_STATE,
 } from "./types";
+
+// three.js is large, so the 3D viewer loads only when an expert procedure step arrives.
+const Viewer3D = lazy(() => import("./Viewer3D").then((m) => ({ default: m.Viewer3D })));
 
 interface Props {
   serverUrl: string;
@@ -66,6 +71,8 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
   const { textStreams: stateStreams } = useTextStream(TOPIC_STATE);
   const { textStreams: markerStreams } = useTextStream(TOPIC_MARKER);
   const { textStreams: alertStreams } = useTextStream(TOPIC_ALERT);
+  const { textStreams: step3dStreams } = useTextStream(TOPIC_3D);
+  const step3d = useMemo(() => lastJson<Step3D>(step3dStreams), [step3dStreams]);
   const view = useMemo(() => lastJson<SessionView>(stateStreams), [stateStreams]);
   const marker = useMemo(() => lastJson<Marker>(markerStreams), [markerStreams]);
   const alert = useMemo(() => lastJson<Alert>(alertStreams), [alertStreams]);
@@ -160,6 +167,11 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
       )}
 
       <aside className="panel">
+        {step3d && (
+          <Suspense fallback={<div className="viewer3d-msg">Loading 3D model…</div>}>
+            <Viewer3D step={step3d} />
+          </Suspense>
+        )}
         <RepairPanel view={view} />
         <ManualUpload room={room} />
       </aside>
