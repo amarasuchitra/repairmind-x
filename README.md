@@ -109,12 +109,18 @@ vignette, a touch of lens chromatic aberration and animated film grain.
   radial spectrum, aperture blades that open with loudness and segment meters, all on a tilted plane seen in
   perspective. Cyan when the mechanic speaks, green while it listens, violet with a scanning sweep while it
   thinks. Without WebGL it falls back to the 2D canvas dial.
-- **Start page** (`web/src/Landing.tsx`, `web/src/fx/showroom/`): one full-screen 3D scene that never
-  scrolls. A desk fan modelled in code stands on a lit platform in a dark studio; drag to turn it. Five
-  chapters along the bottom (Overview, Show it, Talk it through, Fix it, Start) move the camera and change
-  the model: an x-ray identification scan, labels pinned to real parts, an exploded view with an AR lock on
-  the blade cap. Every element sits on a 12-column grid: copy in columns 1-5, the chapter panel in 9-12, the
-  chapter rail across the bottom. Chapters advance on their own until you take over; arrow keys work too.
+- **Start page** (`web/src/Landing.tsx`, `web/src/fx/showroom/`): a fixed 3D stage with five full-height
+  sections scrolling over it (Overview, Show it, Talk it through, Fix it, Start). A belt-drive record player
+  modelled in code sits on a lit platform in a dark studio; drag to turn it. Scrolling drives the camera
+  between composed shots and changes the model: the record spins and the tonearm swings over it, an x-ray
+  scan sweeps across for identification, labels pin to real parts, and in Fix it the platter lifts off to
+  show the glowing drive belt and an AR lock on the motor pulley. Words and the model alternate sides each
+  section; a rail on the right fills as you scroll. Display type is a wide extended face (Michroma) in
+  spaced capitals, and the R.M.X ring mark (`web/src/ui/RingMark.tsx`) breaks where its letters cross it.
+- **Anatomy view** (`web/src/anatomy/`): on the call screen, an isometric figure of the identified device
+  drawn with the [Anatomy kit](https://github.com/wheresryan22/anatomy) (MIT, vendored in
+  `web/vendor/anatomy`). The part the current step is about is lit, the platter lifts off when the step
+  needs it out of the way, and you can tap any part. Rebuild it with `node scripts/anatomy/turntable.mjs`.
 
 Safety banners and the stop alert stay solid amber and red and are never see-through; the hazard banner
 pulses its glow, never its opacity. With "reduce motion" the intro is skipped and the background and orb
@@ -127,11 +133,11 @@ Open `/#demo` to preview the call screen with sample data and a simulated voice,
 
 | Overview | Show it | Fix it | Start |
 |---|---|---|---|
-| ![Overview](docs/screenshots/v3-overview.png) | ![Show it](docs/screenshots/v3-show.png) | ![Fix it](docs/screenshots/v3-fix.png) | ![Start](docs/screenshots/v3-start.png) |
+| ![Overview](docs/screenshots/v4-overview.png) | ![Show it](docs/screenshots/v4-show.png) | ![Fix it](docs/screenshots/v4-fix.png) | ![Start](docs/screenshots/v4-start.png) |
 
 | Start page on a phone | Phone call | Hazard stop | Desktop call |
 |---|---|---|---|
-| ![Start page](docs/screenshots/v3-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop](docs/screenshots/v2-call-desktop.png) |
+| ![Start page](docs/screenshots/v4-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop call with anatomy view](docs/screenshots/v4-call-desktop.png) |
 
 ## Run it
 

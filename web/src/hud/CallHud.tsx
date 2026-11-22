@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Alert, Marker, SessionView, StepView } from "../types";
 import { VoiceOrb, type OrbState } from "./VoiceOrb";
 import { Flip, Logo, Mic, MicOff, PhoneOff } from "../ui/Icons";
+import { AnatomyFigure, hasAnatomy } from "../anatomy/Anatomy";
 
 export interface Caption {
   who: "You" | "Mechanic";
@@ -206,6 +207,13 @@ function RepairPanel({ view }: { view: SessionView | null }) {
           </ul>
         )}
       </div>
+
+      {hasAnatomy(view) && (
+        <div className="hud-card anat-wrap">
+          <h2 className="hud-h">ANATOMY</h2>
+          <AnatomyFigure view={view} />
+        </div>
+      )}
 
       <div className={`hud-card safety safety-${view.risk_level}`}>
         <h2 className="hud-h">SAFETY <span className={`lvl lvl-${view.risk_level}`}>{view.risk_level.toUpperCase()}</span></h2>

@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import gsap from "gsap";
 import { VoiceOrb } from "./hud/VoiceOrb";
 import { makeDemoVoice } from "./fx/demoVoice";
 import { prefersReducedMotion } from "./fx/motion";
 import { webglAvailable } from "./fx/gl/core";
 import { Showroom } from "./fx/showroom/Showroom";
-import { Arrow, Logo } from "./ui/Icons";
+import { Arrow } from "./ui/Icons";
+import { RingMark, Wordmark } from "./ui/RingMark";
 
 export interface LandingProps {
   accepted: boolean;
@@ -21,7 +22,6 @@ export interface LandingProps {
 
 const CHAPTERS = ["Overview", "Show it", "Talk it through", "Fix it", "Start"] as const;
 const START = 4;
-const AUTO_MS = 9000;
 
 const NOTICE = [
   { k: "Control", t: "The mechanic gives guidance, not a guarantee. You stay in control of every step." },
@@ -41,14 +41,24 @@ function Tag({ at, side = "r", k, children, minor }: { at: string; side?: "l" | 
   );
 }
 
+/** Section heading block: an outlined chapter numeral behind a wide uppercase title. */
+function Head({ i, kicker, children }: { i: number; kicker: string; children: ReactNode }) {
+  return (
+    <>
+      <span className="sx-num" aria-hidden data-a>{String(i + 1).padStart(2, "0")}</span>
+      <span className="sx-kicker" data-a>{kicker}</span>
+      <h2 className="sx-h" data-a>{children}</h2>
+    </>
+  );
+}
+
 export function Landing(p: LandingProps) {
   const [ch, setCh] = useState(0);
-  const [auto, setAuto] = useState(true);
   const canvas = useRef<HTMLCanvasElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
-  const copy = useRef<HTMLDivElement>(null);
-  const panel = useRef<HTMLDivElement>(null);
+  const bar = useRef<HTMLSpanElement>(null);
+  const secs = useRef<HTMLElement[]>([]);
   const room = useRef<Showroom | null>(null);
   const reduced = useMemo(prefersReducedMotion, []);
   const [gl] = useState(webglAvailable);
@@ -67,31 +77,52 @@ export function Landing(p: LandingProps) {
     return () => { r?.dispose(); room.current = null; };
   }, [gl, reduced]);
 
-  const go = useCallback((i: number, user = true) => {
-    if (user) setAuto(false);
-    setCh((cur) => (i === cur ? cur : i));
+  // scrolling drives the scene: progress is measured in chapters, from section tops
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.add("sx-snap");
+    let raf = 0;
+    const measure = () => {
+      raf = 0;
+      const y = window.scrollY;
+      const tops = secs.current.map((s) => s.offsetTop);
+      let prog = 0;
+      for (let i = tops.length - 1; i >= 0; i--) {
+        if (y >= tops[i] - 1) {
+          prog = i + (i < tops.length - 1 ? Math.min(1, (y - tops[i]) / Math.max(1, tops[i + 1] - tops[i])) : 0);
+          break;
+        }
+      }
+      room.current?.setProgress(prog);
+      const near = Math.round(prog);
+      setCh(near);
+      // pinned labels belong to one chapter: they fade out while the camera travels
+      const off = Math.abs(prog - near);
+      if (labels.current) labels.current.style.opacity = String(1 - Math.min(1, Math.max(0, (off - 0.08) / 0.16)));
+      if (bar.current) bar.current.style.setProperty("--p", (prog / (tops.length - 1)).toFixed(4));
+    };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(measure); };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    measure();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      cancelAnimationFrame(raf);
+      html.classList.remove("sx-snap");
+      window.scrollTo(0, 0);
+    };
   }, []);
 
-  useEffect(() => { room.current?.goTo(ch); }, [ch]);
-
-  // chapters advance on their own until the visitor takes over
+  // each section's words and panel come in as it reaches the middle of the screen
   useEffect(() => {
-    if (!auto || reduced || !p.entering || ch >= START) return;
-    const id = window.setTimeout(() => go((ch + 1) % START, false), AUTO_MS);
-    return () => window.clearTimeout(id);
-  }, [auto, ch, reduced, p.entering, go]);
+    if (reduced) { secs.current.forEach((s) => s.classList.add("in")); return; }
+    const io = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && e.target.classList.add("in")), { threshold: 0.3 });
+    secs.current.forEach((s) => io.observe(s));
+    return () => io.disconnect();
+  }, [reduced]);
 
-  // keyboard: arrows move between chapters
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement;
-      if (t && (t.tagName === "INPUT" || t.tagName === "BUTTON" && e.key === " ")) return;
-      if (e.key === "ArrowRight") go(Math.min(START, ch + 1));
-      if (e.key === "ArrowLeft") go(Math.max(0, ch - 1));
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [ch, go]);
+  const go = (i: number) => secs.current[i]?.scrollIntoView({ behavior: reduced ? "auto" : "smooth" });
 
   // entrance once the intro hands over
   useEffect(() => {
@@ -101,184 +132,172 @@ export function Landing(p: LandingProps) {
     if (!el || reduced) return;
     const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
     tl.fromTo(el.querySelectorAll(".sx-top > *"), { opacity: 0, y: -10 }, { opacity: 1, y: 0, duration: 1.2, stagger: 0.08 }, 0.2)
-      .fromTo(el.querySelectorAll(".sx-rail button"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 1.1, stagger: 0.06 }, 0.5)
-      .fromTo(el.querySelectorAll(".sx-frame > *"), { opacity: 0 }, { opacity: 1, duration: 1.6 }, 0.3);
+      .fromTo(el.querySelector(".ring-mark"), { opacity: 0, scale: 0.85, rotate: -25 }, { opacity: 1, scale: 1, rotate: 0, duration: 2 }, 0.1)
+      .fromTo(el.querySelectorAll(".sx-rail, .sx-frame > *"), { opacity: 0 }, { opacity: 1, duration: 1.6 }, 0.4);
     return () => { tl.progress(1).kill(); };
   }, [p.entering, reduced]);
 
-  // copy and panel change with each chapter
-  useEffect(() => {
-    if (reduced || !p.entering) return;
-    const items = [...(copy.current?.querySelectorAll("[data-a]") ?? []), ...(panel.current ? [panel.current] : [])];
-    const tw = gsap.fromTo(items, { opacity: 0, y: 18, filter: "blur(6px)" }, { opacity: 1, y: 0, filter: "blur(0px)", duration: 1, ease: "expo.out", stagger: 0.06, delay: 0.25 });
-    return () => { tw.progress(1).kill(); };
-  }, [ch, reduced, p.entering]);
-
   const n = (i: number) => String(i + 1).padStart(2, "0");
+  const sec = (i: number) => (el: HTMLElement | null) => { if (el) secs.current[i] = el; };
 
   return (
     <div ref={root} className={`sx sx-ch${ch} ${p.entering ? "" : "sx-wait"} ${gl ? "" : "sx-nogl"}`}>
-      <canvas ref={canvas} className="sx-canvas" aria-hidden />
-      <div className="sx-shade" aria-hidden />
-
-      <div ref={labels} className="sx-labels" aria-hidden>
-        <div key={ch}>
-        {ch === 1 && <>
-          <Tag at="model" k="Identified">EX-DF30B · 96%</Tag>
-          <Tag at="clip" k="Fixings" side="r">4 guard clips</Tag>
-          <Tag at="motor" k="Housing" side="l" minor>Motor, sealed</Tag>
-        </>}
-        {ch === 2 && <>
-          <Tag at="blade" k="Cause 1 · 92%" side="l">Dust build-up</Tag>
-          <Tag at="motor" k="Cause 2 · 5%" side="l">Worn bearing</Tag>
-          <Tag at="cap" k="Cause 3 · 3%" side="l" minor>Loose blade cap</Tag>
-        </>}
-        {ch === 3 && <>
-          <div className="sx-lock" data-anchor="cap" data-r="0.3"><i /><i /><i /><i />
-            <svg className="sx-turn" viewBox="0 0 100 100"><path d="M78 30A36 36 0 1 1 30 22" /><path d="M24 12l6 10-11 3" /></svg>
+      <div className="sx-stage" aria-hidden>
+        <canvas ref={canvas} className="sx-canvas" />
+        <div className="sx-shade" />
+        <div ref={labels} className="sx-labels">
+          <div key={ch}>
+          {ch === 1 && <>
+            <Tag at="model" k="Identified" side="l">EX-TT20 · 94%</Tag>
+            <Tag at="tonearm" k="Tonearm">Static balance</Tag>
+            <Tag at="speed" k="Controls" side="l" minor>33⅓ / 45 rpm</Tag>
+          </>}
+          {ch === 2 && <>
+            <Tag at="platter" k="Cause 1 · 88%">Worn drive belt</Tag>
+            <Tag at="pulley" k="Cause 2 · 8%" side="l">Dirty motor pulley</Tag>
+            <Tag at="speed" k="Cause 3 · 4%" minor>Speed setting</Tag>
+          </>}
+          {ch === 3 && <>
+            <div className="sx-lock" data-anchor="pulley" data-r="0.14"><i /><i /><i /><i />
+              <svg className="sx-turn" viewBox="0 0 100 100"><path d="M78 30A36 36 0 1 1 30 22" /><path d="M24 12l6 10-11 3" /></svg>
+            </div>
+            <Tag at="pulley" k="Step 3 · Now" side="l">Loop the belt over the pulley</Tag>
+            <Tag at="record" k="Step 2 · Done" side="l">Platter lifted off</Tag>
+          </>}
           </div>
-          <Tag at="cap" k="Step 3 · Turn clockwise">Left-hand thread</Tag>
-          <Tag at="guard" k="Step 2 · Done" side="l" minor>Front guard off</Tag>
-        </>}
+        </div>
+        <div className="sx-frame">
+          <span className="c tl" /><span className="c tr" /><span className="c bl" /><span className="c br" />
         </div>
       </div>
 
-      <div className="sx-frame" aria-hidden>
-        <span className="c tl" /><span className="c tr" /><span className="c bl" /><span className="c br" />
-      </div>
+      <header className="sx-top">
+        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); go(0); }} aria-label="RepairMind X, back to top">
+          <Wordmark />
+        </a>
+        <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{CHAPTERS[ch]}</em></span>
+        <nav className="sx-links">
+          <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>Bulk inspection</a>
+          <button className="x-btn x-btn-line sx-cta" onClick={() => go(START)}>Start a repair <Arrow size={16} /></button>
+        </nav>
+      </header>
 
-      <div className="sx-ui">
-        <header className="sx-top">
-          <a className="x-brand" href="#" onClick={(e) => { e.preventDefault(); go(0); }} aria-label="RepairMind X home">
-            <Logo size={26} /><span>RepairMind</span><b>X</b>
-          </a>
-          <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)}</span>
-          <nav className="sx-links">
-            <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>Bulk inspection</a>
-            <button className="x-btn x-btn-line sx-cta" onClick={() => go(START)}>Start a repair <Arrow size={16} /></button>
-          </nav>
-        </header>
-
-        <section ref={copy} className="sx-copy" key={`c${ch}`} aria-live="polite">
-          {ch === 0 && <>
+      <main className="sx-flow">
+        <section ref={sec(0)} className="sx-sec sx-sec-l sx-hero" aria-label="Overview">
+          <div className="sx-col">
+            <div data-a><RingMark size={170} /></div>
             <span className="sx-kicker" data-a>Live video repair</span>
-            <h1 className="sx-h" data-a>Every machine<br />has a solution.</h1>
+            <h1 className="sx-h sx-h1" data-a>Every machine has a solution.</h1>
             <p className="sx-p" data-a>Point your phone at the problem and talk. The mechanic sees what you see, marks the exact part on your screen and walks you through the fix, one checked step at a time.</p>
             <div className="sx-actions" data-a>
               <button className="x-btn x-btn-solid" onClick={() => go(START)}>Start a repair <Arrow size={18} /></button>
               <button className="x-btn x-btn-ghost" onClick={() => go(1)}>See how it works</button>
             </div>
-          </>}
-          {ch === 1 && <>
-            <span className="sx-kicker" data-a>Step one</span>
-            <h1 className="sx-h" data-a>Show it.</h1>
-            <p className="sx-p" data-a>Point your camera at the device. The mechanic reads its shape and label, names the make and model, and asks to see the label when it isn't sure.</p>
-          </>}
-          {ch === 2 && <>
-            <span className="sx-kicker" data-a>Step two</span>
-            <h1 className="sx-h" data-a>Talk it through.</h1>
-            <p className="sx-p" data-a>Describe the fault in your own words. It asks a few sharp questions, ranks the likely causes and tells you how sure it is.</p>
-          </>}
-          {ch === 3 && <>
-            <span className="sx-kicker" data-a>Step three</span>
-            <h1 className="sx-h" data-a>Fix it.</h1>
-            <p className="sx-p" data-a>Each step is marked on your live video. A second AI checks every risky instruction, and anything that can't be undone waits for your OK.</p>
-          </>}
-          {ch === START && <>
-            <span className="sx-kicker" data-a>Before you start</span>
-            <h1 className="sx-h" data-a>Ready when<br />you are.</h1>
-            <p className="sx-p" data-a>Read this once. The mechanic holds itself to the same rules for the whole call.</p>
-          </>}
-          {ch < START && ch > 0 && (
-            <div className="sx-actions" data-a>
-              <button className="x-btn x-btn-line" onClick={() => go(ch + 1)}>{ch === 3 ? "Start a repair" : "Next"} <Arrow size={16} /></button>
-            </div>
-          )}
+            <dl className="sx-specrow" data-a>
+              <div><dt>Vision</dt><dd>Live camera, AR</dd></div>
+              <div><dt>Voice</dt><dd>Natural, two-way</dd></div>
+              <div><dt>Safety</dt><dd>Cross-checked</dd></div>
+            </dl>
+          </div>
+          <span className="sx-scroll" aria-hidden><i />Scroll</span>
         </section>
 
-        <aside ref={panel} className={`sx-panel${ch === START ? " sx-panel-solid" : ""}`} key={`p${ch}`}>
-          {ch === 0 && <>
-            <h2 className="sx-ph">System</h2>
-            <dl className="sx-spec">
-              <div><dt>Vision</dt><dd>Live camera, AR markers</dd><i /></div>
-              <div><dt>Voice</dt><dd>Natural, two-way</dd><i /></div>
-              <div><dt>Safety</dt><dd>Gated and cross-checked</dd><i /></div>
-              <div><dt>Manuals</dt><dd>Steps cite the page</dd><i /></div>
-            </dl>
-          </>}
-          {ch === 1 && <>
-            <h2 className="sx-ph">Identification <span className="ok">Confirmed</span></h2>
-            <dl className="sx-rows">
-              <div><dt>Device</dt><dd>Desk fan, 30 cm</dd></div>
-              <div><dt>Model</dt><dd>EX-DF30B</dd></div>
-              <div><dt>Label</dt><dd>Read from the base</dd></div>
-            </dl>
-            <div className="sx-meter"><span>Match</span><b>96%</b><i style={{ ["--v" as string]: 0.96 }} /></div>
-          </>}
-          {ch === 2 && <>
-            <h2 className="sx-ph">Conversation</h2>
-            <div className="sx-voice">
-              <div className="sx-orb"><VoiceOrb state="speaking" bands={[]} voice={voice} size={88} /></div>
-              <div className="sx-lines">
-                <p className="me"><b>You</b>It rattles and it's slower than it used to be.</p>
-                <p className="ai"><b>Mechanic</b>I can see dust on the blade. Does it rattle on the lowest speed too?</p>
-              </div>
-            </div>
-            <h3 className="sx-sub">Likely causes</h3>
-            <ol className="sx-bars">
-              {[["Dust build-up on blade", 0.92], ["Worn motor bearing", 0.05], ["Loose blade cap", 0.03]].map(([t, v]) => (
-                <li key={t as string}><span>{t}</span><b>{Math.round((v as number) * 100)}%</b><i style={{ ["--v" as string]: v as number }} /></li>
-              ))}
-            </ol>
-          </>}
-          {ch === 3 && <>
-            <h2 className="sx-ph">Step 3 of 4</h2>
-            <p className="sx-step">Turn the blade cap clockwise to loosen it. It has a left-hand thread.</p>
-            <ul className="sx-chips"><li>Cross-checked</li><li>Manual, p. 12</li><li>Waits for your OK</li></ul>
-            <ol className="sx-steps">
-              <li className="done">Unplug the fan</li>
-              <li className="done">Remove the front guard</li>
-              <li className="active">Loosen the blade cap</li>
-              <li>Clean the blade</li>
-            </ol>
-          </>}
-          {ch === START && <>
-            <h2 className="sx-ph">Safety notice</h2>
-            <ol className="sx-notice">
-              {NOTICE.map((x) => (
-                <li key={x.k} className={x.alert ? "alert" : ""}><span className="k">{x.k}</span><span className="t">{x.t}</span></li>
-              ))}
-            </ol>
-            <div className="sx-consent">
-            <label className="x-check">
-              <input type="checkbox" checked={p.accepted} onChange={(e) => p.setAccepted(e.target.checked)} />
-              <span className="box" aria-hidden />
-              <span>I understand and want to continue</span>
-            </label>
-            <div className="sx-go">
-              <button className="x-btn x-btn-solid" disabled={!p.accepted || p.loading} onClick={() => p.onStart()}>
-                {p.loading ? "Connecting…" : "Start AI Mechanic"} <Arrow size={18} />
-              </button>
-              {p.lastRoom && (
-                <button className="x-btn x-btn-line" disabled={!p.accepted || p.loading} onClick={() => p.onStart(p.lastRoom!)}>Resume last repair</button>
-              )}
-            </div>
-            {p.error && <p className="x-error" role="alert">{p.error}</p>}
-            </div>
-          </>}
-        </aside>
+        <section ref={sec(1)} className="sx-sec sx-sec-r" aria-label="Show it">
+          <div className="sx-col">
+            <Head i={1} kicker="Step one">Show it.</Head>
+            <p className="sx-p" data-a>Point your camera at the device. The mechanic reads its shape and label, names the make and model, and asks to see the label when it isn't sure.</p>
+            <aside className="sx-panel" data-a>
+              <h3 className="sx-ph">Identification <span className="ok">Confirmed</span></h3>
+              <dl className="sx-rows">
+                <div><dt>Device</dt><dd>Belt-drive turntable</dd></div>
+                <div><dt>Model</dt><dd>EX-TT20</dd></div>
+                <div><dt>Label</dt><dd>Read from the back panel</dd></div>
+              </dl>
+              <div className="sx-meter"><span>Match</span><b>94%</b><i style={{ ["--v" as string]: 0.94 }} /></div>
+            </aside>
+          </div>
+        </section>
 
-        <nav className="sx-rail" aria-label="Chapters">
-          {CHAPTERS.map((c, i) => (
-            <button key={c} className={i === ch ? "on" : i < ch ? "past" : ""} aria-current={i === ch ? "step" : undefined} onClick={() => go(i)}>
-              <span className="bar"><i className={i === ch && auto && !reduced && p.entering && ch < START ? "run" : ""} style={{ animationDuration: `${AUTO_MS}ms` }} /></span>
-              <span className="no">{n(i)}</span>
-              <span className="lb">{c}</span>
-            </button>
-          ))}
-        </nav>
-        {gl && <span className="sx-hint" aria-hidden>Drag to turn</span>}
-      </div>
+        <section ref={sec(2)} className="sx-sec sx-sec-l" aria-label="Talk it through">
+          <div className="sx-col">
+            <Head i={2} kicker="Step two">Talk it through.</Head>
+            <p className="sx-p" data-a>Describe the fault in your own words. It asks a few sharp questions, ranks the likely causes and tells you how sure it is.</p>
+            <aside className="sx-panel" data-a>
+              <div className="sx-voice">
+                <div className="sx-orb"><VoiceOrb state="speaking" bands={[]} voice={voice} size={88} /></div>
+                <div className="sx-lines">
+                  <p className="me"><b>You</b>It plays slow and the music wobbles.</p>
+                  <p className="ai"><b>Mechanic</b>That sounds like the belt. Does it reach speed if you nudge the platter?</p>
+                </div>
+              </div>
+              <h4 className="sx-sub">Likely causes</h4>
+              <ol className="sx-bars">
+                {[["Worn drive belt", 0.88], ["Dirty motor pulley", 0.08], ["Wrong speed setting", 0.04]].map(([t, v]) => (
+                  <li key={t as string}><span>{t}</span><b>{Math.round((v as number) * 100)}%</b><i style={{ ["--v" as string]: v as number }} /></li>
+                ))}
+              </ol>
+            </aside>
+          </div>
+        </section>
+
+        <section ref={sec(3)} className="sx-sec sx-sec-r" aria-label="Fix it">
+          <div className="sx-col">
+            <Head i={3} kicker="Step three">Fix it.</Head>
+            <p className="sx-p" data-a>Each step is marked on your live video. A second AI checks every risky instruction, and anything that can't be undone waits for your OK.</p>
+            <aside className="sx-panel" data-a>
+              <h3 className="sx-ph">Step 3 of 4</h3>
+              <p className="sx-step">Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon.</p>
+              <ul className="sx-chips"><li>Cross-checked</li><li>Manual, p. 9</li><li>Waits for your OK</li></ul>
+              <ol className="sx-steps">
+                <li className="done">Unplug the turntable</li>
+                <li className="done">Lift the platter off</li>
+                <li className="active">Fit the new belt</li>
+                <li>Check the speed</li>
+              </ol>
+            </aside>
+          </div>
+        </section>
+
+        <section ref={sec(4)} className="sx-sec sx-sec-l sx-start" aria-label="Start">
+          <div className="sx-col">
+            <Head i={4} kicker="Before you start">Ready when you are.</Head>
+            <p className="sx-p" data-a>Read this once. The mechanic holds itself to the same rules for the whole call.</p>
+            <aside className="sx-panel sx-panel-solid" data-a>
+              <h3 className="sx-ph">Safety notice</h3>
+              <ol className="sx-notice">
+                {NOTICE.map((x) => (
+                  <li key={x.k} className={x.alert ? "alert" : ""}><span className="k">{x.k}</span><span className="t">{x.t}</span></li>
+                ))}
+              </ol>
+              <div className="sx-consent">
+                <label className="x-check">
+                  <input type="checkbox" checked={p.accepted} onChange={(e) => p.setAccepted(e.target.checked)} />
+                  <span className="box" aria-hidden />
+                  <span>I understand and want to continue</span>
+                </label>
+                <div className="sx-go">
+                  <button className="x-btn x-btn-solid" disabled={!p.accepted || p.loading} onClick={() => p.onStart()}>
+                    {p.loading ? "Connecting…" : "Start AI Mechanic"} <Arrow size={18} />
+                  </button>
+                  {p.lastRoom && (
+                    <button className="x-btn x-btn-line" disabled={!p.accepted || p.loading} onClick={() => p.onStart(p.lastRoom!)}>Resume last repair</button>
+                  )}
+                </div>
+                {p.error && <p className="x-error" role="alert">{p.error}</p>}
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <nav className="sx-rail" aria-label="Chapters">
+        <span className="sx-rail-bar"><span ref={bar} /></span>
+        {CHAPTERS.map((c, i) => (
+          <button key={c} className={i === ch ? "on" : ""} aria-current={i === ch ? "step" : undefined} onClick={() => go(i)} aria-label={c}>
+            <span className="no">{n(i)}</span><span className="lb">{c}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

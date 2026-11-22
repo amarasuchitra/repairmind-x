@@ -2,10 +2,11 @@ import * as THREE from "three";
 import gsap from "gsap";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { createStage, glowTexture, perfGuard, ringMaterial, ringMesh, type Stage } from "../gl/core";
-import { buildFan, makeFxUniforms, type FanModel } from "./fan";
+import { buildDeck, DECK, type DeckModel } from "./turntable";
+import { makeFxUniforms } from "./fx";
 
 /**
- * The landing page's one 3D scene: a desk fan on a lit platform in a dark studio, a slow network of
+ * The landing page's one 3D scene: a belt-drive record player on a lit platform in a dark studio, a slow network of
  * connections far behind it, and a camera that moves between composed "shots" when the visitor picks a
  * chapter. Screen labels are plain DOM elements that this class pins to named points on the model.
  */
@@ -31,18 +32,18 @@ export interface Shot {
   explode: number;
   xray: number;
   scan: number;
-  spin: number; // blade speed, rad/s
-  osc: number; // head oscillation amount
-  capGlow: number;
+  spin: number; // platter speed, rad/s (33⅓ rpm is about 3.5)
+  arm: number; // tonearm: 0 on its rest, 1 over the record
+  glow: number; // highlight on the part being worked on (the belt)
   sx: number; // horizontal framing: positive moves the model right, as a fraction of the width
 }
 
 export const SHOTS: Shot[] = [
-  { az: 32, el: 11, dist: 9.4, tx: 0, ty: 1.7, tz: 0, explode: 0, xray: 0, scan: 0, spin: 7, osc: 1, capGlow: 0, sx: 0.06 },
-  { az: -36, el: 9, dist: 8.0, tx: 0, ty: 1.85, tz: 0, explode: 0, xray: 1, scan: 1, spin: 0.5, osc: 0, capGlow: 0, sx: 0.06 },
-  { az: 24, el: 6, dist: 7.0, tx: 0.05, ty: 2.15, tz: 0, explode: 0, xray: 0, scan: 0, spin: 0, osc: 0, capGlow: 0, sx: 0.07 },
-  { az: 58, el: 9, dist: 7.6, tx: 0, ty: 2.25, tz: 0.45, explode: 1, xray: 0, scan: 0, spin: 0, osc: 0, capGlow: 1, sx: 0.06 },
-  { az: 8, el: 9, dist: 11, tx: 0, ty: 1.85, tz: 0, explode: 0, xray: 0, scan: 0, spin: 3.2, osc: 0.6, capGlow: 0, sx: -0.015 },
+  { az: 28, el: 24, dist: 15, tx: 0, ty: 0.3, tz: 0, explode: 0, xray: 0, scan: 0, spin: 3.5, arm: 1, glow: 0, sx: 0.2 },
+  { az: -30, el: 26, dist: 14.5, tx: 0, ty: 0.3, tz: 0, explode: 0, xray: 1, scan: 1, spin: 0.4, arm: 1, glow: 0, sx: -0.2 },
+  { az: 16, el: 34, dist: 12, tx: -0.25, ty: 0.4, tz: 0.1, explode: 0, xray: 0, scan: 0, spin: 2.2, arm: 1, glow: 0, sx: 0.2 },
+  { az: -24, el: 17, dist: 13, tx: -0.5, ty: 1.05, tz: -0.2, explode: 1, xray: 0, scan: 0, spin: 0, arm: 0, glow: 1, sx: -0.13 },
+  { az: 6, el: 22, dist: 17, tx: 0, ty: 0.3, tz: 0, explode: 0, xray: 0, scan: 0, spin: 2, arm: 0, glow: 0, sx: 0.2 },
 ];
 
 export interface ShowroomOptions {
@@ -53,14 +54,14 @@ export interface ShowroomOptions {
 
 export class Showroom {
   private stage: Stage;
-  private fan: FanModel;
+  private deck: DeckModel;
   private fx = makeFxUniforms();
   private cur: Shot = { ...SHOTS[0] };
   private reveal = { v: 0 };
   private raf = 0;
   private t0 = performance.now();
   private last = 0;
-  private bladeAngle = 0;
+  private spinAngle = 0;
   private scanPhase = 0;
   private yaw = 0;
   private yawVel = 0;
@@ -78,7 +79,8 @@ export class Showroom {
   private W = 1;
   private H = 1;
   private dirty = true;
-  private tween: gsap.core.Tween | null = null;
+  private pT = 0;
+  private p = 0;
   private guard = perfGuard(22, () => this.stage.setPixelRatio(1));
   private disposers: (() => void)[] = [];
   private v = new THREE.Vector3();
@@ -107,7 +109,7 @@ export class Showroom {
     // lighting: a soft key, a cool cyan rim from behind and a blue fill, like a product shoot
     const key = new THREE.DirectionalLight(0xf2f6ff, 1.6);
     key.position.set(4, 6.5, 5);
-    const rim = new THREE.DirectionalLight(0x46e2ff, 3.4);
+    const rim = new THREE.DirectionalLight(0x46e2ff, 2.2);
     rim.position.set(-4.5, 3.5, -5);
     const rim2 = new THREE.DirectionalLight(0x9fc4ff, 1.6);
     rim2.position.set(5, 2.5, -4);
@@ -115,10 +117,10 @@ export class Showroom {
     fill.position.set(-5, 1, 3);
     scene.add(key, rim, rim2, fill, new THREE.AmbientLight(0x0b1830, 0.6));
 
-    this.fan = buildFan(this.fx);
+    this.deck = buildDeck(this.fx);
     // accents read as light sources, so they bloom
-    this.fan.accents.forEach((m) => m.color.multiplyScalar(2.4));
-    scene.add(this.fan.root);
+    this.deck.accents.forEach((m) => m.color.multiplyScalar(2.4));
+    scene.add(this.deck.root);
 
     this.buildFloor();
     this.scanRing = this.buildScanRing();
@@ -157,9 +159,9 @@ export class Showroom {
           float fade = smoothstep(9.0, 1.5, r);
           float rings = smoothstep(0.012, 0.0, abs(fract(r * 1.25) - 0.5) - 0.488);
           float a = atan(vP.y, vP.x);
-          float ticks = step(0.985, fract(a / 6.2831853 * 120.0)) * smoothstep(2.2, 2.25, r) * smoothstep(2.6, 2.55, r);
-          float glow = exp(-r * r * 0.9) * 0.55;
-          float shadow = smoothstep(0.0, 1.5, r);
+          float ticks = step(0.985, fract(a / 6.2831853 * 120.0)) * smoothstep(3.3, 3.35, r) * smoothstep(3.7, 3.65, r);
+          float glow = exp(-r * r * 0.35) * 0.55;
+          float shadow = smoothstep(0.0, 2.6, r);
           vec3 col = vec3(0.02, 0.05, 0.1) * glow + vec3(0.16, 0.6, 0.9) * (rings * 0.07 + ticks * 0.5) * fade;
           float alpha = max(fade * 0.9, 0.0);
           gl_FragColor = vec4(col * shadow, alpha);
@@ -172,7 +174,7 @@ export class Showroom {
 
     // contact shadow under the base
     const sh = new THREE.Mesh(
-      new THREE.CircleGeometry(1.9, 64),
+      new THREE.PlaneGeometry(DECK.w * 1.45, DECK.d * 1.5),
       new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, opacity: 0.95, depthWrite: false }),
     );
     sh.rotation.x = -Math.PI / 2;
@@ -188,16 +190,19 @@ export class Showroom {
       this.platform.push(m);
       return m;
     };
-    mk(1.48, 0.012, 0x46e2ff, { opacity: 0.55 });
-    mk(1.62, 0.03, 0x46e2ff, { dash: 90, duty: 0.35, opacity: 0.3 });
-    mk(1.78, 0.01, 0x2f86ff, { opacity: 0.25 });
-    mk(1.9, 0.02, 0x9fe9ff, { arc: 0.14, start: 0.1, opacity: 0.9 });
-    mk(1.9, 0.02, 0x9fe9ff, { arc: 0.06, start: 0.6, opacity: 0.6 });
+    mk(2.95, 0.014, 0x46e2ff, { opacity: 0.5 });
+    mk(3.12, 0.035, 0x46e2ff, { dash: 140, duty: 0.35, opacity: 0.3 });
+    mk(3.3, 0.012, 0x2f86ff, { opacity: 0.25 });
+    mk(3.48, 0.024, 0x9fe9ff, { arc: 0.12, start: 0.1, opacity: 0.9 });
+    mk(3.48, 0.024, 0x9fe9ff, { arc: 0.05, start: 0.6, opacity: 0.6 });
   }
 
   private buildScanRing() {
-    const m = ringMesh(1.55, 0.02, ringMaterial(new THREE.Color(0x46e2ff).multiplyScalar(2.2), { opacity: 1 }), 160);
-    m.rotation.x = -Math.PI / 2;
+    // a hoop standing across the deck that sweeps from left to right
+    const m = ringMesh(1.95, 0.02, ringMaterial(new THREE.Color(0x46e2ff).multiplyScalar(2.2), { opacity: 1 }), 160);
+    m.rotation.y = Math.PI / 2;
+    m.scale.set(1, 0.5, 1);
+    m.position.y = 0.36;
     this.stage.scene.add(m);
     return m;
   }
@@ -288,17 +293,24 @@ export class Showroom {
 
   /* ------------------------------------------------------------------ shots */
 
-  goTo(i: number, instant = false) {
-    const s = SHOTS[i];
-    this.tween?.kill();
-    if (instant || this.o.reduced) {
-      Object.assign(this.cur, s);
-      if (this.o.reduced) { this.cur.spin = 0; this.cur.osc = 0; }
-      this.dirty = true;
-      return;
-    }
-    // keep the shortest way round
-    this.tween = gsap.to(this.cur, { ...s, duration: 1.9, ease: "power3.inOut", onUpdate: () => { this.dirty = true; } });
+  /**
+   * Scroll position in chapters: 0 is the first shot, 1.5 is halfway between the second and the third.
+   * The camera follows with a little inertia and holds still around each whole number, so every chapter
+   * has a resting composition and the moves happen between them.
+   */
+  setProgress(p: number) {
+    this.pT = THREE.MathUtils.clamp(p, 0, SHOTS.length - 1);
+    if (this.o.reduced) this.p = Math.round(this.pT);
+    this.dirty = true;
+  }
+
+  private blend() {
+    const n = SHOTS.length;
+    const i = Math.min(Math.floor(this.p), n - 2);
+    const k = THREE.MathUtils.smoothstep(this.p - i, 0.12, 0.88);
+    const a = SHOTS[i], b = SHOTS[i + 1];
+    for (const key of Object.keys(a) as (keyof Shot)[]) this.cur[key] = a[key] + (b[key] - a[key]) * k;
+    if (this.o.reduced) this.cur.spin = 0;
   }
 
   /** Entrance: the camera settles in from further back while the scene fades up. */
@@ -310,7 +322,8 @@ export class Showroom {
   /* ------------------------------------------------------------------ frame */
 
   private apply(dt: number) {
-    const s = this.cur, f = this.fan, now = performance.now();
+    this.blend();
+    const s = this.cur, f = this.deck, now = performance.now();
     const reduced = this.o.reduced;
 
     // camera on an orbit around the target
@@ -337,23 +350,20 @@ export class Showroom {
     f.root.rotation.y = this.yaw;
     f.root.rotation.x = this.pitch * 0.4;
 
-    // the fan behaves like a fan: blades spin, the head sweeps side to side
+    // the record turns; the tonearm swings between its rest and the record
     const t = (now - this.t0) / 1000;
-    if (!reduced) {
-      this.bladeAngle -= s.spin * dt;
-      f.head.rotation.y = Math.sin(t * 0.45) * 0.42 * s.osc;
-    }
-    f.bladeSpin.rotation.z = this.bladeAngle;
+    if (!reduced) this.spinAngle -= s.spin * dt;
+    f.spin.rotation.y = this.spinAngle;
+    f.arm.rotation.y = -0.54 * s.arm;
+    f.arm.rotation.x = -0.05 * Math.sin(Math.PI * s.arm); // cued up while it travels
 
-    // exploded view for the repair chapter
+    // repair view: the platter lifts off to show the belt and the motor pulley underneath
     const e = s.explode;
-    f.parts.frontGuard.position.set(0, 0, 0.16 + 1.15 * e);
-    f.parts.cap.position.z = 0.1 + 0.6 * e;
-    f.parts.cap.rotation.z = reduced ? 0 : -t * 1.6 * e;
-    f.parts.rearGuard.position.z = -0.35 * e;
-    f.parts.blades.position.z = 0.22 * e;
+    f.platter.position.set(DECK.platter.x + 0.2 * e, DECK.h + 0.16 + 1.35 * e, DECK.platter.z + 0.1 * e);
+    f.platter.rotation.x = 0.1 * e;
+    f.platter.rotation.z = -0.06 * e;
     const pulse = 0.5 + 0.5 * Math.sin(t * 4);
-    f.capMaterial.emissiveIntensity = s.capGlow * (0.25 + 0.35 * pulse);
+    f.highlight.emissiveIntensity = s.glow * (0.6 + 1.2 * pulse);
 
     // identification scan
     this.fx.uXray.value = s.xray;
@@ -361,9 +371,9 @@ export class Showroom {
     if (s.scan > 0.001) {
       if (!reduced) this.scanPhase = (this.scanPhase + dt / 2.8) % 1;
       else this.scanPhase = 0.62;
-      const y = -0.1 + this.scanPhase * 3.9;
-      this.fx.uScanY.value = y;
-      this.scanRing.position.y = y;
+      const x = -2.5 + this.scanPhase * 5;
+      this.fx.uScanY.value = x;
+      this.scanRing.position.x = x;
       this.scanRing.visible = true;
       const m = this.scanRing.material as THREE.ShaderMaterial;
       m.uniforms.uOpacity.value = s.scan * Math.sin(this.scanPhase * Math.PI);
@@ -386,7 +396,7 @@ export class Showroom {
     cam.updateMatrixWorld();
     const right = this.v2.setFromMatrixColumn(cam.matrixWorld, 0);
     els.forEach((el) => {
-      const a = this.fan.anchors[el.dataset.anchor!];
+      const a = this.deck.anchors[el.dataset.anchor!];
       if (!a) return;
       a.getWorldPosition(this.v);
       const r = Number(el.dataset.r || 0);
@@ -409,6 +419,7 @@ export class Showroom {
     const dt = this.last ? Math.min((now - this.last) / 1000, 0.05) : 0.016;
     this.last = now;
     this.parallax.lerp(this.parallaxT, this.o.reduced ? 1 : 0.04);
+    if (!this.o.reduced && Math.abs(this.pT - this.p) > 1e-4) this.p += (this.pT - this.p) * (1 - Math.exp(-dt * 6));
     // under reduced motion only draw when something actually changed
     if (this.o.reduced && !this.dirty && !this.dragging && Math.abs(this.yaw) < 1e-3) return;
     this.dirty = false;
@@ -420,7 +431,6 @@ export class Showroom {
 
   dispose() {
     cancelAnimationFrame(this.raf);
-    this.tween?.kill();
     gsap.killTweensOf(this.reveal);
     this.disposers.forEach((d) => d());
     this.stage.scene.environment?.dispose();
