@@ -144,3 +144,30 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
   background: rgba(245, 181, 68, 0.15); color: var(--amber); border: 1px solid rgba(245, 181, 68, 0.4); }
 .part-label { pointer-events: none; font-size: 11px; white-space: nowrap; background: rgba(11, 15, 23, 0.85);
   color: var(--cyan); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line); }
+
+/* Bulk inspection */
+.inspect { max-width: 860px; }
+.inspect .brand .ghost { margin-left: auto; }
+.field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 14px; }
+.field > span { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.field small, .hint { color: var(--muted); font-size: 0.85rem; }
+.field select, .field input[type="password"], .field input[type="file"] { font: inherit; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; max-width: 100%; }
+.job { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.job-head { display: flex; flex-wrap: wrap; gap: 8px 16px; justify-content: space-between; }
+.job progress { width: 100%; height: 8px; accent-color: var(--cyan); }
+.counts { display: flex; flex-wrap: wrap; gap: 8px; }
+.count { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); padding: 0.45rem 0.9rem; }
+.count[aria-pressed="true"] { outline: 2px solid var(--cyan); }
+.count b { margin-right: 4px; }
+.v-good b, .pill.v-good { color: var(--green); }
+.v-defective b, .pill.v-defective { color: var(--red); }
+.v-uncertain b, .pill.v-uncertain { color: var(--amber); }
+.v-error b, .pill.v-error { color: var(--muted); }
+.pill { font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); }
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.table-wrap th, .table-wrap td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.table-wrap td.file { word-break: break-all; }
+.link-inspect { margin-top: 28px; font-size: 0.9rem; color: var(--muted); }
+.link-inspect a { color: var(--cyan); }

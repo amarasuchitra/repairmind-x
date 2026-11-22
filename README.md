@@ -59,6 +59,20 @@ product's own reviewed procedures.
 `agent/products/example-desk-fan` is a made-up example to copy. It is not a real product and its procedure
 is not reviewed. Detector extras: `uv pip install -e ".[detector]"` (torch, torchvision, anomalib).
 
+## Phase 5: bulk inspection
+
+For factories, repair shops and refurbishers: check many units of one product at once.
+
+| Part | Where | What it does |
+|---|---|---|
+| Upload | web app, "Bulk inspection" link (`#inspect`) | Pick a product that has a trained detector, add photos or ZIPs (up to 5,000 images), watch progress, filter by verdict. |
+| Batch engine | `agent/repairmind/inspection/batch.py` | Runs in the background. Every file gets a row: good, defective, uncertain (for a person to check) or unreadable. Nothing is silently skipped. If the detector itself is broken, the job stops instead of filling the report with noise. ZIP paths are sanitised and sizes capped. |
+| Excel report | `agent/repairmind/inspection/report.py` | Six sheets: Summary (counts, chart, thresholds), All items (filterable), Defective (with heatmaps), Needs review (with columns for a person's decision), Scores (histogram against the thresholds), Method (how verdicts were made and what they don't prove). |
+| API | `POST /api/inspections`, `GET /api/inspections/{id}`, `GET /api/inspections/{id}/report.xlsx` | Off unless `RMX_INSPECTION_TOKEN` is set in `agent/.env`; then every call needs `Authorization: Bearer <token>`. |
+
+Bulk inspection needs a trained detector for the product (Phase 4, `scripts/train_detector.py`). The example
+product has none, so it shows as "no trained detector yet".
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret), a Google AI Studio API key, and an Anthropic API key for the cross-check.

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Call } from "./Call";
+import { Inspect } from "./Inspect";
 
 interface Connection {
   serverUrl: string;
@@ -32,6 +33,12 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const lastRoom = readLastRoom();
+  const [page, setPage] = useState(() => (window.location.hash === "#inspect" ? "inspect" : "call"));
+
+  function go(next: "call" | "inspect") {
+    window.location.hash = next === "inspect" ? "inspect" : "";
+    setPage(next);
+  }
 
   async function start(resumeRoom?: string) {
     setError(null);
@@ -57,6 +64,8 @@ export default function App() {
       setLoading(false);
     }
   }
+
+  if (page === "inspect" && !conn) return <Inspect onBack={() => go("call")} />;
 
   if (conn) {
     return (
@@ -110,6 +119,10 @@ export default function App() {
         )}
       </div>
       {error && <p className="error" role="alert">{error}</p>}
+      <p className="link-inspect">
+        Checking many units for a factory or shop?{" "}
+        <a href="#inspect" onClick={(e) => { e.preventDefault(); go("inspect"); }}>Bulk inspection</a>
+      </p>
     </main>
   );
 }
