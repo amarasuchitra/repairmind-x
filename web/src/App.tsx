@@ -113,7 +113,8 @@ export default function App() {
 
   return (
     <>
-      <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />
+      {/* the landing page draws its own 3D scene */}
+      {(conn || page !== "call") && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
       {content}
       {intro && !conn && <Intro onDone={() => setIntro(false)} />}
     </>

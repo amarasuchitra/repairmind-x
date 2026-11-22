@@ -103,14 +103,18 @@ vignette, a touch of lens chromatic aberration and animated film grain.
   node network while the wordmark resolves. Once per browser session; tap or Esc skips; `/#intro` replays.
 - **Background** (`web/src/fx/NetworkBackground.tsx`): a slow 3D node network in fog at the back, and neon
   circuit glyphs in front that draw themselves in with a hot leading edge, glow and fade. Pointer or phone
-  tilt gives parallax. It steps back as you scroll so long text stays easy to read.
+  tilt gives parallax. The call and inspection pages use it; the start page has its own 3D scene.
 - **The mechanic's voice** (`web/src/hud/VoiceOrb.tsx`): a plasma core (a sphere displaced by 3D noise in
   proportion to the voice, with a Fresnel rim), a particle shell that breathes with the frequency bands, a
   radial spectrum, aperture blades that open with loudness and segment meters, all on a tilted plane seen in
   perspective. Cyan when the mechanic speaks, green while it listens, violet with a scanning sweep while it
   thinks. Without WebGL it falls back to the 2D canvas dial.
-- **Start page** (`web/src/Landing.tsx`): editorial layout on an 8-point spacing scale with Inter Tight,
-  Inter and JetBrains Mono, entrance and scroll choreography with GSAP ScrollTrigger.
+- **Start page** (`web/src/Landing.tsx`, `web/src/fx/showroom/`): one full-screen 3D scene that never
+  scrolls. A desk fan modelled in code stands on a lit platform in a dark studio; drag to turn it. Five
+  chapters along the bottom (Overview, Show it, Talk it through, Fix it, Start) move the camera and change
+  the model: an x-ray identification scan, labels pinned to real parts, an exploded view with an AR lock on
+  the blade cap. Every element sits on a 12-column grid: copy in columns 1-5, the chapter panel in 9-12, the
+  chapter rail across the bottom. Chapters advance on their own until you take over; arrow keys work too.
 
 Safety banners and the stop alert stay solid amber and red and are never see-through; the hazard banner
 pulses its glow, never its opacity. With "reduce motion" the intro is skipped and the background and orb
@@ -121,11 +125,13 @@ keeps to the edges so the camera stays clear.
 Open `/#demo` to preview the call screen with sample data and a simulated voice, without a server or camera
 (`#demo-amber` and `#demo-alert` show the safety states). `/#intro` replays the intro.
 
-| Start page | Phone call | Hazard stop | Desktop call |
+| Overview | Show it | Fix it | Start |
 |---|---|---|---|
-| ![Start page](docs/screenshots/v2-landing-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop](docs/screenshots/v2-call-desktop.png) |
+| ![Overview](docs/screenshots/v3-overview.png) | ![Show it](docs/screenshots/v3-show.png) | ![Fix it](docs/screenshots/v3-fix.png) | ![Start](docs/screenshots/v3-start.png) |
 
-![Start page on desktop](docs/screenshots/v2-landing-desktop.png)
+| Start page on a phone | Phone call | Hazard stop | Desktop call |
+|---|---|---|---|
+| ![Start page](docs/screenshots/v3-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop](docs/screenshots/v2-call-desktop.png) |
 
 ## Run it
 
