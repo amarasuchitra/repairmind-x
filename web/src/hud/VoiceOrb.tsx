@@ -59,15 +59,19 @@ function VoiceOrbGL({ state, bands, size = 96, detail, voice }: Props) {
         canvas,
         fov: 32,
         pixelRatio: pr,
-        bloom: full ? { strength: 1.1, radius: 0.0, threshold: 0.42 } : { strength: 0.9, radius: 0.0, threshold: 0.4 },
-        bloomFactors: [1.0, 0.7, 0.22, 0.04, 0.0],
-        grade: { vignette: 0, grain: 0, aberration: full ? 0.0025 : 0, lift: [0, 0, 0] },
+        bloom: full ? { strength: 0.85, radius: 0.0, threshold: 0.42 } : { strength: 0.9, radius: 0.0, threshold: 0.4 },
+        bloomFactors: [1.0, 0.55, 0.16, 0.03, 0.0],
+        grade: { vignette: 0, grain: 0, aberration: 0, lift: [0, 0, 0] },
       });
     } catch {
       return;
     }
     const { scene, camera } = stage;
-    stage.resize(size, size);
+    // render at the size it is actually shown (CSS may scale the canvas up), never blurrier
+    const fitSize = () => Math.max(size, Math.round(canvas.clientWidth || size));
+    stage.resize(fitSize(), fitSize());
+    const ro = new ResizeObserver(() => stage.resize(fitSize(), fitSize()));
+    ro.observe(canvas);
     camera.position.set(0, 0, full ? 10.6 : 7.6);
 
     const colour = new THREE.Color(HEX[live.current.state]);
@@ -123,7 +127,7 @@ function VoiceOrbGL({ state, bands, size = 96, detail, voice }: Props) {
             float f = 1.0 - max(dot(normalize(vN), normalize(vView)), 0.0);
             float rim = pow(f, 2.2);
             float facing = pow(1.0 - f, 3.0);
-            vec3 col = uColor * (rim * (0.9 + uLevel * 1.4) + 0.015) + vec3(0.85, 0.97, 1.0) * pow(1.0 - f, 8.0) * (0.04 + uLevel * 0.25);
+            vec3 col = uColor * (rim * (0.9 + uLevel * 1.4) + 0.09) + vec3(0.85, 0.97, 1.0) * pow(1.0 - f, 8.0) * (0.04 + uLevel * 0.25);
             col += uColor * max(vDisp, 0.0) * 2.0 * rim;
             gl_FragColor = vec4(col, 1.0);
           }
@@ -326,6 +330,7 @@ function VoiceOrbGL({ state, bands, size = 96, detail, voice }: Props) {
       sweepMat.opacity += ((st === "thinking" ? 0.55 : 0) - sweepMat.opacity) * Math.min(1, dt * 6);
       shell.rotation.y = t * 0.12;
       core.rotation.y = t * 0.2;
+      (coreGlow.material as THREE.SpriteMaterial).color.copy(colour).lerp(white, 0.55);
       coreGlow.scale.setScalar(0.55 + L * 0.9);
       (coreGlow.material as THREE.SpriteMaterial).opacity = 0.45 + L * 0.5;
       // the whole cluster sways a little in 3D so the depth reads
@@ -336,6 +341,7 @@ function VoiceOrbGL({ state, bands, size = 96, detail, voice }: Props) {
     };
     raf = requestAnimationFrame(frame);
     return () => {
+      ro.disconnect();
       cancelAnimationFrame(raf);
       stage.dispose();
     };

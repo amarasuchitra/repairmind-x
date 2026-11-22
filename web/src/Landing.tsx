@@ -120,7 +120,7 @@ export function Landing(p: LandingProps) {
       <main>
         <section className="x-hero" aria-labelledby="hero-h">
           <div className="x-stage" aria-hidden>
-            <VoiceOrb state="speaking" bands={[]} voice={voice} size={720} detail="full" />
+            <VoiceOrb state="speaking" bands={[]} voice={voice} size={900} detail="full" />
             <div className="x-stage-label l1"><i />Voice link · live</div>
             <div className="x-stage-label l2"><i />Optics · tracking</div>
           </div>

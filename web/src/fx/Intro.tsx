@@ -53,10 +53,10 @@ export function Intro({ onDone }: { onDone: () => void }) {
       stage = createStage({
         canvas,
         fov: 50,
-        pixelRatio: Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.25 : 1.5),
+        pixelRatio: Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 2),
         bloom: { strength: 1.0, radius: 0.0, threshold: 0.12 },
         bloomFactors: [1.0, 0.7, 0.35, 0.15, 0.06],
-        grade: { vignette: 1, grain: 0.08, aberration: 0.0025, lift: [0.004, 0.02, 0.07] },
+        grade: { vignette: 1, grain: 0.035, aberration: 0.0008, lift: [0.004, 0.02, 0.07] },
       });
     } catch {
       finish();

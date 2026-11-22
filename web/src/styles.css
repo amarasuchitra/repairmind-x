@@ -485,8 +485,8 @@ a { color: var(--hud); }
 .x-nav-cta { justify-self: end; padding: 11px 18px; font-size: var(--fs-sm); }
 
 .x-hero { position: relative; min-height: 100svh; display: grid; grid-template-columns: minmax(0, 1fr); align-content: end; padding: 120px var(--gutter) 56px; overflow: hidden; }
-.x-stage { position: absolute; z-index: 0; top: 50%; right: clamp(-120px, -4vw, 0px); transform-origin: center; width: min(760px, 62vw); aspect-ratio: 1;
-  translate: 0 -54%; pointer-events: none; }
+.x-stage { position: absolute; z-index: 0; top: 50%; right: 2vw; transform-origin: center; width: min(920px, 52vw); aspect-ratio: 1;
+  translate: 0 -54%; pointer-events: none; mix-blend-mode: screen; }
 .x-stage .orb { width: 100% !important; height: 100% !important; }
 .x-stage-label { position: absolute; display: flex; align-items: center; gap: 10px; font: 400 0.625rem/1 var(--mono); letter-spacing: 0.22em;
   text-transform: uppercase; color: rgba(160, 220, 255, 0.75); }

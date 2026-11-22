@@ -32,6 +32,7 @@ export interface StageOptions {
   transparent?: boolean;
   /** Per-mip bloom weights, small blur first. Lower tail weights keep glow tight instead of hazy. */
   bloomFactors?: [number, number, number, number, number];
+  msaa?: number;
 }
 
 const GradeShader = {
@@ -91,7 +92,8 @@ export function createStage(o: StageOptions): Stage {
   const camera = new THREE.PerspectiveCamera(o.fov ?? 45, 1, 0.1, 200);
   camera.position.set(0, 0, 10);
 
-  const target = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 0 });
+  // 4x MSAA on the scene target: thin HUD lines stay smooth instead of stair-stepped
+  const target = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: o.msaa ?? 4 });
   const composer = new EffectComposer(renderer, target);
   composer.addPass(new RenderPass(scene, camera));
   const b = o.bloom ?? { strength: 1.3, radius: 0.55, threshold: 0.05 };

@@ -27,10 +27,10 @@ export function NetworkBackground({ intensity = 1 }: { intensity?: number }) {
       stage = createStage({
         canvas,
         fov: 45,
-        pixelRatio: Math.min(window.devicePixelRatio || 1, small ? 1.25 : 1.5),
+        pixelRatio: Math.min(window.devicePixelRatio || 1, small ? 1.5 : 2),
         bloom: { strength: 1.0, radius: 0.0, threshold: 0.0 },
-        bloomFactors: [1.0, 0.85, 0.55, 0.3, 0.12],
-        grade: { vignette: 1, grain: 0.045, aberration: 0.0005, lift: [0.002, 0.008, 0.026] },
+        bloomFactors: [1.0, 0.7, 0.35, 0.14, 0.05],
+        grade: { vignette: 1, grain: 0.028, aberration: 0, lift: [0.002, 0.008, 0.026] },
       });
     } catch {
       return;
