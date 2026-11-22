@@ -1,6 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Alert, Marker, SessionView, StepView } from "../types";
 import { VoiceOrb, type OrbState } from "./VoiceOrb";
+import { Flip, Logo, Mic, MicOff, PhoneOff } from "../ui/Icons";
 
 export interface Caption {
   who: "You" | "Mechanic";
@@ -26,18 +27,41 @@ export interface CallHudProps {
   alert: Alert | null;
   onDismissAlert: () => void;
   hostRef?: (el: HTMLElement | null) => void;
+  /** Optional per-frame audio source for the orb (used by the design preview). */
+  voice?: () => number[];
+}
+
+const STATE_LINE: Record<OrbState, string> = {
+  speaking: "Talking you through it",
+  listening: "Listening to you",
+  thinking: "Working it out",
+  connecting: "Opening the voice link",
+  idle: "Standing by",
+};
+
+function useElapsed() {
+  const [start] = useState(() => Date.now());
+  const [now, setNow] = useState(start);
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const s = Math.floor((now - start) / 1000);
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
 /** The call screen. Pure: everything comes in as props, so it can be previewed without a live call. */
 export function CallHud(p: CallHudProps) {
   const v = p.view;
   const risk = v?.risk_level ?? "green";
+  const elapsed = useElapsed();
   return (
     <div className="call-grid hud">
       <header className="call-top">
         <div className="hud-brand">
-          <span className="hud-mark" aria-hidden />
-          <span>REPAIRMIND<span className="dim"> // LIVE</span></span>
+          <Logo size={24} />
+          <span className="wordmark">REPAIRMIND<b>X</b></span>
+          <span className="live-tag"><i aria-hidden />LIVE <span className="timer">{elapsed}</span></span>
         </div>
         <span className={`hud-chip state-${p.orbState}`}><i aria-hidden />{p.status}</span>
       </header>
@@ -86,6 +110,14 @@ export function CallHud(p: CallHudProps) {
       )}
 
       <aside className="panel">
+        <div className={`presence presence-${p.orbState}`}>
+          <VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={220} detail="full" />
+          <div className="presence-text">
+            <span className="hud-h">MECHANIC</span>
+            <b>{p.status}</b>
+            <span className="dim small">{STATE_LINE[p.orbState]}</span>
+          </div>
+        </div>
         {p.side}
         <RepairPanel view={v} />
         {p.tools}
@@ -93,11 +125,11 @@ export function CallHud(p: CallHudProps) {
 
       <footer className="controls">
         <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
-          {p.micOn ? "Mute" : "Unmute"}
+          {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? "Mute" : "Unmute"}</span>
         </button>
-        <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} /></div>
-        <button className="ctl" onClick={p.onSwitchCamera}>Flip cam</button>
-        <button className="ctl danger" onClick={p.onEnd}>End</button>
+        <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={100} /></div>
+        <button className="ctl" onClick={p.onSwitchCamera}><Flip size={18} /><span>Flip cam</span></button>
+        <button className="ctl danger" onClick={p.onEnd}><PhoneOff size={18} /><span>End</span></button>
       </footer>
 
       {p.alert && (

@@ -91,17 +91,35 @@ a safety-checked repair. Tracking runs on the normal camera stream instead, so i
 
 ## Interface
 
-The call screen is a dark holographic HUD. It has:
-- corner brackets and a scan line over the live camera
-- a voice orb that reacts to the mechanic's voice when it speaks and to your mic when it listens
-- glass panels for the diagnosis confidence gauge, safety status and step timeline
-- AR markers drawn as targeting brackets
+![Intro](docs/screenshots/v2-intro.gif)
 
-Safety banners and the stop alert stay solid amber and red and are never see-through. Animations respect "reduce motion". On phones the HUD keeps to the edges so the camera stays clear.
+The web app opens with a short JavaScript intro (about five seconds, once per browser session, skippable
+with a tap or Esc): a point of light ignites, instrument rings sweep in, a segmented ring blasts outward and
+a node network bursts out while the wordmark resolves. Behind every page is a layered, animated background:
+a drifting node network at the back and neon circuit traces that draw themselves in, glow and fade in front.
 
-| Phone call | Safety alert | Desktop |
-|---|---|---|
-| ![Phone call](docs/screenshots/hud-phone-call.png) | ![Safety alert](docs/screenshots/hud-phone-safety-alert.png) | ![Desktop](docs/screenshots/hud-desktop-call.png) |
+The mechanic's voice is shown as a layered instrument dial on canvas (`web/src/hud/VoiceOrb.tsx`): a tick
+dial, counter-rotating bracket arcs, a radial spectrum of the voice, an oscilloscope ring that ripples with
+it, six aperture blades that open as it gets louder, and a bright core. Cyan when the mechanic speaks, green
+while it listens to you, violet while it thinks. On desktop a large version sits at the top of the side
+panel; on phones a compact one sits in the control bar.
+
+The call screen keeps corner brackets, a scan line, glass panels for the diagnosis gauge, safety status and
+step timeline, and AR markers drawn as targeting brackets.
+
+Safety banners and the stop alert stay solid amber and red and are never see-through; the hazard banner
+pulses its glow, never its opacity. All animation respects "reduce motion" (the intro is skipped and the
+background is a still frame), canvases cap their pixel ratio, phones run the background at about 30 fps,
+and everything pauses while the tab is hidden. On phones the HUD keeps to the edges so the camera stays clear.
+
+Open `/#demo` to preview the call screen with sample data and a simulated voice, without a server or camera
+(`#demo-amber` and `#demo-alert` show the safety states). `/#intro` replays the intro.
+
+| Start page | Phone call | Hazard stop | Desktop call |
+|---|---|---|---|
+| ![Start page](docs/screenshots/v2-landing-phone.png) | ![Phone call](docs/screenshots/v2-call-phone-amber.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop](docs/screenshots/v2-call-desktop.png) |
+
+![Start page on desktop](docs/screenshots/v2-landing-desktop.png)
 
 ## Run it
 
