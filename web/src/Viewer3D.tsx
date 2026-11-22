@@ -107,7 +107,7 @@ function PrimitivePart({ part, step, play, explode }: { part: Part3D; step: Step
       <meshStandardMaterial color={part.color} emissive={lit ? "#38d6e8" : "#000000"} roughness={0.55}
         transparent opacity={lit || step.highlight.length === 0 ? 1 : 0.55} />
       {lit && (
-        <Html distanceFactor={6} center className="part-label">{part.label || part.name}</Html>
+        <Html center className="part-label" style={{ transform: "translateY(-28px)" }}>{part.label || part.name}</Html>
       )}
     </mesh>
   );

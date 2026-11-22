@@ -18,6 +18,7 @@ from pydantic import BaseModel
 
 from .agent import AGENT_NAME, SESSIONS_DIR
 from .expert import products as expert_products
+from .inspection.api import router as inspection_router
 from .manuals import ManualIndex, manual_path
 
 load_dotenv()
@@ -49,6 +50,15 @@ class TokenResponse(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True}
+
+
+app.include_router(inspection_router)
+
+
+@app.get("/api/products")
+def product_list() -> list[dict]:
+    return [{"id": p.id, "name": p.name, "has_detector": p.detector is not None}
+            for p in expert_products.load_all().values()]
 
 
 @app.get("/api/products/{product_id}")
