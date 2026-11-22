@@ -7,6 +7,7 @@ import { webglAvailable } from "./fx/gl/core";
 import { Showroom } from "./fx/showroom/Showroom";
 import { Arrow } from "./ui/Icons";
 import { RingMark, Wordmark } from "./ui/RingMark";
+import { sound } from "./fx/sound";
 
 export interface LandingProps {
   accepted: boolean;
@@ -18,10 +19,15 @@ export interface LandingProps {
   onInspect: () => void;
   /** false while the intro is still on screen: the entrance waits for it */
   entering: boolean;
+  /** who signed in with the quick sign-in on this device, if anyone */
+  profile: { name: string; guest?: boolean } | null;
+  onSignOut: () => void;
 }
 
 const CHAPTERS = ["Overview", "Show it", "Talk it through", "Fix it", "Start"] as const;
 const START = 4;
+/** How fast the record turns in each chapter's shot (matches the 3D scene), for the vinyl crackle. */
+const SPIN = [3.5, 0.4, 2.2, 0, 2];
 
 const NOTICE = [
   { k: "Control", t: "The mechanic gives guidance, not a guarantee. You stay in control of every step." },
@@ -52,8 +58,22 @@ function Head({ i, kicker, children }: { i: number; kicker: string; children: Re
   );
 }
 
+/** Header switch for the sound design: four bars that move while sound is on. */
+function SoundSwitch() {
+  const [on, setOn] = useState(sound.enabled);
+  useEffect(() => sound.subscribe(setOn), []);
+  return (
+    <button className={`sx-sound${on ? " on" : ""}`} onClick={() => sound.toggle()} aria-pressed={on} aria-label={on ? "Sound on. Turn sound off" : "Sound off. Turn sound on"}>
+      <span className="eq" aria-hidden><i /><i /><i /><i /></span>
+      <span className="t" aria-hidden>{on ? "Sound" : "Muted"}</span>
+    </button>
+  );
+}
+
 export function Landing(p: LandingProps) {
   const [ch, setCh] = useState(0);
+  const prevCh = useRef(0);
+  const hovered = useRef<Element | null>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const labels = useRef<HTMLDivElement>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -122,6 +142,38 @@ export function Landing(p: LandingProps) {
     return () => io.disconnect();
   }, [reduced]);
 
+  // sound: arm on first gesture, keep the beds only while this page is up
+  useEffect(() => {
+    sound.arm();
+    sound.wake();
+    return () => sound.quiet();
+  }, []);
+
+  // each chapter has its cue; the vinyl crackle follows the record's speed
+  useEffect(() => {
+    const from = prevCh.current;
+    prevCh.current = ch;
+    sound.setSpin(SPIN[ch]);
+    if (from === ch || !p.entering) return;
+    sound.whoosh(ch > from ? 1 : -1);
+    if (ch === 1) { sound.scan(); sound.blips(3, 1.2); }
+    if (ch === 2) sound.blips(3, 0.7);
+    if (ch === 3) { sound.lift(); sound.lock(1.6); sound.blips(2, 2.1); }
+    if (ch === 4) sound.settle();
+    if (ch === 0 && from === 3) sound.needle();
+  }, [ch, p.entering]);
+
+  const onHover = (e: React.PointerEvent) => {
+    const el = (e.target as Element).closest("button, a, label");
+    if (el !== hovered.current) {
+      hovered.current = el;
+      if (el && e.pointerType === "mouse") sound.tick();
+    }
+  };
+  const onPress = (e: React.PointerEvent) => {
+    if ((e.target as Element).closest("button, a")) sound.tick(true);
+  };
+
   const go = (i: number) => secs.current[i]?.scrollIntoView({ behavior: reduced ? "auto" : "smooth" });
 
   // entrance once the intro hands over
@@ -141,7 +193,7 @@ export function Landing(p: LandingProps) {
   const sec = (i: number) => (el: HTMLElement | null) => { if (el) secs.current[i] = el; };
 
   return (
-    <div ref={root} className={`sx sx-ch${ch} ${p.entering ? "" : "sx-wait"} ${gl ? "" : "sx-nogl"}`}>
+    <div ref={root} className={`sx sx-ch${ch} ${p.entering ? "" : "sx-wait"} ${gl ? "" : "sx-nogl"}`} onPointerOver={onHover} onPointerDown={onPress}>
       <div className="sx-stage" aria-hidden>
         <canvas ref={canvas} className="sx-canvas" />
         <div className="sx-shade" />
@@ -177,6 +229,7 @@ export function Landing(p: LandingProps) {
         </a>
         <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{CHAPTERS[ch]}</em></span>
         <nav className="sx-links">
+          <SoundSwitch />
           <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>Bulk inspection</a>
           <button className="x-btn x-btn-line sx-cta" onClick={() => go(START)}>Start a repair <Arrow size={16} /></button>
         </nav>
@@ -271,19 +324,26 @@ export function Landing(p: LandingProps) {
               </ol>
               <div className="sx-consent">
                 <label className="x-check">
-                  <input type="checkbox" checked={p.accepted} onChange={(e) => p.setAccepted(e.target.checked)} />
+                  <input type="checkbox" checked={p.accepted} onChange={(e) => { sound.confirm(e.target.checked); p.setAccepted(e.target.checked); }} />
                   <span className="box" aria-hidden />
                   <span>I understand and want to continue</span>
                 </label>
                 <div className="sx-go">
-                  <button className="x-btn x-btn-solid" disabled={!p.accepted || p.loading} onClick={() => p.onStart()}>
+                  <button className="x-btn x-btn-solid" disabled={!p.accepted || p.loading} onClick={() => { sound.launch(); p.onStart(); }}>
                     {p.loading ? "Connecting…" : "Start AI Mechanic"} <Arrow size={18} />
                   </button>
                   {p.lastRoom && (
-                    <button className="x-btn x-btn-line" disabled={!p.accepted || p.loading} onClick={() => p.onStart(p.lastRoom!)}>Resume last repair</button>
+                    <button className="x-btn x-btn-line" disabled={!p.accepted || p.loading} onClick={() => { sound.launch(); p.onStart(p.lastRoom!); }}>Resume last repair</button>
                   )}
                 </div>
                 {p.error && <p className="x-error" role="alert">{p.error}</p>}
+                <p className="sx-who">
+                  {p.profile && !p.profile.guest
+                    ? <>Signed in as <b>{p.profile.name}</b> · <button type="button" onClick={p.onSignOut}>Sign out</button></>
+                    : p.profile?.guest
+                      ? <>Continuing as a guest · <button type="button" onClick={p.onSignOut}>Sign in</button></>
+                      : <>You'll sign in quickly before the call starts.</>}
+                </p>
               </div>
             </aside>
           </div>

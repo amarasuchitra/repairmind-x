@@ -3,6 +3,7 @@ import * as THREE from "three";
 import gsap from "gsap";
 import { prefersReducedMotion } from "./motion";
 import { createStage, glowTexture, ringMaterial, ringMesh, webglAvailable } from "./gl/core";
+import { sound } from "./sound";
 
 const SEEN_KEY = "rmx.introSeen";
 
@@ -25,13 +26,19 @@ export function shouldPlayIntro(): boolean {
  *   warp      dust streaks toward the lens
  *   network   the camera flies through a 3D node network as the wordmark resolves
  *   settle    a final core flare, then the whole frame dissolves into the start page
- * Tap, click, Esc, Enter or Space skips. Plays once per browser session.
+ * It opens on a single point of light with "Enter": that first tap is what lets the browser play the
+ * score (see ./sound.ts), which is scheduled against the same timeline. After that, a tap, click or Esc
+ * skips. Plays once per browser session.
  */
 export function Intro({ onDone }: { onDone: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const [gone, setGone] = useState(false);
+  const [armed, setArmed] = useState(false);
+  const [soundOn, setSoundOn] = useState(sound.enabled);
+  useEffect(() => sound.subscribe(setSoundOn), []);
   const finishRef = useRef<() => void>(() => undefined);
+  const enterRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     const canvas = canvasRef.current, root = rootRef.current;
@@ -40,6 +47,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
     const finish = () => {
       if (done) return;
       done = true;
+      sound.endIntro();
       try { sessionStorage.setItem(SEEN_KEY, "1"); } catch { /* plays again next time */ }
       gsap.to(root, {
         opacity: 0, scale: 1.04, filter: "blur(8px)", duration: 0.8, ease: "power2.inOut",
@@ -54,9 +62,9 @@ export function Intro({ onDone }: { onDone: () => void }) {
         canvas,
         fov: 50,
         pixelRatio: Math.min(window.devicePixelRatio || 1, window.innerWidth < 700 ? 1.5 : 2),
-        bloom: { strength: 1.0, radius: 0.0, threshold: 0.12 },
+        bloom: { strength: 0.8, radius: 0.0, threshold: 0.18 },
         bloomFactors: [1.0, 0.7, 0.35, 0.15, 0.06],
-        grade: { vignette: 1, grain: 0.035, aberration: 0.0008, lift: [0.004, 0.02, 0.07] },
+        grade: { vignette: 1, grain: 0.03, aberration: 0.0006, lift: [0.006, 0.026, 0.085] },
       });
     } catch {
       finish();
@@ -179,13 +187,24 @@ export function Intro({ onDone }: { onDone: () => void }) {
     scene.add(sweep);
 
     /* --- state the timeline animates --- */
+    // before Enter: the navy field is up and a single point of light waits in the middle
     const S = {
-      field: 0, flare: 0, flareSize: 0.2, streak: 0, rings: 0, hudScale: 0.92, hudFade: 1, camZ: 10,
+      field: 0.7, flare: 0.5, flareSize: 0.02, streak: 0, rings: 0, hudScale: 0.92, hudFade: 1, camZ: 10,
       breachR: 0.3, breach: 0, dust: 0, warp: 0, net: 0, netZ: -8, netSpin: 0, core: 0,
     };
     const ringSweeps = rings.map(() => ({ v: 0 }));
 
-    const tl = gsap.timeline({ onComplete: finish });
+    const tl = gsap.timeline({ onComplete: finish, paused: true });
+    let gated = true;
+    const enter = () => {
+      if (!gated) return;
+      gated = false;
+      setArmed(true);
+      sound.start();
+      sound.intro(rings.length);
+      tl.play(0);
+    };
+    enterRef.current = enter;
     if (import.meta.env.DEV) (window as unknown as { __rmxIntroTl: gsap.core.Timeline }).__rmxIntroTl = tl; // lets visual QA seek frames
     tl.to(S, { field: 1, duration: 1.2, ease: "power1.out" }, 0)
       // ignite
@@ -221,8 +240,6 @@ export function Intro({ onDone }: { onDone: () => void }) {
       .fromTo(root.querySelector(".intro-rule"), { scaleX: 0 }, { scaleX: 1, duration: 1, ease: "expo.inOut" }, 4.95)
       .fromTo(root.querySelector(".intro-tag"), { opacity: 0, letterSpacing: "1.2em" }, { opacity: 0.9, letterSpacing: "0.55em", duration: 1.1, ease: "expo.out" }, 5.15)
       .to({}, { duration: 0.6 });
-    const boot = root.querySelectorAll<HTMLElement>(".intro-boot span");
-    boot.forEach((b, i) => tl.fromTo(b, { opacity: 0, x: -6 }, { opacity: 1, x: 0, duration: 0.25, ease: "steps(3)" }, 0.4 + i * 0.75));
 
     /* --- render loop --- */
     let raf = 0;
@@ -230,8 +247,9 @@ export function Intro({ onDone }: { onDone: () => void }) {
     const loop = () => {
       raf = requestAnimationFrame(loop);
       const t = clock.getElapsedTime();
-      (field.material as THREE.SpriteMaterial).opacity = 0.55 * S.field;
-      (flareCore.material as THREE.SpriteMaterial).opacity = Math.min(1, S.flare + S.core);
+      (field.material as THREE.SpriteMaterial).opacity = 0.7 * S.field;
+      const wait = gated ? 0.75 + 0.25 * Math.sin(t * 2.4) : 1;
+      (flareCore.material as THREE.SpriteMaterial).opacity = Math.min(1, S.flare + S.core) * wait;
       flareCore.scale.setScalar(0.5 + 1.3 * S.flareSize + S.core * 0.8);
       (flareGlow.material as THREE.SpriteMaterial).opacity = 0.8 * Math.max(S.flare, S.core * 0.8);
       flareGlow.scale.setScalar(2 + 7 * S.flareSize + S.core * 5);
@@ -244,7 +262,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
       hud.rotation.y = 0.18 + Math.cos(t * 0.3) * 0.06;
       rings.forEach((r, i) => {
         r.mat.uniforms.uSweep.value = ringSweeps[i].v;
-        r.mat.uniforms.uOpacity.value = (r.mat.userData.base ??= r.mat.uniforms.uOpacity.value) * S.rings * S.hudFade;
+        r.mat.uniforms.uOpacity.value = (r.mat.userData.base ??= r.mat.uniforms.uOpacity.value * 0.85) * S.rings * S.hudFade;
         r.mesh.rotation.z = t * r.spin;
       });
 
@@ -281,7 +299,12 @@ export function Intro({ onDone }: { onDone: () => void }) {
     loop();
 
     const onKey = (e: KeyboardEvent) => {
-      if (["Escape", "Enter", " "].includes(e.key)) finish();
+      if (e.key === "Escape") finish();
+      else if (["Enter", " "].includes(e.key)) {
+        e.preventDefault();
+        if (gated) enter();
+        else finish();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -296,7 +319,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
 
   if (gone) return null;
   return (
-    <div ref={rootRef} className="intro" onClick={() => finishRef.current()} role="presentation">
+    <div ref={rootRef} className={`intro${armed ? " armed" : ""}`} onClick={() => (armed ? finishRef.current() : enterRef.current())} role="presentation">
       <canvas ref={canvasRef} className="intro-canvas" aria-hidden />
       <div className="intro-word" aria-label="RepairMind X">
         <div className="intro-title">
@@ -306,11 +329,15 @@ export function Intro({ onDone }: { onDone: () => void }) {
         <div className="intro-rule" />
         <div className="intro-tag">LIVE AI REPAIR MECHANIC</div>
       </div>
-      <div className="intro-boot" aria-hidden>
-        <span>SYS.BOOT</span><span>OPTICS ONLINE</span><span>VOICE LINK</span><span>SAFETY GUARD ARMED</span><span>READY</span>
+      <div className="intro-gate">
+        <button className="intro-enter" onClick={(e) => { e.stopPropagation(); enterRef.current(); }} autoFocus>Enter</button>
+        <span className="intro-hint">{soundOn ? "Sound on · best with headphones" : "Sound off"}</span>
       </div>
+      <button className="intro-sound" aria-pressed={soundOn} onClick={(e) => { e.stopPropagation(); sound.toggle(); }}>
+        {soundOn ? "Sound on" : "Sound off"}
+      </button>
       <div className="intro-corner tl" aria-hidden /><div className="intro-corner br" aria-hidden />
-      <button className="intro-skip" onClick={(e) => { e.stopPropagation(); finishRef.current(); }}>Skip intro</button>
+      <button className="intro-skip" onClick={(e) => { e.stopPropagation(); finishRef.current(); }}>{armed ? "Skip intro" : "Skip"}</button>
     </div>
   );
 }

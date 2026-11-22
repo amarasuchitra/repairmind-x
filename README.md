@@ -100,7 +100,18 @@ vignette, a touch of lens chromatic aberration and animated film grain.
 - **Intro** (`web/src/fx/Intro.tsx`), about 6.5 s, choreographed on one GSAP timeline: a point of light
   ignites with an anamorphic streak, instrument rings sweep on at different depths as the camera pushes in,
   they collapse and a segmented ring blasts past the lens, dust warps by, and the camera flies through a 3D
-  node network while the wordmark resolves. Once per browser session; tap or Esc skips; `/#intro` replays.
+  node network while the wordmark resolves. It opens on a single point of light and an Enter button: that
+  first tap is what lets the browser play the score. Once per browser session; tap or Esc skips; `/#intro`
+  replays.
+- **Sound** (`web/src/fx/sound.ts`): every sound is synthesised live with the Web Audio API, so there are
+  no audio files. The intro has its own score timed to the animation (ignition, ring ticks, the collapse,
+  the breach boom, the warp rush, a light sweep and a final chord). On the start page a low drone and a
+  vinyl crackle that follows the record's speed run underneath, with cues for each chapter: a whoosh
+  between chapters, a scan sweep, label blips, the platter's servo lift and an AR lock chime, plus quiet
+  ticks on buttons. A switch in the header mutes it, and the choice is remembered on the device.
+- **Quick sign-in** (`web/src/Login.tsx`): between the start page and the call, once per device. It asks
+  for a name and an optional email so the app can greet you, keeps them in this browser only, and offers
+  "Continue as guest". It is not an account system: no password, nothing is sent to the server.
 - **Background** (`web/src/fx/NetworkBackground.tsx`): a slow 3D node network in fog at the back, and neon
   circuit glyphs in front that draw themselves in with a hot leading edge, glow and fade. Pointer or phone
   tilt gives parallax. The call and inspection pages use it; the start page has its own 3D scene.

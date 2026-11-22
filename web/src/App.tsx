@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { Call } from "./Call";
 import { Inspect } from "./Inspect";
 import { Landing } from "./Landing";
+import { Login, readProfile, writeProfile, type Profile } from "./Login";
 import { NetworkBackground } from "./fx/NetworkBackground";
 import { Intro, shouldPlayIntro } from "./fx/Intro";
 
@@ -44,6 +45,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [intro, setIntro] = useState(() => pageFromHash() === "call" && shouldPlayIntro());
   const lastRoom = readLastRoom();
+  const [profile, setProfile] = useState<Profile | null>(readProfile);
+  // set while the quick sign-in is showing: the call it should start afterwards (a room to resume, or a new one)
+  const [signingIn, setSigningIn] = useState<{ room?: string } | null>(null);
   const [page, setPage] = useState<Page>(pageFromHash);
   useEffect(() => {
     const onHash = () => setPage(pageFromHash());
@@ -81,6 +85,12 @@ export default function App() {
     }
   }
 
+  // the flow is intro, start page, quick sign-in (once per device), then the live call
+  const requestStart = (room?: string) => {
+    if (profile) void start(room);
+    else setSigningIn({ room });
+  };
+
   let content;
   if (conn) {
     content = (
@@ -94,6 +104,19 @@ export default function App() {
     );
   } else if (page === "demo") {
     content = <Suspense fallback={null}><Demo /></Suspense>;
+  } else if (signingIn) {
+    content = (
+      <Login
+        onBack={() => setSigningIn(null)}
+        onDone={(p) => {
+          writeProfile(p);
+          setProfile(p);
+          const room = signingIn.room;
+          setSigningIn(null);
+          void start(room);
+        }}
+      />
+    );
   } else if (page === "inspect") {
     content = <Inspect onBack={() => go("call")} />;
   } else {
@@ -104,7 +127,9 @@ export default function App() {
         loading={loading}
         error={error}
         lastRoom={lastRoom}
-        onStart={start}
+        onStart={requestStart}
+        profile={profile}
+        onSignOut={() => { writeProfile(null); setProfile(null); }}
         onInspect={() => go("inspect")}
         entering={!intro}
       />
@@ -114,7 +139,7 @@ export default function App() {
   return (
     <>
       {/* the landing page draws its own 3D scene */}
-      {(conn || page !== "call") && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
+      {(conn || signingIn || page !== "call") && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
       {content}
       {intro && !conn && <Intro onDone={() => setIntro(false)} />}
     </>
