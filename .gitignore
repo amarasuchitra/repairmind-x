@@ -5,3 +5,4 @@ web/dist/
 agent/sessions/
 __pycache__/
 .pytest_cache/
+*.tsbuildinfo
