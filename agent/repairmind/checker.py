@@ -29,7 +29,7 @@ Purpose = Literal["review", "vision"]
 
 ANTHROPIC_MODEL = {"review": os.getenv("RMX_REVIEW_MODEL", "claude-opus-5-5"),
                    "vision": os.getenv("RMX_VISION_MODEL", "claude-opus-5-5")}
-GEMINI_MODEL = os.getenv("RMX_GEMINI_CHECK_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("RMX_GEMINI_CHECK_MODEL", "gemini-3.5-flash")
 
 
 def _anthropic_key() -> bool:
