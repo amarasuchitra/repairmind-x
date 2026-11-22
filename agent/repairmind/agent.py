@@ -29,6 +29,7 @@ from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
 from . import reviewer, safety, sources, speech_guard, vision
+from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
 from .prompts import GREETING, MECHANIC_INSTRUCTIONS
@@ -419,6 +420,8 @@ server = AgentServer()
 
 @server.rtc_session(agent_name=AGENT_NAME)
 async def entrypoint(ctx: JobContext) -> None:
+    # Must run before any audio stream exists; see audio_warmup.py (Windows crash).
+    warm_up_resampler()
     await ctx.connect()
 
     # Resume a dropped call: the web app reuses the room name for the same repair.
