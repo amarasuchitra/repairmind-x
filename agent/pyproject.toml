@@ -24,3 +24,6 @@ detector = ["torch>=2.3", "torchvision>=0.18", "anomalib>=2.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+include = ["repairmind*"]
