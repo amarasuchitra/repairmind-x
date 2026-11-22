@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Call } from "./Call";
 import { Inspect } from "./Inspect";
+import { VoiceOrb } from "./hud/VoiceOrb";
 
 interface Connection {
   serverUrl: string;
@@ -80,11 +81,12 @@ export default function App() {
   }
 
   return (
-    <main className="landing">
-      <div className="brand">
-        <div className="logo" aria-hidden>RM</div>
-        <span>RepairMind X</span>
+    <main className="landing hud-landing">
+      <div className="hud-brand">
+        <span className="hud-mark" aria-hidden />
+        <span>REPAIRMIND<span className="dim"> // X</span></span>
       </div>
+      <div className="landing-orb" aria-hidden><VoiceOrb state="idle" bands={[]} size={132} /></div>
       <h1>Every machine has a solution. Let's find it.</h1>
       <p className="lede">
         Start a live video call with an AI mechanic. Show it the problem, answer a few questions, and it

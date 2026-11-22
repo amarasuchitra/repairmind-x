@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Marker } from "../types";
 import type { Box } from "./tracker";
 import { WORK_WIDTH } from "./tracker";
+import { brackets } from "../hud/CallHud";
 
 type Status = "idle" | "starting" | "tracking" | "lost" | "failed";
 
@@ -136,8 +137,9 @@ export function ARLayer({ host, marker, mirrored, suppressed, onFallback, onLost
       <div className="ar-layer" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }}>
         {box && status === "tracking" && (
           <svg className={`ar-svg${mirrored ? " mirror" : ""}`} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-            <rect x={(box.x - box.w / 2) * 100} y={(box.y - box.h / 2) * 100} width={box.w * 100} height={box.h * 100}
-              rx="1.5" className="ar-box" />
+            <path className="ar-box" d={brackets((box.x - box.w / 2) * 100, (box.y - box.h / 2) * 100,
+              (box.x + box.w / 2) * 100, (box.y + box.h / 2) * 100, Math.min(box.w, box.h) * 30 + 1.5)} />
+            <circle className="ar-dot" cx={box.x * 100} cy={box.y * 100} r="0.6" />
             <ActionGlyph action={marker.action ?? ""} box={box} />
           </svg>
         )}
