@@ -17,10 +17,13 @@ import {
   SessionView,
   Step3D,
   TOPIC_3D,
+  TOPIC_AR,
   TOPIC_ALERT,
   TOPIC_MARKER,
   TOPIC_STATE,
 } from "./types";
+
+import { ARLayer } from "./ar/ARLayer";
 
 // three.js is large, so the 3D viewer loads only when an expert procedure step arrives.
 const Viewer3D = lazy(() => import("./Viewer3D").then((m) => ({ default: m.Viewer3D })));
@@ -65,7 +68,7 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
   const { state: agentState, agent } = useVoiceAssistant();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const camTracks = useTracks([Track.Source.Camera]).filter((t) => t.participant.isLocal);
-  const camRef = useRef<HTMLDivElement>(null);
+  const camRef = useRef<HTMLElement | null>(null);
   const [facing, setFacing] = useState<"environment" | "user">("environment");
 
   const { textStreams: stateStreams } = useTextStream(TOPIC_STATE);
@@ -83,12 +86,14 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
     text: t.text,
   }));
 
-  // Freeze the current camera frame when the mechanic points at something.
+  // When the mechanic points at something, the live AR layer tracks it on the moving video. If it
+  // can't (approximate marker, part not found again), we freeze that frame and draw on the still.
   const [frozen, setFrozen] = useState<{ src: string; marker: Marker } | null>(null);
-  useEffect(() => {
-    if (!marker) return;
-    if (marker.image) {
-      setFrozen({ src: marker.image, marker });
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const activeMarker = marker && !marker.clear ? marker : null;
+  function freeze(m: Marker) {
+    if (m.image) {
+      setFrozen({ src: m.image, marker: m });
       return;
     }
     const video = camRef.current?.querySelector("video");
@@ -97,11 +102,19 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
-    setFrozen({ src: canvas.toDataURL("image/jpeg", 0.85), marker });
-  }, [markerStreams.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    setFrozen({ src: canvas.toDataURL("image/jpeg", 0.85), marker: m });
+  }
+  useEffect(() => {
+    setFrozen(null); // a new marker replaces any still from the last one
+  }, [markerStreams.length]);
+  // Motion arrows belong to one step: drop them once that step isn't active any more.
+  const markerStepActive =
+    !activeMarker?.step_id || Boolean(view?.steps.some((s) => s.id === activeMarker.step_id && s.status === "active"));
+  const arMarker = activeMarker && (markerStepActive ? activeMarker : { ...activeMarker, action: "" as const });
 
   const [dismissedAlert, setDismissedAlert] = useState(0);
   const showAlert = alert && alertStreams.length > dismissedAlert;
+  const arSuppressed = Boolean(view?.hazard) || Boolean(showAlert);
 
   async function switchCamera() {
     const next = facing === "environment" ? "user" : "environment";
@@ -130,12 +143,25 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
         <span className={`pill state-${agentState}`}>{status}</span>
       </header>
 
-      <section className="camera" ref={camRef}>
+      <section className="camera" ref={(el) => { camRef.current = el; setHost(el); }}>
         {camTracks[0] ? (
           <VideoTrack trackRef={camTracks[0]} className={facing === "user" ? "mirror" : ""} />
         ) : (
           <div className="placeholder">Allow camera access to show the mechanic your device.</div>
         )}
+        <ARLayer
+          host={host}
+          marker={arMarker}
+          mirrored={facing === "user"}
+          suppressed={arSuppressed}
+          onFallback={freeze}
+          onLost={(m) => {
+            localParticipant
+              .sendText(JSON.stringify({ event: "lost", id: m.id ?? 0 }), { topic: TOPIC_AR })
+              .catch(() => undefined);
+          }}
+          onShowStill={() => activeMarker && freeze(activeMarker)}
+        />
         {view && view.risk_level !== "green" && (
           <div className={`risk-banner risk-${view.risk_level}`}>
             {view.risk_level === "red" ? "Professional repair only" : "Safety precautions required"}

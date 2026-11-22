@@ -73,6 +73,22 @@ For factories, repair shops and refurbishers: check many units of one product at
 Bulk inspection needs a trained detector for the product (Phase 4, `scripts/train_detector.py`). The example
 product has none, so it shows as "no trained detector yet".
 
+## Live AR
+
+When the mechanic points at a part, the box, label and any motion arrow stay on the real part in the live
+video as the phone moves. Previously they were drawn on a frozen still.
+
+| Part | Where | What it does |
+|---|---|---|
+| Tracker | `web/src/ar/tracker.ts`, run in a Web Worker | Pyramidal Lucas-Kanade optical flow on corner features inside the box, checked forward and backward every frame. About 7 ms per frame on a laptop, run at about 12 fps. |
+| Catch-up | `catchUp()` | The server locates the part on a frame that is a few seconds old. The phone keeps about 4 s of recent frames, finds the matching one and follows the part forward to "now". |
+| Honest failure | `ARLayer.tsx` | If too few features survive, the app says "lost" and draws nothing, rather than a box in the wrong place. The agent then re-finds the part on a fresh frame, at most 3 times and at least 4 s apart. If tracking can't start, it falls back to the still picture. |
+| Motion arrows | `point_at(action=...)`, `agent/repairmind/ar.py` | Shows turn clockwise/anticlockwise, press, pull, lift and slide arrows only for the step the safety gates have already made active. They disappear when that step ends, and nothing is drawn during a hazard stop or alert. |
+
+WebXR is deliberately not used. An immersive AR session takes over the camera, so the video to the
+mechanic would stop and it could no longer watch what the user is doing. That is not acceptable for
+a safety-checked repair. Tracking runs on the normal camera stream instead, so it works on any phone browser.
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret), a Google AI Studio API key, and an Anthropic API key for the cross-check.

@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import reviewer, safety, sources, speech_guard, vision
+from . import ar, reviewer, safety, sources, speech_guard, vision
 from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
@@ -51,6 +51,7 @@ TOPIC_STATE = "rmx.state"
 TOPIC_MARKER = "rmx.marker"
 TOPIC_ALERT = "rmx.alert"
 TOPIC_3D = "rmx.3d"
+TOPIC_AR_EVENTS = "rmx.ar"
 
 
 class Mechanic(Agent):
@@ -60,6 +61,8 @@ class Mechanic(Agent):
         self.state = state
         self.frames = frames
         self.session_path = SESSIONS_DIR / f"{state.session_id}.json"
+        self._marker_seq = 0
+        self.ar_target: ar.ARTarget | None = None
 
     def _manual(self) -> ManualIndex | None:
         path = manual_path(SESSIONS_DIR, self.state.session_id)
@@ -321,17 +324,21 @@ class Mechanic(Agent):
         return await self._done(self.state.report_step_result(step_id, verified_by, passed, observation))  # type: ignore[arg-type]
 
     @function_tool
-    async def point_at(self, context: RunContext, description: str, label: str,
+    async def point_at(self, context: RunContext, description: str, label: str, action: str = "",
                        approx_x: float = -1.0, approx_y: float = -1.0) -> str:
-        """Point at a part on the user's camera. The app freezes that exact frame and draws a box and arrow.
+        """Point at a part on the user's camera. The app draws a box, label and optional motion arrow that
+        stay on the real part as the camera moves (live AR). If it can't follow the part it shows a still.
 
         Args:
             description: What to find, specific enough to locate, e.g. "the lower-left Phillips screw on the cover".
             label: Short on-screen label, e.g. "this screw".
+            action: Optional motion arrow for the CURRENT ACTIVE step only: press, pull, lift, turn_cw,
+                turn_ccw, slide_left or slide_right. Leave empty just to point.
             approx_x: Your own rough guess 0..1 from the left, used only if precise location is unavailable.
             approx_y: Your own rough guess 0..1 from the top, used only if precise location is unavailable.
         """
         clamp = lambda v: max(0.0, min(1.0, float(v)))  # noqa: E731
+        action, step_id, note = ar.gate_action(self.state, action)
         frame = self.frames.jpeg_b64(max_side=960) if self.frames else None
         loc = await vision.locate(frame, description) if frame else None
         if loc is not None and loc.found:
@@ -347,9 +354,36 @@ class Mechanic(Agent):
             return "Precise pointing is unavailable. Describe the location in words instead."
         if frame:
             marker["image"] = "data:image/jpeg;base64," + frame
+        self._marker_seq += 1
+        marker.update({"id": self._marker_seq, "action": action, "step_id": step_id})
+        self.ar_target = ar.ARTarget(self._marker_seq, description, label[:60], action, step_id)
         await self.publish(TOPIC_MARKER, marker)
-        return ("Marker shown on a still picture. Tell the user to look at it"
-                + ("." if marker["precise"] else ", and say it's approximate."))
+        if marker["precise"]:
+            return ("Marker shown on the live view and following the part. Tell the user to look at it." + note)
+        return "Marker shown on a still picture. Tell the user to look at it, and say it's approximate." + note
+
+    async def refind_marker(self, marker_id: int) -> None:
+        """The app lost the part on the live view: locate it again on a fresh frame (rate-limited)."""
+        t = self.ar_target
+        if t is None or t.marker_id != marker_id or not t.may_refind() or self.frames is None:
+            return
+        t.note_refind()
+        frame = self.frames.jpeg_b64(max_side=960)
+        loc = await vision.locate(frame, t.description) if frame else None
+        if loc is None or not loc.found:
+            return  # the app keeps saying "lost"; the user is asked to point the camera back
+        clamp = lambda v: max(0.0, min(1.0, float(v)))  # noqa: E731
+        # Re-check the arrow: the step may have finished since.
+        action, step_id, _ = ar.gate_action(self.state, t.action)
+        if step_id != t.step_id:
+            action, step_id = "", ""
+        self._marker_seq += 1
+        t.marker_id = self._marker_seq
+        await self.publish(TOPIC_MARKER, {
+            "x": clamp(loc.x_center), "y": clamp(loc.y_center), "w": clamp(loc.width), "h": clamp(loc.height),
+            "label": t.label, "precise": True, "image": "data:image/jpeg;base64," + frame,
+            "id": t.marker_id, "action": action, "step_id": step_id,
+        })
 
     @function_tool
     async def read_label(self, context: RunContext) -> str:
@@ -447,6 +481,20 @@ async def entrypoint(ctx: JobContext) -> None:
         max_tool_steps=6,
     )
     mechanic = Mechanic(ctx, state, frames)
+
+    # Live AR: the app tells us when it loses the part it was tracking, so we can find it again.
+    def _on_ar(reader, participant_identity: str) -> None:
+        async def handle() -> None:
+            try:
+                msg = json.loads(await reader.read_all())
+                if msg.get("event") == "lost":
+                    await mechanic.refind_marker(int(msg.get("id", 0)))
+            except Exception:
+                log.exception("AR message failed")
+
+        asyncio.create_task(handle())
+
+    ctx.room.register_text_stream_handler(TOPIC_AR_EVENTS, _on_ar)
 
     # Safety net that doesn't depend on the model noticing: scan every final user transcript.
     @session.on("user_input_transcribed")

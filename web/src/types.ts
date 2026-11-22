@@ -34,6 +34,10 @@ export interface Marker {
   label: string;
   precise?: boolean;
   image?: string; // the exact frame the mechanic analysed, as a data URL
+  id?: number; // new id = new target; the live AR overlay restarts tracking
+  action?: "" | "press" | "pull" | "lift" | "turn_cw" | "turn_ccw" | "slide_left" | "slide_right";
+  step_id?: string; // motion arrows belong to this step and disappear when it is no longer active
+  clear?: boolean; // remove the overlay
 }
 
 export interface Alert {
@@ -45,6 +49,7 @@ export const TOPIC_STATE = "rmx.state";
 export const TOPIC_MARKER = "rmx.marker";
 export const TOPIC_ALERT = "rmx.alert";
 export const TOPIC_ESCALATION = "rmx.escalation";
+export const TOPIC_AR = "rmx.ar"; // client -> agent: {event: "lost", id}
 
 export const TOPIC_3D = "rmx.3d";
 
