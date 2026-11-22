@@ -44,6 +44,8 @@ AGENT_NAME = "repairmind-mechanic"
 SESSIONS_DIR = Path(os.getenv("RMX_SESSIONS_DIR", "sessions"))
 GEMINI_MODEL = os.getenv("RMX_GEMINI_MODEL", "gemini-3.1-flash-live-preview")
 GEMINI_VOICE = os.getenv("RMX_GEMINI_VOICE", "Charon")
+# google-genai 3.x defaults to the "v1" API, which has no Live endpoint (WebSocket 404).
+GEMINI_API_VERSION = os.getenv("RMX_GEMINI_API_VERSION", "v1beta")
 
 TOPIC_STATE = "rmx.state"
 TOPIC_MARKER = "rmx.marker"
@@ -437,6 +439,7 @@ async def entrypoint(ctx: JobContext) -> None:
         llm=google.realtime.RealtimeModel(
             model=GEMINI_MODEL,
             voice=GEMINI_VOICE,
+            api_version=GEMINI_API_VERSION,
             temperature=0.4,
         ),
         # ~1 frame/second while the user talks, slower when quiet: enough context, low cost.
