@@ -80,6 +80,10 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
   const [frozen, setFrozen] = useState<{ src: string; marker: Marker } | null>(null);
   useEffect(() => {
     if (!marker) return;
+    if (marker.image) {
+      setFrozen({ src: marker.image, marker });
+      return;
+    }
     const video = camRef.current?.querySelector("video");
     if (!video || !video.videoWidth) return;
     const canvas = document.createElement("canvas");
@@ -146,7 +150,10 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
             <MarkerOverlay m={frozen.marker} />
           </div>
           <div className="frozen-bar">
-            <span>Look here: {frozen.marker.label}</span>
+            <span>
+              Look here: {frozen.marker.label}
+              {frozen.marker.precise === false && <em className="approx"> (approximate)</em>}
+            </span>
             <button className="ghost" onClick={() => setFrozen(null)}>Back to live</button>
           </div>
         </section>

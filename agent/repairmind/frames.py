@@ -68,3 +68,17 @@ class FrameGrabber:
                                                 strategy="scale_aspect_fit") if scale < 1 else None,
         )
         return base64.b64encode(images.encode(frame, opts)).decode()
+
+    async def two_frames(self, gap: float = 0.8, max_side: int = 1280) -> list[str]:
+        """Two full frames about `gap` seconds apart, for checks that must agree twice."""
+        first = self.jpeg_b64(max_side)
+        if first is None:
+            return []
+        seen = self._at
+        await asyncio.sleep(gap)
+        for _ in range(10):
+            if self._at > seen:
+                break
+            await asyncio.sleep(0.1)
+        second = self.jpeg_b64(max_side)
+        return [first, second] if second and self._at > seen else [first]

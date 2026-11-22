@@ -74,6 +74,8 @@ class Step:
     observation: str = ""
     photo_taken: bool = False
     user_confirmed_irreversible: bool = False
+    vision_verified: bool = False
+    vision_attempts: int = 0
     created_at: float = field(default_factory=time.time)
 
 
@@ -380,11 +382,35 @@ class RepairSession:
         return GateResult(True, f"Confirmed. Give the step carefully and slowly: {s.text}. Expected: "
                           f"{s.expected_result}", data={"step_id": s.id})
 
+    def record_vision_check(self, step_id: str, status: str, observation: str) -> GateResult:
+        s = self._step(step_id)
+        if not s or s.status != "active":
+            return GateResult(False, "No active step with that id.", "bad_id")
+        s.vision_attempts += 1
+        self._record("vision_check", id=step_id, status=status, obs=observation)
+        if status == "done":
+            s.vision_verified = True
+            return GateResult(True, "Camera check passed on two frames.")
+        if status == "not_done":
+            return GateResult(False, "The camera shows the step is not done correctly: " + observation,
+                              "vision_not_done")
+        if status == "unavailable":
+            return GateResult(False, "The camera check can't run right now. For a green step, ask the user to "
+                              "confirm; for anything riskier, stop and offer a human expert.", "vision_unavailable")
+        if s.vision_attempts >= 3:
+            return GateResult(False, "Still unclear after three tries. Don't guess: offer a human expert.",
+                              "vision_unclear_escalate")
+        return GateResult(False, "Unclear: " + observation + " Ask for a closer, steadier, better-lit view "
+                          "of the area, then check again.", "vision_unclear")
+
     def report_step_result(self, step_id: str, verified_by: VerifyKind, passed: bool,
                            observation: str) -> GateResult:
         s = self._step(step_id)
         if not s or s.status != "active":
             return GateResult(False, "No active step with that id.", "bad_id")
+        if passed and verified_by == "camera" and (s.risk != "green" or s.irreversible) and not s.vision_verified:
+            return GateResult(False, "Run check_step_on_camera first: risky and irreversible steps need the "
+                              "two-frame camera check to pass.", "needs_vision_check")
         if passed and verified_by == "user" and (s.risk != "green" or s.irreversible):
             return GateResult(False, "This step must be checked on camera, not just by the user saying it's done. "
                               "Ask them to show it clearly.", "needs_camera")

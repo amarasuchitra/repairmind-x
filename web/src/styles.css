@@ -131,3 +131,4 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .file-btn input { display: none; }
 .file-btn.busy { opacity: 0.6; }
 .manual-status { color: var(--muted); font-size: 0.85rem; margin: 8px 0 0; }
+.approx { color: var(--amber); font-style: normal; font-weight: 500; }

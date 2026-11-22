@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import reviewer, safety, sources, speech_guard
+from . import reviewer, safety, sources, speech_guard, vision
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
 from .prompts import GREETING, MECHANIC_INSTRUCTIONS
@@ -210,21 +210,81 @@ class Mechanic(Agent):
         return await self._done(self.state.report_step_result(step_id, verified_by, passed, observation))  # type: ignore[arg-type]
 
     @function_tool
-    async def mark_spot(self, context: RunContext, x: float, y: float, label: str,
-                        width: float = 0.0, height: float = 0.0) -> str:
-        """Point at something in the CURRENT camera frame. The app freezes the frame and draws an arrow.
+    async def point_at(self, context: RunContext, description: str, label: str,
+                       approx_x: float = -1.0, approx_y: float = -1.0) -> str:
+        """Point at a part on the user's camera. The app freezes that exact frame and draws a box and arrow.
 
         Args:
-            x: Horizontal centre, 0 = left edge, 1 = right edge.
-            y: Vertical centre, 0 = top, 1 = bottom.
-            label: Short label, e.g. "this screw".
-            width: Optional box width 0..1.
-            height: Optional box height 0..1.
+            description: What to find, specific enough to locate, e.g. "the lower-left Phillips screw on the cover".
+            label: Short on-screen label, e.g. "this screw".
+            approx_x: Your own rough guess 0..1 from the left, used only if precise location is unavailable.
+            approx_y: Your own rough guess 0..1 from the top, used only if precise location is unavailable.
         """
         clamp = lambda v: max(0.0, min(1.0, float(v)))  # noqa: E731
-        await self.publish(TOPIC_MARKER, {"x": clamp(x), "y": clamp(y), "w": clamp(width), "h": clamp(height),
-                                          "label": label[:60]})
-        return "Marker shown. Tell the user to look at the arrow on the still picture."
+        frame = self.frames.jpeg_b64(max_side=960) if self.frames else None
+        loc = await vision.locate(frame, description) if frame else None
+        if loc is not None and loc.found:
+            marker = {"x": clamp(loc.x_center), "y": clamp(loc.y_center), "w": clamp(loc.width),
+                      "h": clamp(loc.height), "label": label[:60], "precise": True}
+        elif loc is not None and not loc.found:
+            return ("Couldn't clearly find that in the current view (" + (loc.note or "not visible") + "). Ask the "
+                    "user to move the camera so it is in view, then try again.")
+        elif approx_x >= 0 and approx_y >= 0:
+            marker = {"x": clamp(approx_x), "y": clamp(approx_y), "w": 0.0, "h": 0.0, "label": label[:60],
+                      "precise": False}
+        else:
+            return "Precise pointing is unavailable. Describe the location in words instead."
+        if frame:
+            marker["image"] = "data:image/jpeg;base64," + frame
+        await self.publish(TOPIC_MARKER, marker)
+        return ("Marker shown on a still picture. Tell the user to look at it"
+                + ("." if marker["precise"] else ", and say it's approximate."))
+
+    @function_tool
+    async def read_label(self, context: RunContext) -> str:
+        """Read the brand and exact model from the rating label in the current full-resolution frame.
+        Ask the user to hold the camera close and steady on the label first."""
+        frame = self.frames.jpeg_b64(max_side=1600) if self.frames else None
+        if frame is None:
+            return "No camera frame yet. Ask the user to point the camera at the label."
+        reading = await vision.read_label(frame)
+        if reading is None:
+            return ("Close-up reading is unavailable. Ask the user to read the model number aloud, then call "
+                    "identify_device with model_confirmed=true and how_identified='user said'.")
+        if not reading.readable or not reading.model:
+            return "Label not readable: " + (reading.advice_if_unreadable or "ask for a closer, sharper shot.")
+        result = self.state.identify_device(self.state.device or "device", reading.brand or self.state.brand,
+                                            reading.model, True, "label (close-up read)")
+        out = await self._done(result)
+        return f"Label reads: {reading.brand} {reading.model}. Read it back to the user to confirm. " + out
+
+    @function_tool
+    async def look_closer(self, context: RunContext, question: str) -> str:
+        """Ask a specific question about the current full-resolution frame, e.g. "is the ribbon cable fully seated?"."""
+        frame = self.frames.jpeg_b64(max_side=1600) if self.frames else None
+        if frame is None:
+            return "No camera frame yet."
+        ans = await vision.ask(frame, question)
+        if ans is None:
+            return "Close-up view unavailable; rely on what you can see and say if you're unsure."
+        return ans.answer if ans.confident else f"Unsure: {ans.answer}. {ans.advice_if_unsure}"
+
+    @function_tool
+    async def check_step_on_camera(self, context: RunContext, step_id: str) -> str:
+        """Check the active step on two full-resolution frames. Required for risky and irreversible steps.
+        Ask the user to hold the camera steady on the area first."""
+        step = self.state._step(step_id)
+        if step is None or step.status != "active":
+            return "BLOCKED (bad_id). No active step with that id."
+        frames = await self.frames.two_frames() if self.frames else []
+        verdict = await vision.check_step(frames, step.text, step.expected_result)
+        result = self.state.record_vision_check(step_id, verdict.status, verdict.observation)
+        if verdict.status == "done":
+            result = self.state.report_step_result(step_id, "camera", True, verdict.observation)
+        elif verdict.status == "not_done":
+            result = self.state.report_step_result(step_id, "camera", False,
+                                                   verdict.observation + " " + "; ".join(verdict.problems_seen))
+        return await self._done(result)
 
     # ------------------------------------------------------- hazards & handoff
     @function_tool

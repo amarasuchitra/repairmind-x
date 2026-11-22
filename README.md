@@ -32,6 +32,17 @@ Browser (phone / desktop)  ──WebRTC──>  LiveKit room  <──  Mechanic 
 | Service manuals | `agent/repairmind/manuals.py`, `POST /api/manual` | Upload the device's PDF manual during the call ("Add manual" button). It is split into page-tagged passages and searched with BM25, so steps cite "manual p.N". |
 | Full-resolution frames | `agent/repairmind/frames.py` | Keeps the newest full camera frame for the reviewer (and Phase 3 close-ups). |
 
+## Phase 3: visual guidance
+
+| Part | Where | What it does |
+|---|---|---|
+| Label reading | `read_label` tool, `agent/repairmind/vision.py` | Reads brand and exact model from the rating label on a full-resolution frame. If any character is uncertain it asks for a better shot rather than guessing. |
+| Close-ups | `look_closer` tool | Answers detail questions ("is the ribbon cable fully seated?") from a full-resolution frame. |
+| Precise markers | `point_at` tool | Locates the part on the newest full frame and sends that exact frame to the app with a box and arrow. Falls back to an approximate marker, clearly labelled, if precise location is unavailable. |
+| Two-frame step checks | `check_step_on_camera` tool | Two frames about a second apart must both show the step done with at least 0.8 confidence and no problems seen. Required before amber or irreversible steps count as done. Unclear three times means hand off to a human. |
+
+Vision uses the same Anthropic key as the cross-check (`RMX_VISION_MODEL`, default `claude-opus-5-5`). Without it, risky steps can't be verified on camera, so they are blocked.
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret), a Google AI Studio API key, and an Anthropic API key for the cross-check.
@@ -61,8 +72,8 @@ static host) or use a tunnel such as `cloudflared tunnel --url http://localhost:
   iFixit lookup was not reachable from the build machine.
 - **The speech guard acts after the sentence is spoken.** It interrupts and corrects within about a
   second, but the words were already heard. It also allows any instruction while a step is active.
-- **Markers use freeze-frame.** The arrow is drawn on a still frame, because the live camera moves.
-  Coordinates come from the model and can be off; tracking comes in Phase 3.
+- **Markers use freeze-frame.** The box is drawn on the exact frame that was analysed, not the moving
+  live video. Live tracking of markers is not built yet.
 - **iFixit licence.** Guides are CC BY-NC-SA. Fine for this prototype; a commercial launch needs
   iFixit's paid API plan, and their content may not be used to train models.
 - **Safety keywords are English only** for now.

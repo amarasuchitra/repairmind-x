@@ -110,6 +110,8 @@ def test_irreversible_flow():
     assert r.allowed
     # Irreversible steps need a camera check, not just the user's word.
     assert s.report_step_result(sid, "user", True, "done").code == "needs_camera"
+    assert s.report_step_result(sid, "camera", True, "tie gone").code == "needs_vision_check"
+    s.record_vision_check(sid, "done", "tie gone in both frames")
     assert s.report_step_result(sid, "camera", True, "tie gone").allowed
 
 
