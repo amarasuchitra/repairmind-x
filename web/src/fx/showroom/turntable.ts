@@ -16,6 +16,7 @@ export interface DeckModel {
   arm: THREE.Group; // swings between rest and the record
   anchors: Record<string, THREE.Object3D>;
   highlight: THREE.MeshPhysicalMaterial; // the drive belt: glows when it is the part being worked on
+  plinth: THREE.Mesh; // the cabinet, so a scene can give it a different finish
   accents: THREE.MeshBasicMaterial[];
 }
 
@@ -315,5 +316,5 @@ export function buildDeck(fx: FxUniforms): DeckModel {
   anchor(root, "speed", -1.68, TOP + 0.06, FRONT, anchors);
   anchor(root, "model", 0.3, TOP + 0.55, -1.1, anchors);
 
-  return { root, spin, platter, arm, anchors, highlight, accents: [accent, accentSoft, amber] };
+  return { root, spin, platter, arm, anchors, highlight, plinth, accents: [accent, accentSoft, amber] };
 }
