@@ -5,6 +5,7 @@ import {
   VideoTrack,
   useConnectionState,
   useLocalParticipant,
+  useMultibandTrackVolume,
   useTextStream,
   useTracks,
   useTranscriptions,
@@ -24,6 +25,8 @@ import {
 } from "./types";
 
 import { ARLayer } from "./ar/ARLayer";
+import { CallHud } from "./hud/CallHud";
+import type { OrbState } from "./hud/VoiceOrb";
 
 // three.js is large, so the 3D viewer loads only when an expert procedure step arrives.
 const Viewer3D = lazy(() => import("./Viewer3D").then((m) => ({ default: m.Viewer3D })));
@@ -65,7 +68,7 @@ function lastJson<T>(streams: { text: string }[]): T | null {
 
 function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) => void }) {
   const connection = useConnectionState();
-  const { state: agentState, agent } = useVoiceAssistant();
+  const { state: agentState, agent, audioTrack } = useVoiceAssistant();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
   const camTracks = useTracks([Track.Source.Camera]).filter((t) => t.participant.isLocal);
   const camRef = useRef<HTMLElement | null>(null);
@@ -82,7 +85,7 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
 
   const transcripts = useTranscriptions();
   const captions = transcripts.slice(-3).map((t) => ({
-    who: t.participantInfo.identity === localParticipant.identity ? "You" : "Mechanic",
+    who: (t.participantInfo.identity === localParticipant.identity ? "You" : "Mechanic") as "You" | "Mechanic",
     text: t.text,
   }));
 
@@ -126,29 +129,42 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
 
   const status =
     connection !== ConnectionState.Connected
-      ? "Connecting…"
+      ? "Connecting"
       : !agent
-        ? "Waiting for the mechanic…"
+        ? "Waiting for mechanic"
         : ({ listening: "Listening", thinking: "Thinking", speaking: "Speaking" } as Record<string, string>)[
             agentState
-          ] ?? "Connected";
+          ] ?? "Online";
+  const orbState: OrbState =
+    connection !== ConnectionState.Connected || !agent
+      ? "connecting"
+      : (["listening", "thinking", "speaking"] as const).find((s) => s === agentState) ?? "idle";
+
+  // The orb follows the mechanic's voice while it speaks, and your mic while it listens.
+  const micRef = useTracks([Track.Source.Microphone]).find((t) => t.participant.isLocal);
+  const agentBands = useMultibandTrackVolume(audioTrack, { bands: 12, loPass: 2, hiPass: 120 });
+  const micBands = useMultibandTrackVolume(micRef, { bands: 12, loPass: 2, hiPass: 120 });
+  const bands = orbState === "speaking" ? agentBands : orbState === "listening" ? micBands : [];
 
   return (
-    <div className="call-grid">
-      <header className="call-top">
-        <div className="brand small">
-          <div className="logo" aria-hidden>RM</div>
-          <span>Live repair</span>
-        </div>
-        <span className={`pill state-${agentState}`}>{status}</span>
-      </header>
-
-      <section className="camera" ref={(el) => { camRef.current = el; setHost(el); }}>
-        {camTracks[0] ? (
+    <CallHud
+      status={status}
+      orbState={orbState}
+      bands={bands}
+      view={view}
+      captions={captions}
+      hostRef={(el) => {
+        camRef.current = el;
+        setHost(el);
+      }}
+      camera={
+        camTracks[0] ? (
           <VideoTrack trackRef={camTracks[0]} className={facing === "user" ? "mirror" : ""} />
         ) : (
           <div className="placeholder">Allow camera access to show the mechanic your device.</div>
-        )}
+        )
+      }
+      overlay={
         <ARLayer
           host={host}
           marker={arMarker}
@@ -162,172 +178,25 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
           }}
           onShowStill={() => activeMarker && freeze(activeMarker)}
         />
-        {view && view.risk_level !== "green" && (
-          <div className={`risk-banner risk-${view.risk_level}`}>
-            {view.risk_level === "red" ? "Professional repair only" : "Safety precautions required"}
-          </div>
-        )}
-        <div className="captions" aria-live="polite">
-          {captions.map((c, i) => (
-            <p key={i} className={c.who === "You" ? "me" : "ai"}>
-              <b>{c.who}:</b> {c.text}
-            </p>
-          ))}
-        </div>
-      </section>
-
-      {frozen && (
-        <section className="frozen" aria-label="The mechanic is pointing at this">
-          <div className="frozen-img">
-            <img src={frozen.src} alt="Still frame from your camera" />
-            <MarkerOverlay m={frozen.marker} />
-          </div>
-          <div className="frozen-bar">
-            <span>
-              Look here: {frozen.marker.label}
-              {frozen.marker.precise === false && <em className="approx"> (approximate)</em>}
-            </span>
-            <button className="ghost" onClick={() => setFrozen(null)}>Back to live</button>
-          </div>
-        </section>
-      )}
-
-      <aside className="panel">
-        {step3d && (
+      }
+      side={
+        step3d && (
           <Suspense fallback={<div className="viewer3d-msg">Loading 3D model…</div>}>
             <Viewer3D step={step3d} />
           </Suspense>
-        )}
-        <RepairPanel view={view} />
-        <ManualUpload room={room} />
-      </aside>
-
-      <footer className="controls">
-        <button
-          className={isMicrophoneEnabled ? "ctl" : "ctl off"}
-          onClick={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
-        >
-          {isMicrophoneEnabled ? "Mute" : "Unmute"}
-        </button>
-        <button className="ctl" onClick={switchCamera}>Switch camera</button>
-        <button className="ctl danger" onClick={() => onEnd(Boolean(view?.steps.length && view.steps.every((s) => s.status === "done")))}>
-          End call
-        </button>
-      </footer>
-
-      {showAlert && alert && (
-        <div className="modal" role="alertdialog" aria-modal>
-          <div className={`modal-card ${alert.kind === "hazard_stop" ? "hazard" : "red"}`}>
-            <h2>{alert.kind === "hazard_stop" ? "Stop now" : "This needs a professional"}</h2>
-            <p>{alert.message}</p>
-            <button className="primary" onClick={() => setDismissedAlert(alertStreams.length)}>I understand</button>
-          </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+      tools={<ManualUpload room={room} />}
+      frozen={frozen}
+      onCloseFrozen={() => setFrozen(null)}
+      micOn={isMicrophoneEnabled}
+      onToggleMic={() => localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}
+      onSwitchCamera={switchCamera}
+      onEnd={() => onEnd(Boolean(view?.steps.length && view.steps.every((s) => s.status === "done")))}
+      alert={showAlert && alert ? alert : null}
+      onDismissAlert={() => setDismissedAlert(alertStreams.length)}
+    />
   );
-}
-
-function MarkerOverlay({ m }: { m: Marker }) {
-  const hasBox = m.w > 0.01 && m.h > 0.01;
-  return (
-    <svg className="marker" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
-      {hasBox ? (
-        <rect x={(m.x - m.w / 2) * 100} y={(m.y - m.h / 2) * 100} width={m.w * 100} height={m.h * 100}
-              rx="1.5" className="mk-box" />
-      ) : (
-        <circle cx={m.x * 100} cy={m.y * 100} r="5" className="mk-box" />
-      )}
-      <line x1={Math.min(95, m.x * 100 + 18)} y1={Math.max(5, m.y * 100 - 18)} x2={m.x * 100 + 4}
-            y2={m.y * 100 - 4} className="mk-arrow" />
-    </svg>
-  );
-}
-
-const STATUS_ICON: Record<string, string> = {
-  pending: "○",
-  awaiting_confirmation: "!",
-  active: "▶",
-  done: "✓",
-  failed: "✕",
-  blocked: "■",
-};
-
-function RepairPanel({ view }: { view: SessionView | null }) {
-  if (!view) {
-    return (
-      <div className="panel-empty">
-        <h2>Repair</h2>
-        <p>The mechanic will fill this in as it identifies the device and diagnoses the problem.</p>
-      </div>
-    );
-  }
-  return (
-    <div className="panel-body">
-      <div className="kv">
-        <span>Device</span>
-        <b>{view.device || "Not identified yet"}</b>
-        {view.device && !view.model_confirmed && <em>Model not confirmed: show the label</em>}
-      </div>
-
-      {view.diagnosis ? (
-        <div className="kv">
-          <span>Diagnosis</span>
-          <b>{view.diagnosis}</b>
-          <Confidence value={view.confidence} />
-        </div>
-      ) : view.hypotheses.length > 0 ? (
-        <div className="kv">
-          <span>Possible causes</span>
-          <ul className="hyp">
-            {view.hypotheses.map((h) => (
-              <li key={h.cause}>{h.cause} <Confidence value={h.confidence} /></li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      {view.precautions.length > 0 && (
-        <div className="kv">
-          <span>Safety first</span>
-          <ul className="checklist">
-            {view.precautions.map((p) => (
-              <li key={p.id} className={p.done ? "done" : ""}>{p.done ? "✓" : "○"} {p.text}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="kv">
-        <span>Steps</span>
-        {view.steps.length === 0 ? (
-          <em>No steps yet. Diagnosis comes first.</em>
-        ) : (
-          <ol className="steps">
-            {view.steps.map((s) => (
-              <li key={s.id} className={`st-${s.status}`}>
-                <span className="ico">{STATUS_ICON[s.status]}</span>
-                <div>
-                  <p>{s.text}</p>
-                  {s.irreversible.length > 0 && <p className="warn">Can't be undone: {s.irreversible.join(", ")}</p>}
-                  {s.source && <p className="src">Source: {s.source}</p>}
-                  {s.cross_checked && <p className="checked">Double-checked by a second AI</p>}
-                </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
-
-      {view.escalated && <p className="note">Handed to a human expert with the full repair history.</p>}
-    </div>
-  );
-}
-
-function Confidence({ value }: { value: number }) {
-  const pct = Math.round(value * 100);
-  const cls = pct >= 85 ? "hi" : pct >= 75 ? "mid" : "lo";
-  return <span className={`conf conf-${cls}`}>{pct}% sure</span>;
 }
 
 function ManualUpload({ room }: { room: string }) {

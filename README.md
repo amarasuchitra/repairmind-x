@@ -89,6 +89,20 @@ WebXR is deliberately not used. An immersive AR session takes over the camera, s
 mechanic would stop and it could no longer watch what the user is doing. That is not acceptable for
 a safety-checked repair. Tracking runs on the normal camera stream instead, so it works on any phone browser.
 
+## Interface
+
+The call screen is a dark holographic HUD. It has:
+- corner brackets and a scan line over the live camera
+- a voice orb that reacts to the mechanic's voice when it speaks and to your mic when it listens
+- glass panels for the diagnosis confidence gauge, safety status and step timeline
+- AR markers drawn as targeting brackets
+
+Safety banners and the stop alert stay solid amber and red and are never see-through. Animations respect "reduce motion". On phones the HUD keeps to the edges so the camera stays clear.
+
+| Phone call | Safety alert | Desktop |
+|---|---|---|
+| ![Phone call](docs/screenshots/hud-phone-call.png) | ![Safety alert](docs/screenshots/hud-phone-safety-alert.png) | ![Desktop](docs/screenshots/hud-desktop-call.png) |
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret), a Google AI Studio API key, and an Anthropic API key for the cross-check.
