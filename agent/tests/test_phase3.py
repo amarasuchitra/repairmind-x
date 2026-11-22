@@ -34,6 +34,8 @@ def test_not_done_blocks():
 def test_vision_unavailable_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     v = asyncio.run(vision.check_step(["a", "b"], "Cut the tie", "tie removed"))
     assert v.status == "unavailable"
     assert asyncio.run(vision.locate("a", "screw")) is None

@@ -2,7 +2,8 @@
 
 The live voice model sees about one low-resolution frame per second, which is enough to talk but not
 to read a rating label or judge whether a clip is seated. These helpers send the newest full frame to
-a vision model (Claude) with a narrow question and a structured answer.
+a vision model (Claude, or a free Gemini model; see checker.py) with a narrow question and a structured
+answer.
 
 Step checks require TWO frames taken a moment apart to agree, with high confidence, before a step
 counts as verified on camera. Anything else comes back as "unclear", and the mechanic asks for a
@@ -12,14 +13,14 @@ better view. When no vision model is configured, every check returns "unavailabl
 from __future__ import annotations
 
 import logging
-import os
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from . import checker
+
 log = logging.getLogger("repairmind.vision")
 
-VISION_MODEL = os.getenv("RMX_VISION_MODEL", "claude-opus-5-5")
 STEP_CONFIDENCE = 0.8
 
 
@@ -59,33 +60,24 @@ class StepVerdict(BaseModel):
     problems_seen: list[str] = Field(default_factory=list)
 
 
+VISION_SYSTEM = ("You inspect photos from a live repair video call. Describe only what is actually visible. "
+                 "If the view is blurry, dark, cropped or ambiguous, say so instead of guessing.")
+
+
+class GeminiBox(BaseModel):
+    """Gemini's native detection format: box_2d = [ymin, xmin, ymax, xmax] scaled 0..1000."""
+    found: bool
+    box_2d: list[int] = Field(default_factory=list)
+    note: str = ""
+
+
 def available() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN"))
+    return checker.provider() is not None
 
 
 async def _parse(frames_b64: list[str], prompt: str, schema: type[BaseModel]) -> BaseModel | None:
-    import anthropic
-
-    content: list[dict] = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": f}}
-                           for f in frames_b64]
-    content.append({"type": "text", "text": prompt})
-    try:
-        client = anthropic.AsyncAnthropic(timeout=25.0, max_retries=1)
-        resp = await client.messages.parse(
-            model=VISION_MODEL,
-            max_tokens=2000,
-            system=("You inspect photos from a live repair video call. Describe only what is actually visible. "
-                    "If the view is blurry, dark, cropped or ambiguous, say so instead of guessing."),
-            output_config={"effort": "medium"},
-            messages=[{"role": "user", "content": content}],
-            output_format=schema,
-        )
-    except (anthropic.APIConnectionError, anthropic.APIStatusError) as e:
-        log.warning("vision call failed: %s", e)
-        return None
-    if resp.stop_reason == "refusal":
-        return None
-    return resp.parsed_output
+    res = await checker.parse(VISION_SYSTEM, frames_b64, prompt, schema, "vision")
+    return None if res.refused or res.error else res.parsed
 
 
 async def read_label(frame_b64: str) -> LabelReading | None:
@@ -105,8 +97,25 @@ async def ask(frame_b64: str, question: str) -> Answer | None:
 async def locate(frame_b64: str, description: str) -> Location | None:
     if not available():
         return None
+    if checker.provider() == "gemini":
+        # Gemini is trained to output boxes in this exact format, which is more accurate than fractions.
+        g = await _parse([frame_b64], f"Detect: {description}. Return found and box_2d as [ymin, xmin, ymax, "
+                         "xmax] normalised to 0-1000. If it's not clearly visible, set found=false.", GeminiBox)
+        if not isinstance(g, GeminiBox):
+            return None
+        return gemini_box_to_location(g)
     return await _parse([frame_b64], f"Find this in the photo: {description}. Give its bounding box as fractions "
                         "of the image size. If it's not clearly visible, set found=false.", Location)
+
+
+def gemini_box_to_location(g: GeminiBox) -> Location:
+    if not g.found or len(g.box_2d) != 4:
+        return Location(found=False, note=g.note or "not visible")
+    ymin, xmin, ymax, xmax = (max(0, min(1000, int(v))) / 1000 for v in g.box_2d)
+    if xmax <= xmin or ymax <= ymin:
+        return Location(found=False, note="invalid box")
+    return Location(found=True, x_center=(xmin + xmax) / 2, y_center=(ymin + ymax) / 2,
+                    width=xmax - xmin, height=ymax - ymin, note=g.note)
 
 
 async def check_step(frames_b64: list[str], step_text: str, expected_result: str) -> StepVerdict:
