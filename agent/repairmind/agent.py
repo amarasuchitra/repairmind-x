@@ -15,6 +15,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from livekit.agents import (
     Agent,
+    ConversationItemAddedEvent,
     AgentServer,
     AgentSession,
     JobContext,
@@ -27,7 +28,9 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import safety, sources
+from . import reviewer, safety, sources, speech_guard
+from .frames import FrameGrabber
+from .manuals import ManualIndex, manual_path
 from .prompts import GREETING, MECHANIC_INSTRUCTIONS
 from .session import GateResult, Hypothesis, RepairSession
 
@@ -45,11 +48,16 @@ TOPIC_ALERT = "rmx.alert"
 
 
 class Mechanic(Agent):
-    def __init__(self, ctx: JobContext, state: RepairSession) -> None:
+    def __init__(self, ctx: JobContext, state: RepairSession, frames: FrameGrabber | None = None) -> None:
         super().__init__(instructions=MECHANIC_INSTRUCTIONS)
         self.ctx = ctx
         self.state = state
+        self.frames = frames
         self.session_path = SESSIONS_DIR / f"{state.session_id}.json"
+
+    def _manual(self) -> ManualIndex | None:
+        path = manual_path(SESSIONS_DIR, self.state.session_id)
+        return ManualIndex.load(path) if path.exists() else None
 
     # ----------------------------------------------------------------- helpers
     async def publish(self, topic: str, payload: dict) -> None:
@@ -131,6 +139,16 @@ class Mechanic(Agent):
         except Exception as e:
             return f"Couldn't load that guide ({e})."
 
+    @function_tool
+    async def search_manual(self, context: RunContext, query: str) -> str:
+        """Search the service manual the user uploaded for this device. Cite results as their "ref"."""
+        idx = self._manual()
+        if idx is None:
+            return ("No manual uploaded. Ask the user to tap 'Add manual (PDF)' if they have the service or "
+                    "user manual, or use find_repair_guide.")
+        hits = idx.search(query)
+        return json.dumps(hits) if hits else "Nothing relevant in the manual for that query."
+
     # ------------------------------------------------------------ precautions
     @function_tool
     async def confirm_precaution(self, context: RunContext, precaution_id: str, verified_on_camera: bool) -> str:
@@ -146,7 +164,7 @@ class Mechanic(Agent):
     # ------------------------------------------------------------------ steps
     @function_tool
     async def propose_step(self, context: RunContext, text: str, source_kind: str, source_ref: str,
-                           expected_result: str) -> str:
+                           expected_result: str, source_excerpt: str = "") -> str:
         """Ask permission to give ONE repair step. Say the step only if the answer is ALLOWED.
 
         Args:
@@ -154,9 +172,16 @@ class Mechanic(Agent):
             source_kind: "ifixit", "manual", "label" or "general_safe".
             source_ref: Guide URL plus step number, or manual page. Empty only for general_safe.
             expected_result: What the camera should show when the step is done.
+            source_excerpt: The exact source text this step comes from (guide step or manual passage).
         """
         if source_kind not in ("ifixit", "manual", "label", "general_safe"):
             return "BLOCKED (bad_source_kind). Use ifixit, manual, label or general_safe."
+        key = self.state._key(text)
+        if self.state.needs_review(text, source_kind) and self.state.reviews.get(key, {}).get("status") != "approve":
+            frame = self.frames.jpeg_b64() if self.frames else None
+            result = await reviewer.review_step(self.state, text, source_kind, source_ref, source_excerpt,
+                                                expected_result, [frame] if frame else None)
+            self.state.record_review(text, result.status, result.reason)
         return await self._done(self.state.propose_step(text, source_kind, source_ref, expected_result))  # type: ignore[arg-type]
 
     @function_tool
@@ -233,6 +258,9 @@ async def entrypoint(ctx: JobContext) -> None:
     state = RepairSession.load(path) if path.exists() else RepairSession(session_id=safe_name)
     resumed = path.exists()
 
+    frames = FrameGrabber()
+    frames.attach(ctx.room)
+
     session = AgentSession(
         llm=google.realtime.RealtimeModel(
             model=GEMINI_MODEL,
@@ -243,7 +271,7 @@ async def entrypoint(ctx: JobContext) -> None:
         video_sampler=VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.5),
         max_tool_steps=6,
     )
-    mechanic = Mechanic(ctx, state)
+    mechanic = Mechanic(ctx, state, frames)
 
     # Safety net that doesn't depend on the model noticing: scan every final user transcript.
     @session.on("user_input_transcribed")
@@ -263,6 +291,28 @@ async def entrypoint(ctx: JobContext) -> None:
             session.generate_reply(instructions="Say exactly, calmly and slowly: " + safety.HAZARD_STOP_MESSAGE)
 
         asyncio.create_task(stop())
+
+    # Second safety net: check what the mechanic actually said against the gates.
+    @session.on("conversation_item_added")
+    def _on_item(ev: ConversationItemAddedEvent) -> None:
+        item = ev.item
+        if getattr(item, "role", None) != "assistant":
+            return
+        text = getattr(item, "text_content", None) or ""
+        violation = speech_guard.check(text, state)
+        if not violation:
+            return
+        state._record("speech_guard", kind=violation.kind, sentence=violation.sentence)
+        state.save(SESSIONS_DIR)
+
+        async def correct() -> None:
+            await session.interrupt(force=True)
+            session.generate_reply(instructions=(
+                "You just said something your safety rules don't allow (" + violation.detail + "): \""
+                + violation.sentence + "\". Say exactly: \"" + speech_guard.CORRECTIONS[violation.kind]
+                + "\" Then follow the gates: use propose_step before giving any step."))
+
+        asyncio.create_task(correct())
 
     await session.start(
         agent=mechanic,

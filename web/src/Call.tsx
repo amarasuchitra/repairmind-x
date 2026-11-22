@@ -27,7 +27,7 @@ interface Props {
   onEnd: (finished: boolean) => void;
 }
 
-export function Call({ serverUrl, token, onEnd }: Props) {
+export function Call({ serverUrl, token, room, onEnd }: Props) {
   return (
     <LiveKitRoom
       serverUrl={serverUrl}
@@ -38,7 +38,7 @@ export function Call({ serverUrl, token, onEnd }: Props) {
       onDisconnected={() => onEnd(false)}
       className="call"
     >
-      <CallView onEnd={onEnd} />
+      <CallView room={room} onEnd={onEnd} />
       <RoomAudioRenderer />
     </LiveKitRoom>
   );
@@ -55,7 +55,7 @@ function lastJson<T>(streams: { text: string }[]): T | null {
   return null;
 }
 
-function CallView({ onEnd }: { onEnd: (finished: boolean) => void }) {
+function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) => void }) {
   const connection = useConnectionState();
   const { state: agentState, agent } = useVoiceAssistant();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
@@ -154,6 +154,7 @@ function CallView({ onEnd }: { onEnd: (finished: boolean) => void }) {
 
       <aside className="panel">
         <RepairPanel view={view} />
+        <ManualUpload room={room} />
       </aside>
 
       <footer className="controls">
@@ -265,6 +266,7 @@ function RepairPanel({ view }: { view: SessionView | null }) {
                   <p>{s.text}</p>
                   {s.irreversible.length > 0 && <p className="warn">Can't be undone: {s.irreversible.join(", ")}</p>}
                   {s.source && <p className="src">Source: {s.source}</p>}
+                  {s.cross_checked && <p className="checked">Double-checked by a second AI</p>}
                 </div>
               </li>
             ))}
@@ -281,4 +283,46 @@ function Confidence({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const cls = pct >= 85 ? "hi" : pct >= 75 ? "mid" : "lo";
   return <span className={`conf conf-${cls}`}>{pct}% sure</span>;
+}
+
+function ManualUpload({ room }: { room: string }) {
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function upload(file: File) {
+    setBusy(true);
+    setStatus(null);
+    const form = new FormData();
+    form.append("room", room);
+    form.append("file", file);
+    try {
+      const res = await fetch("/api/manual", { method: "POST", body: form });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.detail ?? `Upload failed (${res.status})`);
+      setStatus(`Added "${body.title}" (${body.pages} pages). The mechanic will cite it.`);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="manual">
+      <label className={`secondary file-btn ${busy ? "busy" : ""}`}>
+        {busy ? "Reading manual…" : "Add manual (PDF)"}
+        <input
+          type="file"
+          accept="application/pdf"
+          disabled={busy}
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) upload(f);
+            e.target.value = "";
+          }}
+        />
+      </label>
+      {status && <p className="manual-status">{status}</p>}
+    </div>
+  );
 }

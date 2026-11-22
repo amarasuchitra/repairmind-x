@@ -7,6 +7,7 @@ export interface StepView {
   risk: RiskLevel;
   irreversible: string[];
   source: string;
+  cross_checked?: boolean;
 }
 
 export interface SessionView {

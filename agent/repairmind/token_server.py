@@ -11,12 +11,13 @@ import secrets
 from datetime import timedelta
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
 from pydantic import BaseModel
 
-from .agent import AGENT_NAME
+from .agent import AGENT_NAME, SESSIONS_DIR
+from .manuals import ManualIndex, manual_path
 
 load_dotenv()
 
@@ -70,3 +71,28 @@ def token(req: TokenRequest) -> TokenResponse:
         .to_jwt()
     )
     return TokenResponse(server_url=url, participant_token=jwt, room=room)
+
+
+MAX_MANUAL_BYTES = 40 * 1024 * 1024
+
+
+@app.post("/api/manual")
+async def upload_manual(room: str = Form(...), file: UploadFile = File(...)) -> dict:
+    """Attach a PDF service manual to a repair so the mechanic can search and cite it."""
+    if not ROOM_RE.match(room):
+        raise HTTPException(400, "Unknown repair session.")
+    data = await file.read(MAX_MANUAL_BYTES + 1)
+    if len(data) > MAX_MANUAL_BYTES:
+        raise HTTPException(413, "The manual is larger than 40 MB.")
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(415, "Please upload a PDF.")
+    title = re.sub(r"[^\w .()-]", "", (file.filename or "manual").rsplit(".", 1)[0])[:60] or "manual"
+    try:
+        idx = ManualIndex.from_pdf(title, data)
+    except Exception:
+        raise HTTPException(422, "Couldn't read that PDF.")
+    if not idx.passages:
+        raise HTTPException(422, "That PDF has no readable text (it may be scanned images).")
+    idx.save(manual_path(SESSIONS_DIR, room))
+    pages = max(p.page for p in idx.passages)
+    return {"title": title, "pages": pages, "passages": len(idx.passages)}

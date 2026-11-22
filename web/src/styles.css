@@ -124,3 +124,10 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .modal-card h2 { margin: 0 0 8px; color: var(--red); }
 .modal-card.red { border-color: var(--amber); }
 .modal-card.red h2 { color: var(--amber); }
+
+.checked { color: var(--violet); font-size: 0.78rem; }
+.manual { padding: 0 16px 16px; }
+.file-btn { display: inline-block; border-radius: 999px; padding: 0.6rem 1.1rem; cursor: pointer; font-size: 0.9rem; }
+.file-btn input { display: none; }
+.file-btn.busy { opacity: 0.6; }
+.manual-status { color: var(--muted); font-size: 0.85rem; margin: 8px 0 0; }

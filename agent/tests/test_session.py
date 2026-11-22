@@ -15,8 +15,8 @@ BIKE = dict(device="bicycle", brand="Trek", model="FX 2",
             evidence=["chain visibly off the ring"])
 
 
-def diagnosed(spec=WASHER, confidence=0.9, expect_allowed=True) -> RepairSession:
-    s = RepairSession()
+def diagnosed(spec=WASHER, confidence=0.9, expect_allowed=True, review=False) -> RepairSession:
+    s = RepairSession(review_required=review)
     s.identify_device(spec["device"], spec["brand"], spec["model"], model_confirmed=True, source="label")
     for q, a in spec["history"]:
         s.record_history_answer(q, a)
@@ -141,3 +141,38 @@ def test_escalation_package_and_persistence(tmp_path: Path):
     path = s.save(tmp_path)
     s2 = RepairSession.load(path)
     assert s2.diagnosis == s.diagnosis and s2.escalated
+
+
+def test_first_step_needs_cross_check():
+    s = diagnosed(BIKE, review=True)
+    text = "Shift to the smallest rear cog"
+    r = s.propose_step(text, "manual", "Trek manual p.12", "chain on smallest cog")
+    assert r.code == "needs_review"
+    s.record_review(text, "approve", "matches manual")
+    assert s.propose_step(text, "manual", "Trek manual p.12", "chain on smallest cog").allowed
+
+
+def test_cross_check_disagreement_blocks():
+    s = diagnosed(BIKE, review=True)
+    text = "Shift to the smallest rear cog"
+    s.record_review(text, "revise", "manual shows a different derailleur")
+    assert s.propose_step(text, "manual", "p.12", "x").code == "review_revise"
+    s.record_review(text, "escalate", "frame looks cracked")
+    assert s.propose_step(text, "manual", "p.12", "x").code == "review_escalate"
+
+
+def test_cross_check_unavailable_fails_closed():
+    s = diagnosed(BIKE, review=True)
+    text = "Shift to the smallest rear cog"
+    s.record_review(text, "unavailable", "no key")
+    assert s.propose_step(text, "manual", "p.12", "x").code == "review_unavailable"
+
+
+def test_later_green_reversible_step_skips_review():
+    s = diagnosed(BIKE, review=True)
+    first = "Shift to the smallest rear cog"
+    s.record_review(first, "approve", "ok")
+    sid = s.propose_step(first, "manual", "p.12", "x").data["step_id"]
+    s.report_step_result(sid, "camera", True, "ok")
+    assert not s.needs_review("Lift the chain onto the small ring", "manual")
+    assert s.needs_review("Cut the cable tie", "manual")
