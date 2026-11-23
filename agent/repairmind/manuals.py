@@ -89,11 +89,11 @@ class ManualIndex:
 
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"title": self.title, "passages": [asdict(p) for p in self.passages]}))
+        path.write_text(json.dumps({"title": self.title, "passages": [asdict(p) for p in self.passages]}), encoding="utf-8")
 
     @classmethod
     def load(cls, path: Path) -> "ManualIndex":
-        raw = json.loads(path.read_text())
+        raw = json.loads(path.read_text(encoding="utf-8"))
         return cls(raw["title"], [Passage(**p) for p in raw["passages"]])
 
 

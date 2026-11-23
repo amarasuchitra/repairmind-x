@@ -266,10 +266,10 @@ def save(root: Path, b: DesignBrief) -> DesignBrief:
     b.updated_at = now
     p = brief_path(root, b.id)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(b.model_dump(), indent=2))
+    p.write_text(json.dumps(b.model_dump(), indent=2), encoding="utf-8")
     return b
 
 
 def load(root: Path, brief_id: str) -> DesignBrief | None:
     p = brief_path(root, brief_id)
-    return DesignBrief(**json.loads(p.read_text())) if p.exists() else None
+    return DesignBrief(**json.loads(p.read_text(encoding="utf-8"))) if p.exists() else None
