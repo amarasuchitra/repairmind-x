@@ -7,6 +7,23 @@ import { SimView, runHeadless } from "./SimView.tsx";
 import { fmt } from "./units.ts";
 
 const STORE = "rmx.lab.design";
+/**
+ * Hand-off from other pages (e.g. a repair call's design brief): put {idea, context} here as JSON in
+ * sessionStorage, then open #lab. The lab prefills the form once and removes the key.
+ */
+export const BRIEF_KEY = "rmx.lab.brief";
+
+function takeBrief(): { idea: string; context: string } | null {
+  try {
+    const raw = sessionStorage.getItem(BRIEF_KEY);
+    if (!raw) return null;
+    sessionStorage.removeItem(BRIEF_KEY);
+    const b = JSON.parse(raw);
+    return { idea: String(b.idea ?? "").slice(0, 4000), context: String(b.context ?? "").slice(0, 4000) };
+  } catch {
+    return null;
+  }
+}
 const MAX_AUTO_ROUNDS = 3;
 const TABS = ["Overview", "Requirements", "Analysis", "Trade study", "Risks", "Research", "Reviews"] as const;
 type Tab = (typeof TABS)[number];
@@ -58,8 +75,9 @@ export function Lab({ onBack }: { onBack: () => void }) {
   const [design, setDesign] = useState<Design>(() => readStored() ?? EXAMPLES[0]);
   const [overrides, setOverrides] = useState<Record<string, number>>({});
   const [tab, setTab] = useState<Tab>("Overview");
-  const [idea, setIdea] = useState("");
-  const [context, setContext] = useState("");
+  const [brief] = useState(takeBrief);
+  const [idea, setIdea] = useState(brief?.idea ?? "");
+  const [context, setContext] = useState(brief?.context ?? "");
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState("");
