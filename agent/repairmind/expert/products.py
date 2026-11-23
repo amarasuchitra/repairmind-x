@@ -122,7 +122,7 @@ def load_all(directory: str | None = None) -> dict[str, Product]:
     root = Path(directory) if directory else PRODUCTS_DIR
     out: dict[str, Product] = {}
     for f in sorted(root.glob("*/product.yaml")):
-        product = Product.model_validate(yaml.safe_load(f.read_text()))
+        product = Product.model_validate(yaml.safe_load(f.read_text(encoding="utf-8")))
         out[product.id] = product
     return out
 

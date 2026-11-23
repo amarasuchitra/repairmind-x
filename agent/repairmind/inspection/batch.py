@@ -75,12 +75,12 @@ class InspectionJob:
         d = self.dir(root)
         d.mkdir(parents=True, exist_ok=True)
         tmp = d / "job.json.tmp"
-        tmp.write_text(json.dumps(asdict(self)))
+        tmp.write_text(json.dumps(asdict(self)), encoding="utf-8")
         tmp.replace(d / "job.json")
 
     @classmethod
     def load(cls, root: Path, job_id: str) -> "InspectionJob":
-        raw = json.loads((root / "inspections" / job_id / "job.json").read_text())
+        raw = json.loads((root / "inspections" / job_id / "job.json").read_text(encoding="utf-8"))
         raw["items"] = [Item(**i) for i in raw.get("items", [])]
         return cls(**raw)
 

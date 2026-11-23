@@ -119,7 +119,7 @@ def test_detector_unavailable_without_config_or_weights(tmp_path):
     p = products.load_all()["example-desk-fan"]
     assert detector.detect(p, tmp_path, Image.new("RGB", (8, 8))).verdict == "unavailable"
     lfs = tmp_path / "w.pth"
-    lfs.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 1\n")
+    lfs.write_text("version https://git-lfs.github.com/spec/v1\noid sha256:abc\nsize 1\n", encoding="utf-8")
     pd = _product_with_detector()
     pd.detector.weights = str(lfs)
     r = detector.detect(pd, tmp_path, Image.new("RGB", (8, 8)))
