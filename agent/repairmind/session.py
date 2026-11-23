@@ -561,12 +561,12 @@ class RepairSession:
     def save(self, directory: Path) -> Path:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{self.session_id}.json"
-        path.write_text(json.dumps(asdict(self), indent=2))
+        path.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
         return path
 
     @classmethod
     def load(cls, path: Path) -> "RepairSession":
-        raw = json.loads(path.read_text())
+        raw = json.loads(path.read_text(encoding="utf-8"))
         raw["tests"] = [SafeTest(**t) for t in raw.get("tests", [])]
         raw["hypotheses"] = [Hypothesis(**h) for h in raw.get("hypotheses", [])]
         raw["steps"] = [Step(**s) for s in raw.get("steps", [])]

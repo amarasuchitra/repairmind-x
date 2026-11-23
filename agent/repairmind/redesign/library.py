@@ -52,7 +52,7 @@ def all_records(root: Path) -> list[dict]:
     if not f.exists():
         return []
     out = []
-    for line in f.read_text().splitlines():
+    for line in f.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if line:
             try:
@@ -66,7 +66,7 @@ def _write(root: Path, records: list[dict]) -> None:
     f = _file(root)
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_suffix(".tmp")
-    tmp.write_text("".join(json.dumps(r) + "\n" for r in records))
+    tmp.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
     tmp.replace(f)
 
 
