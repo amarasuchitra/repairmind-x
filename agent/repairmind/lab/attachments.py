@@ -221,7 +221,7 @@ def read_sheet(a: Attachment, data: bytes) -> None:
         a.summary, a.warning = "Spreadsheet could not be read", "Export it as CSV and attach that instead."
 
 
-def read_text(a: Attachment, data: bytes, ext: str) -> None:
+def read_plain(a: Attachment, data: bytes, ext: str) -> None:
     a.kind = "text"
     for enc in ("utf-8-sig", "utf-16", "latin-1"):
         try:
@@ -469,7 +469,7 @@ async def read_any(name: str, data: bytes, content_type: str = "") -> Attachment
     elif ext in AUDIO_EXT or ct.startswith("audio/"):
         await read_media(a, data, ext or "webm", "audio")
     elif ext in TEXT_EXT or ct.startswith("text/"):
-        read_text(a, data, ext)
+        read_plain(a, data, ext)
     else:
         a.summary = f"{ext.upper() or 'Unknown'} file, not readable here"
         a.warning = "Attach it as PDF, an image, STEP/STL, CSV or text so it can be used."
