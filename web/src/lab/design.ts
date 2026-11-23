@@ -169,4 +169,6 @@ export interface Design {
   trl: number;
   next_steps: string[];
   revisions: Revision[];
+  /** one line per attachment (A1, A2, ...): what the engineer took from it */
+  inputs_used?: string[];
 }

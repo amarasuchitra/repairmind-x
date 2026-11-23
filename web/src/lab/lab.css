@@ -135,3 +135,33 @@
 .lab-reviews > li { margin-bottom: 16px; }
 .lab-lesson { color: var(--violet); font-size: 0.9rem; }
 .lab-scroll { overflow-x: auto; }
+
+/* voice and attachments */
+.lab-idea { display: flex; flex-direction: column; gap: 6px; }
+.lab-mic-wrap { display: flex; flex-direction: column; gap: 4px; }
+.lab-mic { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; background: rgba(56, 214, 232, 0.08); color: var(--cyan); border: 1px solid rgba(56, 214, 232, 0.35); border-radius: 999px; padding: 0.35rem 0.8rem; font-size: 0.85rem; }
+.lab-mic.on { background: rgba(255, 93, 93, 0.12); color: var(--red); border-color: rgba(255, 93, 93, 0.5); animation: labpulse 1.4s ease-in-out infinite; }
+@keyframes labpulse { 50% { box-shadow: 0 0 0 6px rgba(255, 93, 93, 0.12); } }
+@media (prefers-reduced-motion: reduce) { .lab-mic.on { animation: none; } }
+.lab-warn-t { color: var(--amber); font-size: 0.82rem; margin: 0; }
+.lab-att { display: flex; flex-direction: column; gap: 8px; }
+.lab-drop { border: 1px dashed #2c3d5e; border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: rgba(7, 14, 28, 0.6); }
+.lab-drop.over, .lab-drop:focus-visible { border-color: var(--cyan); background: rgba(56, 214, 232, 0.06); outline: none; }
+.lab-drop-t { font-size: 0.8rem; color: var(--lab-dim); }
+.lab-drop .lab-btn { padding: 0.4rem 0.7rem; font-size: 0.84rem; }
+.lab .lab-att-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.lab .lab-att-list li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px; align-items: start; background: #070e1c; border: 1px solid var(--lab-line); border-radius: 8px; padding: 6px; margin: 0; }
+.lab-att-list li.warn { border-color: rgba(245, 181, 68, 0.4); }
+.lab-att-list img, .lab-att-k { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+.lab-att-k { display: grid; place-items: center; font: 700 0.66rem ui-monospace, Menlo, monospace; letter-spacing: 0.06em; background: rgba(139, 123, 255, 0.12); color: var(--violet); }
+.lab-att-k.k-cad { background: rgba(56, 214, 232, 0.12); color: var(--cyan); }
+.lab-att-k.k-audio, .lab-att-k.k-video { background: rgba(62, 207, 142, 0.12); color: var(--green); }
+.lab-att-b { min-width: 0; }
+.lab-att-b b { display: block; font-size: 0.85rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lab-att-b b .mono { color: var(--lab-dim); }
+.lab-link { background: none; border: 0; padding: 2px 0 0; color: var(--cyan); font-size: 0.78rem; border-radius: 0; }
+.lab-att-more ul { font-size: 0.8rem; color: #c7d2e6; padding-left: 1rem; }
+.lab-att-more pre { white-space: pre-wrap; word-break: break-word; font-size: 0.74rem; color: var(--lab-dim); max-height: 160px; overflow: auto; margin: 4px 0 0; }
+.lab-x { background: none; border: 0; color: var(--lab-dim); font-size: 1.1rem; padding: 0 6px; border-radius: 6px; line-height: 1.4; }
+.lab-x:hover { color: var(--red); }
+.lab-drop .lab-row .lab-btn { flex: 0 0 auto; }
