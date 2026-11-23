@@ -10,6 +10,8 @@ import { Intro, shouldPlayIntro } from "./fx/Intro";
 const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
 // The design lab (physics engine, 3D sandbox) only loads when someone opens #lab.
 const Lab = lazy(() => import("./lab/Lab.tsx").then((m) => ({ default: m.Lab })));
+// Redesign a broken part (design brief + failure library) only loads when someone opens #redesign.
+const Redesign = lazy(() => import("./redesign/Redesign.tsx").then((m) => ({ default: m.Redesign })));
 
 interface Connection {
   serverUrl: string;
@@ -29,17 +31,19 @@ function readLastRoom(): string | null {
 
 function writeLastRoom(room: string | null) {
   try {
-    if (room) localStorage.setItem(LAST_ROOM_KEY, room);
-    else localStorage.removeItem(LAST_ROOM_KEY);
+    if (room) {
+      localStorage.setItem(LAST_ROOM_KEY, room);
+      localStorage.setItem("rmx.lastCallRoom", room); // kept after the call ends, for "Redesign the part"
+    } else localStorage.removeItem(LAST_ROOM_KEY);
   } catch {
     /* storage unavailable: resume just won't be offered */
   }
 }
 
-type Page = "call" | "inspect" | "demo" | "lab";
+type Page = "call" | "inspect" | "demo" | "lab" | "redesign";
 const pageFromHash = (): Page => {
   const h = window.location.hash;
-  return h === "#inspect" ? "inspect" : h === "#lab" ? "lab" : h.startsWith("#demo") ? "demo" : "call";
+  return h === "#inspect" ? "inspect" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h.startsWith("#demo") ? "demo" : "call";
 };
 
 export default function App() {
@@ -59,7 +63,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  function go(next: "call" | "inspect" | "lab") {
+  function go(next: "call" | "inspect" | "lab" | "redesign") {
     window.location.hash = next === "call" ? "" : next;
     setPage(next);
   }
@@ -106,6 +110,8 @@ export default function App() {
         }}
       />
     );
+  } else if (page === "redesign") {
+    content = <Suspense fallback={null}><Redesign onBack={() => go("call")} /></Suspense>;
   } else if (page === "lab") {
     content = <Suspense fallback={null}><Lab onBack={() => go("call")} /></Suspense>;
   } else if (page === "demo") {
@@ -138,6 +144,7 @@ export default function App() {
         onSignOut={() => { writeProfile(null); setProfile(null); }}
         onInspect={() => go("inspect")}
         onLab={() => go("lab")}
+        onRedesign={() => go("redesign")}
         entering={!intro}
       />
     );
@@ -146,7 +153,7 @@ export default function App() {
   return (
     <>
       {/* the landing page draws its own 3D scene */}
-      {(conn || signingIn || (page !== "call" && page !== "lab")) && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
+      {(conn || signingIn || (page !== "call" && page !== "lab" && page !== "redesign")) && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
       {content}
       {intro && !conn && <Intro onDone={() => setIntro(false)} />}
     </>

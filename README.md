@@ -202,3 +202,20 @@ static host) or use a tunnel such as `cloudflared tunnel --url http://localhost:
 - **Manuals must have a text layer.** Scanned PDFs are rejected; OCR would come later.
 - **The token server and agent share a disk** for uploaded manuals, so run them on the same machine
   (or point `RMX_SESSIONS_DIR` at shared storage).
+
+## Redesign a broken part
+
+When the fault is a part that broke, wore out, melted or corroded, RepairMind turns the call into a design
+brief for the design lab, and keeps a library of what failed and whether the fix held.
+
+| Part | Where | What it does |
+|---|---|---|
+| Capture on the call | `record_failed_part` tool, `RepairSession.failed_part` | The mechanic notes the part, what it does, how it failed (seen or suspected), what the break looks like, and sizes and loads. A value without a unit is refused, not guessed. |
+| Failure modes | `agent/repairmind/redesign/failure_modes.py` | Overload fracture, fatigue, wear, corrosion, heat, creep, buckling, electrical: the signs to look for, usual causes, known fixes, the questions that tell them apart, and the analyses a redesign must pass (fatigue needs fatigue life and vibration checks, heat needs thermal and creep, and so on). |
+| Units | `agent/repairmind/redesign/units.py` | Lengths, forces, torque, pressure, temperature, speed, mass, power and more, converted to SI once. Sizes must be lengths. |
+| Brief check | `agent/repairmind/redesign/brief.py` | Lists what's missing, unit errors and every estimate as an assumption. Red-level jobs are blocked. Parts that hold a person up or hold pressure (ladders, chairs, mounts, wheels, pressure cookers...) can be drafted but are marked for a qualified engineer's sign-off. |
+| Design lab hand-off | "Send to design lab" | Builds the lab's `{idea, context}` (most important facts first, each under 4,000 characters) and opens `#lab` with it filled in. |
+| Failure library | `agent/repairmind/redesign/library.py` | Only briefs the person chooses to add. Keeps device, part, failure, material, sizes and loads; never the call, names, photos or notes. Searchable, with counts by failure mode and "did the fix hold?" for each record. |
+| Web page | `#redesign` ("Redesign a part" on the start page) | Start from the last repair call on this device or from a blank brief, edit, check, send to the lab, add to the library. |
+| API | `/api/redesign/...` | `failure-modes`, `briefs/from-session`, `briefs`, `briefs/{id}`, `briefs/{id}/lab`, `briefs/{id}/share`, `library`, `library/stats`, `library/{id}/outcome`. |
+
