@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import "../lab/lab.css";
 import "./redesign.css";
 import { Attachments, MicButton, type AttachmentInfo } from "../lab/inputs.tsx";
@@ -131,22 +131,25 @@ export function Redesign({ onBack }: { onBack: () => void }) {
           {!lastRoom && <p className="lab-muted">{t("rd.noCall")}</p>}
         </section>
       ) : (
-        <div className="lab-grid rd-grid">
-          <aside className="lab-side">
+        <div className="lab-flow rd-flow">
+          <section className="lab-card rd-status">
             <CheckPanel check={check} dirty={dirty} />
-            <section className="lab-card">
-              <button className="lab-btn" disabled={!!busy || !dirty} onClick={save}>{busy === t("rd.busy.checking") ? t("rd.checkingBtn") : t("rd.save")}</button>
+            <div className="rd-actions">
               <button className="lab-btn solid" disabled={!!busy || !!check?.blocked} onClick={toLab}>{t("rd.toLab")}</button>
+              {dirty && <button className="lab-btn" disabled={!!busy} onClick={save}>{busy === t("rd.busy.checking") ? t("rd.checkingBtn") : t("rd.save")}</button>}
+              {busy && <span className="lab-muted" aria-live="polite">{busy}…</span>}
+            </div>
+            <details className="lab-fold">
+              <summary>{t("rd.moreActions")}</summary>
               <button className="lab-btn" disabled={!!busy || !!check?.blocked || brief.share_to_library} onClick={share}>
                 {brief.share_to_library ? t("rd.inLibrary") : t("rd.addLibrary")}
               </button>
               <small>{t("rd.libraryKeeps")}</small>
               <button className="lab-btn ghost" disabled={!!busy} onClick={() => { store(BRIEF_ID_KEY, null); setBrief(null); setCheck(null); }}>{t("rd.another")}</button>
-              {busy && <span className="lab-muted" aria-live="polite">{busy}…</span>}
-            </section>
-          </aside>
+            </details>
+          </section>
 
-          <section className="lab-main rd-form">
+          <section className="rd-form">
             <fieldset className="lab-card">
               <legend className="lab-kicker">{t("rd.thePart")}</legend>
               <div className="rd-row3">
@@ -184,11 +187,13 @@ export function Redesign({ onBack }: { onBack: () => void }) {
                 </div>
               )}
               {mode && (
+                <details className="lab-fold"><summary>{t("rd.modeHelp", { name: auto(mode.name) })}</summary>
                 <div className="rd-mode">
                   <div><b>{t("rd.lookFor")}</b><ul>{mode.signs.map((x) => <li key={x}>{auto(x)}</li>)}</ul></div>
                   <div><b>{t("rd.causes")}</b><ul>{mode.causes.map((x) => <li key={x}>{auto(x)}</li>)}</ul></div>
                   <div><b>{t("rd.ask")}</b><ul>{mode.questions.map((x) => <li key={x}>{auto(x)}</li>)}</ul></div>
                 </div>
+                </details>
               )}
               <Field label={t("rd.diagnosis")} value={brief.diagnosis} onChange={(v) => set("diagnosis", v)} long />
               <MicButton label={t("rd.byVoice")} onText={(t) => set("diagnosis", (brief.diagnosis ? `${brief.diagnosis.trimEnd()} ${t}` : t).slice(0, 400))} />
@@ -198,25 +203,21 @@ export function Redesign({ onBack }: { onBack: () => void }) {
               )}
             </fieldset>
 
-            <fieldset className="lab-card">
-              <legend className="lab-kicker">{t("rd.files")}</legend>
+            <Fold title={t("rd.files")} count={files.length}>
               <small>{t("rd.filesP")}</small>
               <Attachments items={files} onChange={setFiles} canHearMedia={canHear} compact />
-            </fieldset>
+            </Fold>
 
-            <fieldset className="lab-card">
-              <legend className="lab-kicker">{t("rd.sizes")}</legend>
+            <Fold title={t("rd.sizes")} count={brief.dimensions.length}>
               <Measures items={brief.dimensions} onChange={(v) => set("dimensions", v)} namePh={t("rd.sizePh")} valuePh="2 mm" />
-            </fieldset>
+            </Fold>
 
-            <fieldset className="lab-card">
-              <legend className="lab-kicker">{t("rd.loads")}</legend>
+            <Fold title={t("rd.loads")} count={brief.operating.length}>
               <Measures items={brief.operating} onChange={(v) => set("operating", v)} namePh={t("rd.loadPh")} valuePh="20 N" />
               <small>{t("rd.loadsP")}</small>
-            </fieldset>
+            </Fold>
 
-            <fieldset className="lab-card">
-              <legend className="lab-kicker">{t("rd.materialMaking")}</legend>
+            <Fold title={t("rd.materialMaking")} count={[brief.material, brief.manufacturing, ...brief.constraints].filter(Boolean).length}>
               <div className="rd-row2">
                 <Field label={t("rd.oldMaterial")} value={brief.material} onChange={(v) => set("material", v)} placeholder={t("rd.materialPh")} />
                 <label className="rd-field"><span>{t("rd.knownFrom")}</span>
@@ -237,7 +238,7 @@ export function Redesign({ onBack }: { onBack: () => void }) {
                 <textarea rows={3} value={brief.constraints.join("\n")} placeholder={t("rd.constraintsPh")}
                   onChange={(e) => set("constraints", e.target.value.split("\n").map((s) => s.slice(0, 200)).slice(0, 20))} />
               </label>
-            </fieldset>
+            </Fold>
           </section>
         </div>
       )}
@@ -276,11 +277,22 @@ function Measures({ items, onChange, namePh, valuePh }: { items: Measure[]; onCh
   );
 }
 
+/** An optional part of the brief, folded until it's needed: open when it already has something in it. */
+function Fold({ title, count, children }: { title: string; count: number; children: ReactNode }) {
+  const { t } = useI18n();
+  return (
+    <details className="lab-fold rd-fold" open={count > 0 || undefined}>
+      <summary>{title}<span className="rd-count">{count ? t("rd.filled", { n: count }) : t("rd.addIfKnown")}</span></summary>
+      {children}
+    </details>
+  );
+}
+
 function CheckPanel({ check, dirty }: { check: Check | null; dirty: boolean }) {
   const { t, auto } = useI18n();
   if (!check) return null;
   return (
-    <section className="lab-card rd-check" aria-live="polite">
+    <section className="rd-check" aria-live="polite">
       <span className="lab-kicker">{t("rd.check")}{dirty ? t("rd.unsaved") : ""}</span>
       {check.blocked ? <p className="rd-bad"><b>{t("rd.cant")}</b> {auto(check.blocked)}</p>
         : check.ready ? <p className="rd-ok">{t("rd.ready")}</p>
@@ -288,9 +300,12 @@ function CheckPanel({ check, dirty }: { check: Check | null; dirty: boolean }) {
       {check.needs_signoff && <p className="rd-warn"><b>{t("rd.signoff")}</b> {auto(check.signoff_reason)}</p>}
       {!!check.errors.length && <><b>{t("rd.fixThese")}</b><ul className="rd-bad">{check.errors.map((x) => <li key={x}>{auto(x)}</li>)}</ul></>}
       {!!check.missing.length && <><b>{t("rd.missing")}</b><ul>{check.missing.map((x) => <li key={x}>{auto(x)}</li>)}</ul></>}
-      {!!check.assumptions.length && <><b>{t("rd.assumptions")}</b><ul className="lab-muted">{check.assumptions.map((x) => <li key={x}>{auto(x)}</li>)}</ul></>}
-      <b>{t("rd.mustPass")}</b>
-      <ul>{check.required_analyses.map((a) => <li key={a.id}>{auto(a.text)}</li>)}</ul>
+      <details className="lab-fold">
+        <summary>{t("rd.checkDetails")}</summary>
+        {!!check.assumptions.length && <><b>{t("rd.assumptions")}</b><ul className="lab-muted">{check.assumptions.map((x) => <li key={x}>{auto(x)}</li>)}</ul></>}
+        <b>{t("rd.mustPass")}</b>
+        <ul>{check.required_analyses.map((a) => <li key={a.id}>{auto(a.text)}</li>)}</ul>
+      </details>
     </section>
   );
 }

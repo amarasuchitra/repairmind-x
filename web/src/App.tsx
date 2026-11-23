@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Call } from "./Call";
 import { Inspect } from "./Inspect";
-import { Landing } from "./Landing";
+import { Home } from "./home/Home";
 import { Login, readProfile, writeProfile, type Profile } from "./Login";
 import { NetworkBackground } from "./fx/NetworkBackground";
 import { Intro, shouldPlayIntro } from "./fx/Intro";
@@ -11,6 +11,8 @@ import { useI18n } from "./i18n";
 const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
 // The design lab (physics engine, 3D sandbox) only loads when someone opens #lab.
 const Lab = lazy(() => import("./lab/Lab.tsx").then((m) => ({ default: m.Lab })));
+// The scrolling 3D walkthrough of a repair call only loads when someone opens #tour ("See how it works").
+const Landing = lazy(() => import("./Landing").then((m) => ({ default: m.Landing })));
 // Redesign a broken part (design brief + failure library) only loads when someone opens #redesign.
 const Redesign = lazy(() => import("./redesign/Redesign.tsx").then((m) => ({ default: m.Redesign })));
 
@@ -41,10 +43,10 @@ function writeLastRoom(room: string | null) {
   }
 }
 
-type Page = "call" | "inspect" | "demo" | "lab" | "redesign";
+type Page = "call" | "inspect" | "demo" | "lab" | "redesign" | "tour";
 const pageFromHash = (): Page => {
   const h = window.location.hash;
-  return h === "#inspect" ? "inspect" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h.startsWith("#demo") ? "demo" : "call";
+  return h === "#inspect" ? "inspect" : h === "#tour" ? "tour" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h.startsWith("#demo") ? "demo" : "call";
 };
 
 export default function App() {
@@ -65,7 +67,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  function go(next: "call" | "inspect" | "lab" | "redesign") {
+  function go(next: "call" | "inspect" | "lab" | "redesign" | "tour") {
     window.location.hash = next === "call" ? "" : next;
     setPage(next);
   }
@@ -134,9 +136,29 @@ export default function App() {
     );
   } else if (page === "inspect") {
     content = <Inspect onBack={() => go("call")} />;
+  } else if (page === "tour") {
+    content = (
+      <Suspense fallback={null}>
+        <Landing
+          accepted={accepted}
+          setAccepted={setAccepted}
+          loading={loading}
+          error={error}
+          lastRoom={lastRoom}
+          onStart={requestStart}
+          profile={profile}
+          onSignOut={() => { writeProfile(null); setProfile(null); }}
+          onInspect={() => go("inspect")}
+          onLab={() => go("lab")}
+          onRedesign={() => go("redesign")}
+          onHome={() => go("call")}
+          entering={!intro}
+        />
+      </Suspense>
+    );
   } else {
     content = (
-      <Landing
+      <Home
         accepted={accepted}
         setAccepted={setAccepted}
         loading={loading}
@@ -148,15 +170,17 @@ export default function App() {
         onInspect={() => go("inspect")}
         onLab={() => go("lab")}
         onRedesign={() => go("redesign")}
-        entering={!intro}
+        onTour={() => go("tour")}
       />
     );
   }
 
   return (
     <>
-      {/* the landing page draws its own 3D scene */}
-      {(conn || signingIn || (page !== "call" && page !== "lab" && page !== "redesign")) && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
+      {/* the walkthrough draws its own 3D scene; the lab and redesign pages have their own backdrop */}
+      {(conn || signingIn || (page !== "tour" && page !== "lab" && page !== "redesign")) && (
+        <NetworkBackground intensity={conn || page === "demo" ? 0.55 : page === "call" ? 0.7 : 1} />
+      )}
       {content}
       {intro && !conn && <Intro onDone={() => setIntro(false)} />}
     </>

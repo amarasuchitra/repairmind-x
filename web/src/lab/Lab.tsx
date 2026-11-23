@@ -69,7 +69,7 @@ function Health({ findings, simFindings, checking }: { findings: Finding[]; simF
   const state = errors ? "bad" : warns ? "warn" : "ok";
   return (
     <div className={`lab-health ${state}`} role="status">
-      <b>{errors ? t("lab.health.failing", { n: errors }) : warns ? t("lab.health.warn") : t("lab.health.ok")}</b>
+      <b>{errors ? t("lab.verdict.bad", { n: errors }) : warns ? t("lab.verdict.warn", { n: warns }) : checking ? t("lab.verdict.checking") : t("lab.verdict.ok")}</b>
       <span>{t("lab.health.counts", { e: errors, w: warns })}{checking ? t("lab.health.running") : simFindings ? t("lab.health.simDone") : ""}</span>
     </div>
   );
@@ -81,6 +81,8 @@ export function Lab({ onBack }: { onBack: () => void }) {
   const [design, setDesign] = useState<Design>(() => readStored() ?? EXAMPLES[0]);
   const [overrides, setOverrides] = useState<Record<string, number>>({});
   const [tab, setTab] = useState<Tab>("Overview");
+  // the engineering detail (requirements, equations, trade study, FMEA, research, reviews) opens on request
+  const [details, setDetails] = useState(false);
   const [brief] = useState(takeBrief);
   // forget the hand-off once read (in an effect, so StrictMode's double initialiser still sees it)
   useEffect(() => {
@@ -194,43 +196,33 @@ export function Lab({ onBack }: { onBack: () => void }) {
         <LanguagePicker className="lab-lang" />
       </header>
 
-      <div className="lab-grid">
-        <aside className="lab-side">
-          <section className="lab-card">
-            <span className="lab-kicker">{t("lab.newIdea")}</span>
-            <div className="lab-idea">
-              <textarea value={interim ? `${idea}${idea && !idea.endsWith(" ") ? " " : ""}${interim}` : idea} onChange={(e) => setIdea(e.target.value)} rows={5}
-                aria-label={t("lab.ideaAria")}
-                placeholder={t("lab.ideaPh")} />
+      <div className="lab-flow">
+        <section className="lab-ask">
+          <h2 className="lab-q">{t("lab.ask")}</h2>
+          <div className="lab-composer">
+            <textarea value={interim ? `${idea}${idea && !idea.endsWith(" ") ? " " : ""}${interim}` : idea} onChange={(e) => setIdea(e.target.value)} rows={2}
+              aria-label={t("lab.ideaAria")} autoFocus={!!brief?.idea}
+              placeholder={t("lab.ideaPh")} />
+            <div className="lab-composer-row">
               <MicButton onInterim={setInterim} onText={(t) => setIdea((v) => (v ? `${v.trimEnd()} ${t}` : t).slice(0, 4000))} />
+              <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={create}>{t("lab.designIt")}</button>
             </div>
+          </div>
+          <details className="lab-fold" open={!!(context || files.length) || undefined}>
+            <summary>{t("lab.moreIn")}</summary>
             <textarea value={context} onChange={(e) => setContext(e.target.value)} rows={2}
               placeholder={t("lab.contextPh")} />
             <Attachments items={files} onChange={setFiles} canHearMedia={!!status?.media} />
-            <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={create}>{t("lab.designIt")}</button>
-            {status && !status.ready && <p className="lab-muted">{t("lab.needKey")}</p>}
-          </section>
-
-          <section className="lab-card">
-            <span className="lab-kicker">{t("lab.examples")}</span>
-            {lang !== "en" && <p className="lab-muted">{t("lab.examplesNote", { name: language.name })}</p>}
-            <div className="lab-examples">
-              {EXAMPLES.map((d) => (
-                <button key={d.title} className={`lab-chip${d.title === design.title && !design.revisions.length ? " on" : ""}`} onClick={() => load(d)}>{d.title}</button>
-              ))}
-            </div>
-          </section>
-
-          <section className="lab-card">
-            <span className="lab-kicker">{t("lab.review")}</span>
-            <p className="lab-muted">{t("lab.reviewP")}</p>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t("lab.notePh")} />
-            <div className="lab-row">
-              <button className="lab-btn" disabled={!!busy || !status?.ready} onClick={() => rethink(false)}>{t("lab.rethinkOnce")}</button>
-              <button className="lab-btn solid" disabled={!!busy || !status?.ready} onClick={() => rethink(true)}>{t("lab.rethinkAll")}</button>
-            </div>
-          </section>
-        </aside>
+          </details>
+          {status && !status.ready && <p className="lab-muted">{t("lab.needKey")}</p>}
+          <div className="lab-try">
+            <span className="lab-muted">{t("lab.tryEx")}</span>
+            {EXAMPLES.map((d) => (
+              <button key={d.title} className={`lab-chip${d.title === design.title && !design.revisions.length ? " on" : ""}`} onClick={() => load(d)}>{d.title}</button>
+            ))}
+          </div>
+          {lang !== "en" && <p className="lab-muted">{t("lab.examplesNote", { name: language.name })}</p>}
+        </section>
 
         <div className="lab-main">
           {busy && <div className="lab-busy" role="status"><span className="lab-spin" aria-hidden />{busy}</div>}
@@ -238,14 +230,37 @@ export function Lab({ onBack }: { onBack: () => void }) {
 
           <div className="lab-title">
             <div>
-              <span className="lab-kicker">TRL {design.trl} · {design.revisions.length ? t("lab.revision", { n: design.revisions.length }) : t("lab.firstPass")} · {t("lab.massListed", { kg: fmt(analysis.totalMassKg) })}</span>
+              <span className="lab-kicker">{design.revisions.length ? t("lab.revision", { n: design.revisions.length }) : t("lab.firstPass")}</span>
               <h1>{design.title}</h1>
             </div>
             <Health findings={analysis.findings} simFindings={simF} checking={checking} />
           </div>
+          <p className="lab-lede">{design.summary}</p>
+
+          {(() => {
+            const problems = allFindings.filter((f) => f.severity !== "info").length;
+            return (
+              <details className={`lab-fold lab-review${problems ? " has" : ""}`} open={problems > 0 || undefined}>
+                <summary>{problems ? t("lab.fix.h", { n: problems }) : t("lab.improve")}</summary>
+                <p className="lab-muted">{t("lab.reviewP")}</p>
+                <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t("lab.notePh")} />
+                <div className="lab-row">
+                  <button className="lab-btn solid" disabled={!!busy || !status?.ready} onClick={() => rethink(true)}>{t("lab.rethinkAll")}</button>
+                  <button className="lab-btn" disabled={!!busy || !status?.ready} onClick={() => rethink(false)}>{t("lab.rethinkOnce")}</button>
+                </div>
+              </details>
+            );
+          })()}
 
           <SimView design={design} analysis={analysis} />
 
+          <button className="lab-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
+            <b>{details ? t("lab.details.hide") : t("lab.details.show")}</b>
+            <span>{t("lab.details.what")}</span>
+          </button>
+
+          {details && <>
+          <span className="lab-kicker lab-specs">TRL {design.trl} · {t("lab.massListed", { kg: fmt(analysis.totalMassKg) })}</span>
           <nav className="lab-tabs" role="tablist">
             {TABS.map((x) => (
               <button key={x} role="tab" aria-selected={tab === x} className={tab === x ? "on" : ""} onClick={() => setTab(x)}>
@@ -434,6 +449,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
               ) : <p className="lab-muted">{t("lab.noReviews")}</p>
             )}
           </section>
+          </>}
         </div>
       </div>
     </main>

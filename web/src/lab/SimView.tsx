@@ -219,6 +219,8 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
       {sim.description && <p className="lab-muted">{sim.description}</p>}
       {sandbox && sandbox.warnings.length > 0 && <ul className="lab-warn">{sandbox.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {results.length > 0 && (
+        <details className="lab-fold lab-probe-fold">
+        <summary>{t("lab.sim.readings", { n: results.length })}</summary>
         <div className="lab-scroll"><table className="lab-table lab-probes">
           <thead><tr><th>{t("lab.sim.probe")}</th><th>{t("lab.sim.simulated")}</th><th>{t("lab.sim.hand")}</th><th>{t("lab.sim.trace")}</th></tr></thead>
           <tbody>
@@ -240,6 +242,7 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
             ))}
           </tbody>
         </table></div>
+        </details>
       )}
     </section>
   );

@@ -31,3 +31,18 @@
 .rd-bar { display: grid; grid-template-columns: 150px minmax(0, 1fr) 32px; gap: 8px; align-items: center; font-size: 0.85rem; }
 .rd-bar i { display: block; height: 8px; border-radius: 4px; background: var(--cyan); min-width: 4px; }
 .rd-bar b { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---- one column: where the brief stands and the next step first, optional sections folded ---- */
+.rd-lib { width: min(1040px, 100%); margin-inline: auto; }
+.rd-status { gap: 12px; border-color: var(--glass-line); background: linear-gradient(180deg, rgba(14, 40, 84, 0.45), rgba(10, 18, 34, 0.86)); }
+.rd-status .rd-check { display: flex; flex-direction: column; gap: 6px; }
+.rd-status .rd-check > p { font-size: 1.05rem; }
+.rd-status .rd-check ul { margin: 0; }
+.rd-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.rd-actions .lab-btn.solid { padding: 0.65rem 1.4rem; border-radius: 999px; }
+.rd-status .lab-fold[open] { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.rd-fold { background: var(--lab-panel); }
+.rd-fold > summary { color: var(--text); font-size: 0.95rem; }
+.rd-count { margin-inline-start: auto; color: var(--lab-dim); font-size: 0.8rem; }
+.rd-fold[open] { display: flex; flex-direction: column; gap: 10px; }
+.rd-form .lab-fold > .rd-mode { margin-top: 4px; }

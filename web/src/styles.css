@@ -992,3 +992,34 @@ html[dir="rtl"] .lang-pick select { padding: 6px 10px 6px 26px; background-posit
 html[data-script="other"] body, html[data-script="other"] body * {
   font-family: "Inter Tight", "Inter", var(--script-font, system-ui), system-ui, sans-serif !important;
 }
+
+/* ---- call: one "now" card first, the rest behind "Show details" ---- */
+.hud-card.now { display: grid; gap: 8px; padding: 16px 16px 14px; border-color: var(--glass-line-hi);
+  background: linear-gradient(180deg, rgba(14, 40, 84, 0.65), rgba(4, 14, 32, 0.8)); }
+.now-k { font: 500 0.7rem/1 var(--mono); letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud); }
+.now-ok .now-k { color: var(--amber); }
+.now-t { margin: 0; font: 500 1.18rem/1.35 var(--display); color: #f2f8ff; }
+.now-s { margin: 0; color: var(--muted); font-size: 0.86rem; }
+.now-s.warn { color: var(--amber); }
+.now-bar { display: flex; gap: 4px; margin-top: 4px; }
+.now-bar i { flex: 1; height: 4px; border-radius: 2px; background: rgba(150, 190, 255, 0.16); }
+.now-bar i.st-done { background: var(--green); }
+.now-bar i.st-active, .now-bar i.st-awaiting_confirmation { background: var(--hud); box-shadow: 0 0 8px rgba(70, 226, 255, 0.7); }
+.now-bar i.st-failed, .now-bar i.st-blocked { background: var(--red); }
+.now-safety { margin: 2px 0 0; padding: 8px 10px; border-radius: 8px; font-size: 0.84rem; color: #ffd79a; background: rgba(245, 181, 68, 0.1); border: 1px solid rgba(245, 181, 68, 0.3); }
+.hud-more { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 12px 0; padding: 10px;
+  background: transparent; color: #b8c8e2; border: 1px dashed var(--glass-line); border-radius: 10px; font: 500 0.82rem/1 var(--sans); }
+.hud-more:hover { color: #fff; border-color: var(--glass-line-hi); }
+.hud-more .chev { width: 7px; height: 7px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg) translateY(-2px); transition: transform 0.3s; }
+.hud-more[aria-expanded="true"] .chev { transform: rotate(-135deg) translateY(-2px); }
+.hud .panel > .now + * { margin-top: 12px; }
+.call-grid { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .call-grid { grid-template-columns: minmax(0, 1fr) 360px; } }
+@media (max-width: 520px) {
+  .hud .call-top { gap: 8px; padding: 8px 12px; }
+  .hud .hud-chip { font-size: 0; gap: 0; padding: 9px; } /* the dot's colour still shows the state */
+  .hud .lang-pick select { max-width: 6rem; }
+  .hud-card.now { padding: 12px 14px; }
+  .now-t { font-size: 1.02rem; }
+  .hud-more { margin: 8px 0 0; }
+}
