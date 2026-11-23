@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
-from .. import checker
+from .. import checker, i18n
 from . import attachments, designer
 from .schema import Design
 
@@ -16,12 +16,15 @@ class DesignRequest(BaseModel):
     idea: str = Field(min_length=8, max_length=4000)
     context: str = Field(default="", max_length=4000)
     attachment_ids: list[str] = Field(default_factory=list, max_length=20)
+    # Language the design is written in (e.g. "hi"); symbols, units and equations stay as they are.
+    language: str = Field(default="en", max_length=16)
 
 
 class ReviseRequest(BaseModel):
     design: Design
     findings: list[str] = Field(default_factory=list, max_length=80)
     note: str = Field(default="", max_length=2000)
+    language: str = Field(default="en", max_length=16)
 
 
 @router.get("/status")
@@ -47,7 +50,7 @@ async def design(req: DesignRequest) -> Design:
     items = [a for a in (attachments.load(i) for i in req.attachment_ids) if a]
     if len(items) < len(req.attachment_ids):
         raise HTTPException(410, "Some attachments have expired or were removed. Attach them again.")
-    return await _run(designer.generate(req.idea, req.context, items))
+    return await _run(designer.generate(req.idea, req.context, items, req.language))
 
 
 async def _read_upload(f: UploadFile) -> bytes:
@@ -87,14 +90,15 @@ def remove(att_id: str) -> dict:
 
 
 @router.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)) -> dict:
+async def transcribe(file: UploadFile = File(...), language: str = Form(default="")) -> dict:
     """Speech to text for browsers without built-in dictation. Needs GOOGLE_API_KEY (Gemini hears audio)."""
     data = await _read_upload(file)
     if len(data) > attachments.MAX_MEDIA_FOR_GEMINI:
         raise HTTPException(413, "Recordings must be under 19 MB.")
     mime = (file.content_type or "audio/webm").split(";")[0]
     try:
-        text = await attachments.gemini_media(data, mime, attachments.TRANSCRIBE_PROMPT, timeout=60.0)
+        text = await attachments.gemini_media(data, mime, attachments.TRANSCRIBE_PROMPT + i18n.transcribe_hint(language),
+                                             timeout=60.0)
     except RuntimeError:
         raise HTTPException(503, "Voice transcription needs GOOGLE_API_KEY in agent/.env. Chrome, Edge and Safari can "
                                  "dictate without it.")
@@ -108,4 +112,4 @@ async def revise(req: ReviseRequest) -> Design:
     if len(req.design.revisions) >= 12:
         raise HTTPException(400, "This design has been revised 12 times. Start a new one from the latest version.")
     findings = [" ".join(f.split())[:600] for f in req.findings]
-    return await _run(designer.revise(req.design, findings, req.note))
+    return await _run(designer.revise(req.design, findings, req.note, req.language))

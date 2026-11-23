@@ -3,6 +3,8 @@ import type { Alert, Marker, SessionView, StepView } from "../types";
 import { VoiceOrb, type OrbState } from "./VoiceOrb";
 import { Flip, Logo, Mic, MicOff, PhoneOff } from "../ui/Icons";
 import { AnatomyFigure, hasAnatomy } from "../anatomy/Anatomy";
+import { LanguagePicker, useI18n } from "../i18n";
+import type { Key } from "../i18n/en";
 
 export interface Caption {
   who: "You" | "Mechanic";
@@ -32,12 +34,12 @@ export interface CallHudProps {
   voice?: () => number[];
 }
 
-const STATE_LINE: Record<OrbState, string> = {
-  speaking: "Talking you through it",
-  listening: "Listening to you",
-  thinking: "Working it out",
-  connecting: "Opening the voice link",
-  idle: "Standing by",
+const STATE_LINE: Record<OrbState, Key> = {
+  speaking: "call.line.speaking",
+  listening: "call.line.listening",
+  thinking: "call.line.thinking",
+  connecting: "call.line.connecting",
+  idle: "call.line.idle",
 };
 
 function useElapsed() {
@@ -53,6 +55,7 @@ function useElapsed() {
 
 /** The call screen. Pure: everything comes in as props, so it can be previewed without a live call. */
 export function CallHud(p: CallHudProps) {
+  const { t, auto } = useI18n();
   const v = p.view;
   const risk = v?.risk_level ?? "green";
   const elapsed = useElapsed();
@@ -62,9 +65,12 @@ export function CallHud(p: CallHudProps) {
         <div className="hud-brand">
           <Logo size={24} />
           <span className="wordmark">REPAIRMIND<b>X</b></span>
-          <span className="live-tag"><i aria-hidden />LIVE <span className="timer">{elapsed}</span></span>
+          <span className="live-tag"><i aria-hidden />{t("call.live")} <span className="timer">{elapsed}</span></span>
         </div>
-        <span className={`hud-chip state-${p.orbState}`}><i aria-hidden />{p.status}</span>
+        <div className="hud-top-r">
+          <LanguagePicker className="hud-lang" />
+          <span className={`hud-chip state-${p.orbState}`}><i aria-hidden />{p.status}</span>
+        </div>
       </header>
 
       <section className="camera" ref={p.hostRef}>
@@ -75,37 +81,37 @@ export function CallHud(p: CallHudProps) {
         </div>
         {p.overlay}
         <div className="hud-readout" aria-label="Session status">
-          <div><b>DEVICE</b> {v?.device || "scanning…"}</div>
-          <div className="ro-extra"><b>MODEL</b> {v?.device ? (v.model_confirmed ? "confirmed" : "not confirmed") : "—"}</div>
-          {v?.diagnosis && <div className="ro-extra"><b>DIAG</b> {Math.round(v.confidence * 100)}%</div>}
+          <div><b>{t("call.device")}</b> {v?.device ? auto(v.device) : t("call.scanning")}</div>
+          <div className="ro-extra"><b>{t("call.model")}</b> {v?.device ? (v.model_confirmed ? t("call.confirmed") : t("call.notConfirmed")) : "—"}</div>
+          {v?.diagnosis && <div className="ro-extra"><b>{t("call.diag")}</b> {Math.round(v.confidence * 100)}%</div>}
         </div>
         {risk !== "green" && (
           <div className={`risk-banner risk-${risk}`} role="status">
-            {risk === "red" ? "⚠ PROFESSIONAL REPAIR ONLY" : "⚠ SAFETY PRECAUTIONS REQUIRED"}
+            {risk === "red" ? t("call.proOnly") : t("call.precautionsReq")}
           </div>
         )}
-        {v?.hazard && <div className="risk-banner risk-red hazard-banner" role="alert">⛔ STOP: {v.hazard}</div>}
+        {v?.hazard && <div className="risk-banner risk-red hazard-banner" role="alert">{t("call.stop", { what: auto(v.hazard) })}</div>}
         <div className="captions" aria-live="polite">
           {p.captions.map((c, i) => (
             <p key={i} className={c.who === "You" ? "me" : "ai"}>
-              <b>{c.who === "You" ? "YOU" : "MECHANIC"}</b> {c.text}
+              <b>{c.who === "You" ? t("call.you") : t("call.mechanic")}</b> {c.text}
             </p>
           ))}
         </div>
       </section>
 
       {p.frozen && (
-        <section className="frozen" aria-label="The mechanic is pointing at this">
+        <section className="frozen" aria-label={t("call.pointing")}>
           <div className="frozen-img">
-            <img src={p.frozen.src} alt="Still frame from your camera" />
+            <img src={p.frozen.src} alt={t("call.still")} />
             <MarkerOverlay m={p.frozen.marker} />
           </div>
           <div className="frozen-bar">
             <span>
-              Look here: {p.frozen.marker.label}
-              {p.frozen.marker.precise === false && <em className="approx"> (approximate)</em>}
+              {t("call.lookHere", { label: auto(p.frozen.marker.label) })}
+              {p.frozen.marker.precise === false && <em className="approx"> {t("call.approx")}</em>}
             </span>
-            <button className="ghost" onClick={p.onCloseFrozen}>Back to live</button>
+            <button className="ghost" onClick={p.onCloseFrozen}>{t("call.backLive")}</button>
           </div>
         </section>
       )}
@@ -114,9 +120,9 @@ export function CallHud(p: CallHudProps) {
         <div className={`presence presence-${p.orbState}`}>
           <VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={220} detail="full" />
           <div className="presence-text">
-            <span className="hud-h">MECHANIC</span>
+            <span className="hud-h">{t("call.mechanic")}</span>
             <b>{p.status}</b>
-            <span className="dim small">{STATE_LINE[p.orbState]}</span>
+            <span className="dim small">{t(STATE_LINE[p.orbState])}</span>
           </div>
         </div>
         {p.side}
@@ -126,19 +132,19 @@ export function CallHud(p: CallHudProps) {
 
       <footer className="controls">
         <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
-          {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? "Mute" : "Unmute"}</span>
+          {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? t("call.mute") : t("call.unmute")}</span>
         </button>
         <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={92} /></div>
-        <button className="ctl" onClick={p.onSwitchCamera}><Flip size={18} /><span>Flip cam</span></button>
-        <button className="ctl danger" onClick={p.onEnd}><PhoneOff size={18} /><span>End</span></button>
+        <button className="ctl" onClick={p.onSwitchCamera}><Flip size={18} /><span>{t("call.flip")}</span></button>
+        <button className="ctl danger" onClick={p.onEnd}><PhoneOff size={18} /><span>{t("call.end")}</span></button>
       </footer>
 
       {p.alert && (
         <div className="modal" role="alertdialog" aria-modal>
           <div className={`modal-card ${p.alert.kind === "hazard_stop" ? "hazard" : "red"}`}>
-            <h2>{p.alert.kind === "hazard_stop" ? "Stop now" : "This needs a professional"}</h2>
-            <p>{p.alert.message}</p>
-            <button className="primary" onClick={p.onDismissAlert}>I understand</button>
+            <h2>{p.alert.kind === "hazard_stop" ? t("call.alert.stop") : t("call.alert.pro")}</h2>
+            <p>{p.alert.kind === "hazard_stop" ? t("call.hazardMessage") : auto(p.alert.message)}</p>
+            <button className="primary" onClick={p.onDismissAlert}>{t("call.alert.ok")}</button>
           </div>
         </div>
       )}
@@ -171,18 +177,19 @@ export function brackets(x0: number, y0: number, x1: number, y1: number, c: numb
   ].join(" ");
 }
 
-const STATUS_LABEL: Record<StepView["status"], string> = {
-  pending: "Queued", awaiting_confirmation: "Needs your OK", active: "Now", done: "Done", failed: "Failed",
-  blocked: "Blocked",
-};
-
 function RepairPanel({ view }: { view: SessionView | null }) {
+  const { t, auto } = useI18n();
+  const status = (s: StepView["status"]) => t(`call.step.${s}` as Key);
+  const precaution = (id: string, text: string) => {
+    const key = `call.precaution.${id}` as Key;
+    const got = t(key);
+    return got === key ? auto(text) : got;
+  };
   if (!view) {
     return (
       <div className="hud-card">
-        <h2 className="hud-h">DIAGNOSTICS</h2>
-        <p className="dim">Show the mechanic your device. This fills in as it identifies the device and works out
-          what's wrong.</p>
+        <h2 className="hud-h">{t("call.diagnostics")}</h2>
+        <p className="dim">{t("call.diagEmpty")}</p>
       </div>
     );
   }
@@ -190,19 +197,19 @@ function RepairPanel({ view }: { view: SessionView | null }) {
   return (
     <div className="panel-body">
       <div className="hud-card">
-        <h2 className="hud-h">DIAGNOSTICS</h2>
+        <h2 className="hud-h">{t("call.diagnostics")}</h2>
         <div className="diag">
           <Gauge value={view.diagnosis ? view.confidence : view.hypotheses[0]?.confidence ?? 0} />
           <div>
-            <span className="lbl">{view.diagnosis ? "Diagnosis" : view.hypotheses.length ? "Leading cause" : "Device"}</span>
-            <b>{view.diagnosis || view.hypotheses[0]?.cause || view.device || "Not identified yet"}</b>
-            {view.device && !view.model_confirmed && <em className="warn-t">Model not confirmed: show the label</em>}
+            <span className="lbl">{view.diagnosis ? t("call.diagnosis") : view.hypotheses.length ? t("call.leading") : t("call.deviceLbl")}</span>
+            <b>{auto(view.diagnosis || view.hypotheses[0]?.cause || view.device) || t("call.notIdentified")}</b>
+            {view.device && !view.model_confirmed && <em className="warn-t">{t("call.showLabel")}</em>}
           </div>
         </div>
         {!view.diagnosis && view.hypotheses.length > 1 && (
           <ul className="hyp">
             {view.hypotheses.slice(1).map((h) => (
-              <li key={h.cause}><span>{h.cause}</span><Bar value={h.confidence} /></li>
+              <li key={h.cause}><span>{auto(h.cause)}</span><Bar value={h.confidence} /></li>
             ))}
           </ul>
         )}
@@ -210,40 +217,40 @@ function RepairPanel({ view }: { view: SessionView | null }) {
 
       {hasAnatomy(view) && (
         <div className="hud-card anat-wrap">
-          <h2 className="hud-h">ANATOMY</h2>
+          <h2 className="hud-h">{t("call.anatomy")}</h2>
           <AnatomyFigure view={view} />
         </div>
       )}
 
       <div className={`hud-card safety safety-${view.risk_level}`}>
-        <h2 className="hud-h">SAFETY <span className={`lvl lvl-${view.risk_level}`}>{view.risk_level.toUpperCase()}</span></h2>
-        {view.risk_reasons.length > 0 && <p className="dim small">{view.risk_reasons.join(" · ")}</p>}
+        <h2 className="hud-h">{t("call.safety")} <span className={`lvl lvl-${view.risk_level}`}>{t(`call.risk.${view.risk_level}` as Key)}</span></h2>
+        {view.risk_reasons.length > 0 && <p className="dim small">{view.risk_reasons.map(auto).join(" · ")}</p>}
         {view.precautions.length > 0 ? (
           <ul className="checklist">
             {view.precautions.map((p) => (
-              <li key={p.id} className={p.done ? "done" : ""}><i aria-hidden>{p.done ? "✓" : ""}</i>{p.text}</li>
+              <li key={p.id} className={p.done ? "done" : ""}><i aria-hidden>{p.done ? "✓" : ""}</i>{precaution(p.id, p.text)}</li>
             ))}
           </ul>
         ) : (
-          <p className="dim small">No special precautions for this job so far.</p>
+          <p className="dim small">{t("call.noPrecautions")}</p>
         )}
       </div>
 
       <div className="hud-card">
-        <h2 className="hud-h">PROCEDURE <span className="dim">{view.steps.length ? `${done}/${view.steps.length}` : ""}</span></h2>
+        <h2 className="hud-h">{t("call.procedure")} <span className="dim">{view.steps.length ? `${done}/${view.steps.length}` : ""}</span></h2>
         {view.steps.length === 0 ? (
-          <p className="dim small">No steps yet. Diagnosis comes first.</p>
+          <p className="dim small">{t("call.noSteps")}</p>
         ) : (
           <ol className="timeline">
             {view.steps.map((s, i) => (
               <li key={s.id} className={`st-${s.status}`}>
                 <span className="node" aria-hidden>{s.status === "done" ? "✓" : i + 1}</span>
                 <div>
-                  <span className="tag">{STATUS_LABEL[s.status]}</span>
-                  <p>{s.text}</p>
-                  {s.irreversible.length > 0 && <p className="warn">Can't be undone: {s.irreversible.join(", ")}</p>}
-                  {s.source && <p className="src">Source: {s.source}</p>}
-                  {s.cross_checked && <p className="checked">Double-checked by a second AI</p>}
+                  <span className="tag">{status(s.status)}</span>
+                  <p>{auto(s.text)}</p>
+                  {s.irreversible.length > 0 && <p className="warn">{t("call.irreversible", { what: s.irreversible.map(auto).join(", ") })}</p>}
+                  {s.source && <p className="src">{t("call.source", { src: s.source })}</p>}
+                  {s.cross_checked && <p className="checked">{t("call.checked")}</p>}
                 </div>
               </li>
             ))}
@@ -251,17 +258,18 @@ function RepairPanel({ view }: { view: SessionView | null }) {
         )}
       </div>
 
-      {view.escalated && <p className="note">Handed to a human expert with the full repair history.</p>}
+      {view.escalated && <p className="note">{t("call.escalated")}</p>}
     </div>
   );
 }
 
 function Gauge({ value }: { value: number }) {
+  const { t } = useI18n();
   const pct = Math.round(value * 100);
   const cls = pct >= 85 ? "hi" : pct >= 75 ? "mid" : "lo";
   const r = 26, c = 2 * Math.PI * r;
   return (
-    <svg className={`gauge g-${cls}`} viewBox="0 0 64 64" role="img" aria-label={`${pct}% sure`}>
+    <svg className={`gauge g-${cls}`} viewBox="0 0 64 64" role="img" aria-label={t("call.sure", { pct })}>
       <circle className="g-track" cx="32" cy="32" r={r} />
       <circle className="g-val" cx="32" cy="32" r={r} strokeDasharray={`${(c * pct) / 100} ${c}`}
               transform="rotate(-90 32 32)" />

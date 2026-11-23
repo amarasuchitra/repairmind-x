@@ -270,17 +270,59 @@ def irreversible_actions(step_text: str) -> list[str]:
     return found
 
 
+# The same stop words in the other languages the app speaks, plus romanised Hindi ("Hinglish"), because the
+# live transcript comes back in whatever language the person speaks. Latin-script words use word boundaries;
+# other scripts are matched as text (their vowel signs don't count as word characters). Kept to phrases that
+# mean danger on their own: a word that is also part of a harmless word is written so it can't match there
+# (Tamil புகை "smoke" is also the start of புகைப்படம் "photo").
+HAZARD_PATTERNS_INTL: tuple[tuple[str, str], ...] = (
+    (r"धुआं|धुआँ|धुंआ|धुँआ|\bdhu+a+n?\b|\bdhuwa\b|ধোঁয়া|ধোয়া|పొగ|धूर|புகை(?!ப்பட)|ધુમાડો|ಹೊಗೆ|പുക(?!ഴ)|ਧੂੰਆਂ|ਧੂਆਂ"
+     r"|\bhumo\b|\bfum[ée]e\b|\brauch(t|en)?\b|دخان|冒烟|烟雾|煙が|煙", "smoke"),
+    (r"आग(?![ेाऱर])|\baag\b|लपट|আগুন|మంటలు|మంట వస్త|ஒரு தீ|தீப்பிடி|தீ பிடி|நெருப்பு|આગ(?![ળેા])|ಬೆಂಕಿ|തീപിടി|തീ പിടി|ਅੱਗ(?![ੇਾ])"
+     r"|\bfuego\b|\bincendio\b|\bllamas\b|\bfeu\b|\bflammes?\b|\bincendie\b|\bfeuer\b|\bflammen?\b|حريق|اشتعل"
+     r"|着火|起火|火焰|失火|火事|炎が|発火", "fire"),
+    (r"जलने की|जल रहा|जल रही|\bjalne ki\b|\bjal raha\b|পোড়া গন্ধ|পোড়া|కాలిన వాసన|కాలుతోంది|जळल्याचा|जळण्याचा"
+     r"|எரியும் வாசனை|கருகிய|எரிகிறது|બળવાની|બળેલી|ಸುಟ್ಟ ವಾಸನೆ|ಸುಡುತ್ತಿದೆ|കരിഞ്ഞ|കത്തുന്ന മണം|ਸੜਨ ਦੀ|ਸੜ ਰਿਹਾ"
+     r"|olor a quemado|sent (le )?br[ûu]l[ée]|se est[áa] quemando|odeur de br[ûu]l[ée]|[çc]a br[ûu]le|verbrannt|brandgeruch"
+     r"|رائحة حريق|رائحة احتراق|يحترق|烧焦|焦味|糊味|焦げ", "a burning smell"),
+    (r"चिंगारी|\bchingar[iy]\b|স্ফুলিঙ্গ|ফুলকি|నిప్పురవ్వ|ठिणगी|தீப்பொறி|તણખ|ಕಿಡಿ|തീപ്പൊരി|ਚੰਗਿਆੜ"
+     r"|\bchispas?\b|[ée]tincelles?|\bfunken\b|شرار|火花", "sparks"),
+    (r"गैस की (गंध|बू|बदबू|स्मेल)|\bgas ki (smell|badbu|boo|bu)\b|গ্যাসের গন্ধ|గ్యాస్ వాసన|गॅसचा वास|கேஸ் வாசனை"
+     r"|எரிவாயு வாசனை|ગેસની ગંધ|ગેસની વાસ|ಗ್ಯಾಸ್ ವಾಸನೆ|ഗ്യാസ് മണം|ഗ്യാസിന്റെ മണം|ਗੈਸ ਦੀ (ਬੋ|ਗੰਧ|ਬਦਬੂ)"
+     r"|olor a gas|odeur de gaz|gasgeruch|riecht nach gas|رائحة غاز|رائحة الغاز|煤气味|燃气味|闻到煤气|闻到燃气"
+     r"|ガス臭|ガスの臭い|ガスのにおい", "a gas smell"),
+    (r"करंट लग|करेंट लग|झटका लग|\bcurrent la?g\w*|\bjhatka\b|শক লেগেছে|কারেন্ট লেগেছে|షాక్ కొట్టి|కరెంట్ కొట్టి"
+     r"|शॉक लाग|करंट लाग|ஷாக் அடி|மின்சாரம் தாக்கி|કરંટ લાગ|શૉક લાગ|ಶಾಕ್ ಹೊಡೆ|ಕರೆಂಟ್ ಹೊಡೆ|ഷോക്ക് അടി|ഷോക്കേറ്റു"
+     r"|ਕਰੰਟ ਲੱਗ|ਝਟਕਾ ਲੱਗ|descarga el[ée]ctrica|\bcalambre\b|electrocut|[ée]lectrocut|d[ée]charge [ée]lectrique"
+     r"|stromschlag|صعقة|صعق|触电|电到我|感電", "an electric shock"),
+    (r"खून|चोट लग|कट गया|कट गई|\bkhoon\b|\bchot lag\w*|রক্ত|আঘাত লেগেছে|কেটে গেছে|రక్తం|గాయం|रक्त|जखम"
+     r"|ரத்தம்|இரத்தம்|காயம்|લોહી|ઈજા|ರಕ್ತ|ಗಾಯ|രക്തം|മുറിവ്|ਖ਼ੂਨ|ਖੂਨ|ਸੱਟ ਲੱਗ"
+     r"|\bsangre\b|\bherid[oa]\b|me (cort|quem)[ée]|\bsang\b|bless[ée]e?\b|je me suis (coup|br[ûu]l)[ée]"
+     r"|\bblut(e|et)?\b|verletzt|ينزف|نزيف|جرح|إصابة|流血|受伤|出血|けが|怪我", "an injury"),
+    (r"(बैटरी|battery|ব্যাটারি|బ్యాటరీ|பேட்டரி|બેટરી|ಬ್ಯಾಟರಿ|ബാറ്ററി|ਬੈਟਰੀ)\s*\S*\s*(फूल|phool|ফুলে|ఉబ్బ|फुग|வீங்க|ફૂલ|ಊದ"
+     r"|വീർ|ਫੁੱਲ)|bater[íi]a hinchada|batterie gonfl[ée]e|akku (ist )?aufgebl[äa]ht|鼓包|膨張|膨らん",
+     "a swelling battery"),
+)
+
+# "No smoke" in other languages: the negation usually comes right after the word ("धुआं नहीं").
+_NEG_AFTER = re.compile(r"^\s*(है\s*)?(नहीं|नही|nahi+n?|না|నహీ|లేదు|ఏమీ లేదు|नाही|இல்லை|નથી|ಇಲ್ಲ|ഇല്ല|ਨਹੀਂ|ないです|ない|ありません|没有)")
+_NEG_BEFORE = re.compile(r"(\b(no|not|never|without|isn'?t|aren'?t|don'?t|doesn'?t|didn'?t|sin|pas de|aucune?|kein\w*|nicht)\b"
+                         r"|没有|没|لا يوجد|(?<!\w)لا(?!\w))[^.?!।，。！？]*$")
+
+
 def detect_hazards(utterance: str) -> list[str]:
     t = _norm(utterance)
-    # Ignore clearly negated mentions like "no smoke" or "there's no burning smell".
+    # Ignore clearly negated mentions like "no smoke", "there's no burning smell" or "धुआं नहीं".
     found: list[str] = []
-    for pattern, label in HAZARD_PATTERNS:
+    for pattern, label in HAZARD_PATTERNS + HAZARD_PATTERNS_INTL:
+        if label in found:
+            continue
         for m in re.finditer(pattern, t):
             before = t[max(0, m.start() - 20): m.start()]
-            if re.search(r"\b(no|not|never|without|isn'?t|aren'?t|don'?t|doesn'?t|didn'?t)\b[^.?!]*$", before):
+            after = t[m.end(): m.end() + 12]
+            if _NEG_BEFORE.search(before) or _NEG_AFTER.match(after):
                 continue
-            if label not in found:
-                found.append(label)
+            found.append(label)
             break
     return found
 
