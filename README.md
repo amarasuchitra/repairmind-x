@@ -150,6 +150,19 @@ Open `/#demo` to preview the call screen with sample data and a simulated voice,
 |---|---|---|---|
 | ![Start page](docs/screenshots/v4-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop call with anatomy view](docs/screenshots/v4-call-desktop.png) |
 
+## Design lab (`#lab`)
+
+Beyond repair: bring an idea, get an engineering breakdown that is checked, simulated and reviewed.
+
+| Part | Where | What it does |
+|---|---|---|
+| Design agent | `agent/repairmind/lab/designer.py`, `POST /api/lab/design` | Turns an idea into requirements (each with a verification method), components, variables with sources, governing equations, a weighted trade study, an FMEA, a physics simulation spec and research notes. Uses Claude (`RMX_DESIGN_MODEL`, default `claude-opus-5-5`) or free Gemini, like the checks. |
+| Units and maths engine | `web/src/lab/units.ts`, `expr.ts`, `analysis.ts` | The model never grades its own arithmetic. Every equation is recomputed in the page with dimensional analysis (adding metres to seconds, or calling joules newtons, is an error), in dependency order. Margins of safety are MS = allowable / (applied × FS) − 1. FMEA RPNs and trade-study totals are recomputed too. Edit any input and everything downstream updates. |
+| Physics sandbox | `web/src/lab/physics.ts`, `SimView.tsx` | Rapier (WebAssembly rigid-body physics, loaded only on this page). Boxes, spheres and cylinders joined by fixed, revolute (with torque-limited motors), spring and prismatic joints. Probes compare the simulation against the equations that predict them, so the hand calculation and the simulation check each other. |
+| Rethink loop | `POST /api/lab/revise` | Failed checks and simulation mismatches go back to the agent as facts. It must find the root cause, weigh alternatives and redesign; the page re-checks and repeats up to 3 rounds ("Rethink until it holds"). |
+| Lessons memory | `sessions/lab/lessons.jsonl` (`RMX_LAB_DIR`) | Each review round ends with general lessons, which are added to every later design prompt. This is how it improves over time without retraining a model. |
+| Worked examples | `web/src/lab/examples.ts` | A ramp-climbing rover, a drop pod (fails its shock check on purpose, to show the rethink loop) and a suspension rig. They work with no server or key, and tests check that each simulation reproduces its own hand calculation. |
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret) and a free Google AI Studio API key. That's all; the app runs entirely on free tiers.
