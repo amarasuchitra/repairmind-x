@@ -164,6 +164,29 @@ Beyond repair: bring an idea, get an engineering breakdown that is checked, simu
 | Lessons memory | `sessions/lab/lessons.jsonl` (`RMX_LAB_DIR`) | Each review round ends with general lessons, which are added to every later design prompt. This is how it improves over time without retraining a model. |
 | Worked examples | `web/src/lab/examples.ts` | A ramp-climbing rover, a drop pod (fails its shock check on purpose, to show the rethink loop) and a suspension rig. They work with no server or key, and tests check that each simulation reproduces its own hand calculation. |
 
+## Languages
+
+The whole app speaks 16 languages: English, Hindi, Bengali, Telugu, Marathi, Tamil, Gujarati, Kannada, Malayalam,
+Punjabi, Spanish, French, German, Arabic (right to left), Chinese and Japanese. Pick one from the globe menu in any
+header, or leave it on Auto to follow the browser.
+
+- **Screens.** Every English string is in `web/src/i18n/en.ts`. The safety notice, hazard alert, precautions and
+  main controls are translated by hand (`web/src/i18n/locales/`). Everything else, and text that arrives during a
+  call (diagnosis, steps, check findings), is translated once by the server with the configured model and cached
+  in `sessions/i18n/`. A translation that drops a number, a unit or a placeholder is rejected and the English is
+  shown instead. With no model configured the app stays in English apart from the hand-written text.
+- **The mechanic** speaks the chosen language from its first word (on Auto it answers in whatever you speak,
+  including mixed Hindi and English). It still writes every tool argument in English, so the deterministic safety
+  rules, the step gates and the second-opinion review work the same in every language. Hazard words ("धुआं",
+  "करंट लगा", "புகை", "humo"...) stop the call in all 16 languages and in romanised Hindi.
+- **The design lab** writes designs in the chosen language. Symbols, expressions, units, ids and numbers stay as
+  they are, so the unit checks and the simulation are unaffected.
+- **Voice input** (dictation and server transcription) listens in the chosen language.
+
+Optional settings: `RMX_TRANSLATE_MODEL` (Claude model for interface translation when `ANTHROPIC_API_KEY` is set),
+`RMX_GEMINI_SET_LANGUAGE=1` (also pass the speech language code to Gemini Live; off by default because native-audio
+models choose the language themselves).
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret) and a free Google AI Studio API key. That's all; the app runs entirely on free tiers.
