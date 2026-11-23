@@ -4,6 +4,7 @@ import { Arrow } from "./ui/Icons";
 import { RingMark, Wordmark } from "./ui/RingMark";
 import { prefersReducedMotion } from "./fx/motion";
 import { sound } from "./fx/sound";
+import { LanguagePicker, useI18n } from "./i18n";
 
 /**
  * Quick sign-in between the start page and the live call. It asks for a name (and an optional email) so
@@ -34,6 +35,7 @@ export function writeProfile(p: Profile | null) {
 }
 
 export function Login({ onDone, onBack }: { onDone: (p: Profile) => void; onBack: () => void }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [touched, setTouched] = useState(false);
@@ -60,33 +62,34 @@ export function Login({ onDone, onBack }: { onDone: (p: Profile) => void; onBack
   return (
     <div ref={root} className="lg">
       <header className="lg-top">
-        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); onBack(); }} aria-label="RepairMind X, back to the start page"><Wordmark /></a>
-        <button className="lg-back" onClick={onBack}><span aria-hidden>←</span> Back</button>
+        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); onBack(); }} aria-label={t("login.backAria")}><Wordmark /></a>
+        <LanguagePicker className="lg-lang" />
+        <button className="lg-back" onClick={onBack}><span aria-hidden>←</span> {t("common.back")}</button>
       </header>
 
       <main className="lg-main">
         <section className="lg-copy">
           <div data-a><RingMark size={150} /></div>
-          <span className="sx-kicker" data-a>One quick step</span>
-          <h1 className="sx-h" data-a>Sign in.</h1>
-          <p className="sx-p" data-a>Tell the mechanic who it's talking to. Your name stays on this device; there's no password and nothing to set up.</p>
+          <span className="sx-kicker" data-a>{t("login.kicker")}</span>
+          <h1 className="sx-h" data-a>{t("login.h")}</h1>
+          <p className="sx-p" data-a>{t("login.p")}</p>
         </section>
 
         <form className="lg-card" onSubmit={submit} noValidate data-a>
-          <h2 className="sx-ph">Your details</h2>
+          <h2 className="sx-ph">{t("login.details")}</h2>
           <label className="lg-field">
-            <span>Name</span>
-            <input autoFocus autoComplete="given-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="What should it call you?" aria-invalid={touched && !nameOk} />
-            {touched && !nameOk && <em role="alert">Enter a name, or continue as a guest.</em>}
+            <span>{t("login.name")}</span>
+            <input autoFocus autoComplete="given-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("login.namePh")} aria-invalid={touched && !nameOk} />
+            {touched && !nameOk && <em role="alert">{t("login.nameErr")}</em>}
           </label>
           <label className="lg-field">
-            <span>Email <i>optional</i></span>
+            <span>{t("login.email")} <i>{t("common.optional")}</i></span>
             <input type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" aria-invalid={touched && !emailOk} />
-            {touched && !emailOk && <em role="alert">That email doesn't look right.</em>}
+            {touched && !emailOk && <em role="alert">{t("login.emailErr")}</em>}
           </label>
-          <button className="x-btn x-btn-solid lg-go" type="submit">Continue to the mechanic <Arrow size={18} /></button>
-          <button className="lg-guest" type="button" onClick={() => { sound.tick(true); onDone({ name: "Guest", guest: true }); }}>Continue as guest</button>
-          <p className="lg-note">Saved only in this browser. Sign out any time from the start page.</p>
+          <button className="x-btn x-btn-solid lg-go" type="submit">{t("login.go")} <Arrow size={18} /></button>
+          <button className="lg-guest" type="button" onClick={() => { sound.tick(true); onDone({ name: "Guest", guest: true }); }}>{t("login.guest")}</button>
+          <p className="lg-note">{t("login.note")}</p>
         </form>
       </main>
     </div>

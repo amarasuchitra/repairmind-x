@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import ar, reviewer, safety, sources, speech_guard, vision
+from . import ar, i18n, reviewer, safety, sources, speech_guard, vision
 from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
@@ -55,8 +55,9 @@ TOPIC_AR_EVENTS = "rmx.ar"
 
 
 class Mechanic(Agent):
-    def __init__(self, ctx: JobContext, state: RepairSession, frames: FrameGrabber | None = None) -> None:
-        super().__init__(instructions=MECHANIC_INSTRUCTIONS)
+    def __init__(self, ctx: JobContext, state: RepairSession, frames: FrameGrabber | None = None,
+                 language: str = "auto", ui_language: str = "") -> None:
+        super().__init__(instructions=MECHANIC_INSTRUCTIONS + "\n\n" + i18n.call_rules(language, ui_language))
         self.ctx = ctx
         self.state = state
         self.frames = frames
@@ -477,6 +478,17 @@ class Mechanic(Agent):
         return await self._done(result)
 
 
+def _languages(metadata: str) -> tuple[str, str]:
+    """(language, ui_language) from the dispatch metadata; anything unreadable means "auto"."""
+    try:
+        data = json.loads(metadata) if metadata else {}
+    except json.JSONDecodeError:
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    return i18n.normalize(str(data.get("language", ""))) or "auto", i18n.normalize(str(data.get("ui_language", "")))
+
+
 server = AgentServer()
 
 
@@ -495,18 +507,23 @@ async def entrypoint(ctx: JobContext) -> None:
     frames = FrameGrabber()
     frames.attach(ctx.room)
 
+    # The web app puts the chosen language in the dispatch metadata (see token_server.py).
+    language, ui_language = _languages(getattr(ctx.job, "metadata", "") or "")
+    speech_code = i18n.gemini_language_code(language)
+
     session = AgentSession(
         llm=google.realtime.RealtimeModel(
             model=GEMINI_MODEL,
             voice=GEMINI_VOICE,
             api_version=GEMINI_API_VERSION,
             temperature=0.4,
+            **({"language": speech_code} if speech_code else {}),
         ),
         # ~1 frame/second while the user talks, slower when quiet: enough context, low cost.
         video_sampler=VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.5),
         max_tool_steps=6,
     )
-    mechanic = Mechanic(ctx, state, frames)
+    mechanic = Mechanic(ctx, state, frames, language, ui_language)
 
     # Live AR: the app tells us when it loses the part it was tracking, so we can find it again.
     def _on_ar(reader, participant_identity: str) -> None:
@@ -537,7 +554,7 @@ async def entrypoint(ctx: JobContext) -> None:
             await mechanic.publish(TOPIC_STATE, state.ui_state())
             await mechanic.publish(TOPIC_ALERT, {"kind": "hazard_stop", "message": safety.HAZARD_STOP_MESSAGE})
             await session.interrupt(force=True)
-            session.generate_reply(instructions="Say exactly, calmly and slowly: " + safety.HAZARD_STOP_MESSAGE)
+            session.generate_reply(instructions=i18n.say_in(language, ui_language, safety.HAZARD_STOP_MESSAGE))
 
         asyncio.create_task(stop())
 
@@ -558,8 +575,8 @@ async def entrypoint(ctx: JobContext) -> None:
             await session.interrupt(force=True)
             session.generate_reply(instructions=(
                 "You just said something your safety rules don't allow (" + violation.detail + "): \""
-                + violation.sentence + "\". Say exactly: \"" + speech_guard.CORRECTIONS[violation.kind]
-                + "\" Then follow the gates: use propose_step before giving any step."))
+                + violation.sentence + "\". " + i18n.say_in(language, ui_language, speech_guard.CORRECTIONS[violation.kind])
+                + " Then follow the gates: use propose_step before giving any step."))
 
         asyncio.create_task(correct())
 
@@ -572,9 +589,10 @@ async def entrypoint(ctx: JobContext) -> None:
     if resumed:
         session.generate_reply(instructions=(
             "The call dropped and the user is back. Briefly say where you were, using this state: "
-            + json.dumps(state.ui_state()) + ". Ask them to show the device again before continuing."))
+            + json.dumps(state.ui_state()) + ". Ask them to show the device again before continuing."
+            + i18n.greeting_language(language, ui_language)))
     else:
-        session.generate_reply(instructions=GREETING)
+        session.generate_reply(instructions=GREETING + i18n.greeting_language(language, ui_language))
 
 
 if __name__ == "__main__":

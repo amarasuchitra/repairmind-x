@@ -15,7 +15,7 @@ from repairmind.lab import attachments
 from repairmind.lab.schema import Design
 from tests.test_token_server import _pdf_with_text
 
-EXAMPLES = json.loads((Path(__file__).parent / "data" / "lab_examples.json").read_text())
+EXAMPLES = json.loads((Path(__file__).parent / "data" / "lab_examples.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture

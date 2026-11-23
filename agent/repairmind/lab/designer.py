@@ -21,7 +21,7 @@ import os
 import time
 from pathlib import Path
 
-from .. import checker
+from .. import checker, i18n
 from .schema import Design
 
 log = logging.getLogger("repairmind.lab")
@@ -168,7 +168,7 @@ async def _call(system: str, text: str, images: list[str] | None = None) -> Desi
     return res.parsed
 
 
-async def generate(idea: str, context: str = "", attachments: list | None = None) -> Design:
+async def generate(idea: str, context: str = "", attachments: list | None = None, language: str = "en") -> Design:
     from .attachments import for_prompt
 
     text = f"IDEA:\n{idea.strip()}"
@@ -177,13 +177,14 @@ async def generate(idea: str, context: str = "", attachments: list | None = None
     att_text, images = for_prompt(attachments or [])
     if att_text:
         text += "\n\n" + att_text
-    design = await _call(ENGINEER_SYSTEM + (ATTACHMENTS_RULES if att_text else "") + _lessons_block(), text, images)
+    design = await _call(ENGINEER_SYSTEM + (ATTACHMENTS_RULES if att_text else "") + i18n.design_rules(language)
+                         + _lessons_block(), text, images)
     design.idea = design.idea or idea
     design.revisions = []
     return design
 
 
-async def revise(design: Design, findings: list[str], note: str = "") -> Design:
+async def revise(design: Design, findings: list[str], note: str = "", language: str = "en") -> Design:
     round_no = len(design.revisions) + 1
     text = "\n\n".join(filter(None, [
         f"ROUND {round_no}",
@@ -191,7 +192,7 @@ async def revise(design: Design, findings: list[str], note: str = "") -> Design:
         "FINDINGS FROM INDEPENDENT CHECKS:\n" + ("\n".join(f"- {f}" for f in findings) or "- none: look for what the checks can't see"),
         f"NOTE FROM THE ENGINEER:\n{note.strip()}" if note.strip() else "",
     ]))
-    revised = await _call(REVISE_SYSTEM + _lessons_block(), text)
+    revised = await _call(REVISE_SYSTEM + i18n.design_rules(language) + _lessons_block(), text)
     # keep the history even if the model dropped earlier rounds
     earlier = design.revisions
     new = [r for r in revised.revisions if r.round >= round_no] or revised.revisions[-1:]

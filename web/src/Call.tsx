@@ -26,6 +26,7 @@ import {
 
 import { ARLayer } from "./ar/ARLayer";
 import { CallHud } from "./hud/CallHud";
+import { useI18n } from "./i18n";
 import type { OrbState } from "./hud/VoiceOrb";
 
 // three.js is large, so the 3D viewer loads only when an expert procedure step arrives.
@@ -67,6 +68,7 @@ function lastJson<T>(streams: { text: string }[]): T | null {
 }
 
 function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) => void }) {
+  const { t } = useI18n();
   const connection = useConnectionState();
   const { state: agentState, agent, audioTrack } = useVoiceAssistant();
   const { localParticipant, isMicrophoneEnabled } = useLocalParticipant();
@@ -129,12 +131,12 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
 
   const status =
     connection !== ConnectionState.Connected
-      ? "Connecting"
+      ? t("call.connecting")
       : !agent
-        ? "Waiting for mechanic"
-        : ({ listening: "Listening", thinking: "Thinking", speaking: "Speaking" } as Record<string, string>)[
+        ? t("call.waiting")
+        : ({ listening: t("call.listening"), thinking: t("call.thinking"), speaking: t("call.speaking") } as Record<string, string>)[
             agentState
-          ] ?? "Online";
+          ] ?? t("call.online");
   const orbState: OrbState =
     connection !== ConnectionState.Connected || !agent
       ? "connecting"
@@ -161,7 +163,7 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
         camTracks[0] ? (
           <VideoTrack trackRef={camTracks[0]} className={facing === "user" ? "mirror" : ""} />
         ) : (
-          <div className="placeholder">Allow camera access to show the mechanic your device.</div>
+          <div className="placeholder">{t("call.allowCamera")}</div>
         )
       }
       overlay={
@@ -181,7 +183,7 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
       }
       side={
         step3d && (
-          <Suspense fallback={<div className="viewer3d-msg">Loading 3D model…</div>}>
+          <Suspense fallback={<div className="viewer3d-msg">{t("call.loading3d")}</div>}>
             <Viewer3D step={step3d} />
           </Suspense>
         )
@@ -200,6 +202,7 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
 }
 
 function ManualUpload({ room }: { room: string }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -212,8 +215,8 @@ function ManualUpload({ room }: { room: string }) {
     try {
       const res = await fetch("/api/manual", { method: "POST", body: form });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.detail ?? `Upload failed (${res.status})`);
-      setStatus(`Added "${body.title}" (${body.pages} pages). The mechanic will cite it.`);
+      if (!res.ok) throw new Error(body.detail ?? t("call.manual.failed", { n: res.status }));
+      setStatus(t("call.manual.added", { title: body.title, pages: body.pages }));
     } catch (e) {
       setStatus(e instanceof Error ? e.message : String(e));
     } finally {
@@ -224,7 +227,7 @@ function ManualUpload({ room }: { room: string }) {
   return (
     <div className="manual">
       <label className={`secondary file-btn ${busy ? "busy" : ""}`}>
-        {busy ? "Reading manual…" : "Add manual (PDF)"}
+        {busy ? t("call.manual.reading") : t("call.manual.add")}
         <input
           type="file"
           accept="application/pdf"

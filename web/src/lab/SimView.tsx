@@ -6,6 +6,7 @@ import type { Design, SimBody } from "./design.ts";
 import type { Analysis } from "./analysis.ts";
 import { DT, Sandbox, loadRapier, simFindings, type ProbeResult } from "./physics.ts";
 import { fmt } from "./units.ts";
+import { useI18n } from "../i18n";
 
 type RapierLib = Awaited<ReturnType<typeof loadRapier>>;
 
@@ -130,6 +131,7 @@ function Spark({ r }: { r: ProbeResult }) {
 
 /** The 3D physics sandbox for a design: watch the assembly, compare probes against the hand calculations. */
 export function SimView({ design, analysis }: { design: Design; analysis: Analysis }) {
+  const { t } = useI18n();
   const [R, setR] = useState<RapierLib | null>(null);
   const [err, setErr] = useState("");
   const [playing, setPlaying] = useState(true);
@@ -138,7 +140,7 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
   const [, setTick] = useState(0);
 
   useEffect(() => {
-    loadRapier().then(setR).catch(() => setErr("The physics engine couldn't load in this browser."));
+    loadRapier().then(setR).catch(() => setErr(t("lab.sim.noLoad")));
   }, []);
 
   const [sandbox, setSandbox] = useState<Sandbox | null>(null);
@@ -172,17 +174,17 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
   }, [sim]);
 
   return (
-    <section className="lab-sim" aria-label="Physics simulation">
+    <section className="lab-sim" aria-label={t("lab.sim.aria")}>
       <div className="lab-sim-head">
         <div>
-          <span className="lab-kicker">Physics sandbox</span>
-          <h3>{sim.title || "Simulation"}</h3>
+          <span className="lab-kicker">{t("lab.sim.kicker")}</span>
+          <h3>{sim.title || t("lab.sim.title")}</h3>
         </div>
         <div className="lab-sim-ctl">
-          <button className="lab-btn" onClick={() => setPlaying((p) => !p)} disabled={!sandbox}>{playing ? "Pause" : "Play"}</button>
-          <button className="lab-btn" onClick={() => { setRun((r) => r + 1); setPlaying(true); }} disabled={!sandbox}>Restart</button>
+          <button className="lab-btn" onClick={() => setPlaying((p) => !p)} disabled={!sandbox}>{playing ? t("lab.sim.pause") : t("lab.sim.play")}</button>
+          <button className="lab-btn" onClick={() => { setRun((r) => r + 1); setPlaying(true); }} disabled={!sandbox}>{t("lab.sim.restart")}</button>
           <label className="lab-speed">
-            <span>Speed</span>
+            <span>{t("lab.sim.speed")}</span>
             <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
               <option value={0.25}>¼×</option><option value={0.5}>½×</option><option value={1}>1×</option><option value={2}>2×</option>
             </select>
@@ -191,7 +193,7 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
       </div>
       <div className="lab-canvas">
         {err && <p className="lab-err">{err}</p>}
-        {!R && !err && <p className="lab-loading">Loading the physics engine…</p>}
+        {!R && !err && <p className="lab-loading">{t("lab.sim.loading")}</p>}
         {sandbox && (
           <Canvas key={design.title} shadows camera={{ position: [focus.x + span * 0.9, focus.y + span * 0.55, focus.z + span * 1.1], fov: 40, near: 0.01, far: 500 }} dpr={[1, 2]}>
             <color attach="background" args={["#060b16"]} />
@@ -218,7 +220,7 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
       {sandbox && sandbox.warnings.length > 0 && <ul className="lab-warn">{sandbox.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {results.length > 0 && (
         <div className="lab-scroll"><table className="lab-table lab-probes">
-          <thead><tr><th>Probe</th><th>Simulated</th><th>Hand calc</th><th>Trace</th></tr></thead>
+          <thead><tr><th>{t("lab.sim.probe")}</th><th>{t("lab.sim.simulated")}</th><th>{t("lab.sim.hand")}</th><th>{t("lab.sim.trace")}</th></tr></thead>
           <tbody>
             {results.map((r) => (
               <tr key={r.probe.id}>

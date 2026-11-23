@@ -3,6 +3,7 @@
  * Used by the design lab and the "Redesign a broken part" page.
  */
 import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useI18n } from "../i18n";
 
 export interface AttachmentInfo {
   id: string;
@@ -87,6 +88,7 @@ export function Attachments({ items, onChange, canHearMedia, compact }: {
   canHearMedia: boolean;
   compact?: boolean;
 }) {
+  const { t, auto } = useI18n();
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [over, setOver] = useState(false);
@@ -100,27 +102,27 @@ export function Attachments({ items, onChange, canHearMedia, compact }: {
     if (!files.length) return;
     setError("");
     const room = 20 - latest.current.length;
-    if (room <= 0) { setError("At most 20 attachments per idea."); return; }
+    if (room <= 0) { setError(t("in.max")); return; }
     const toSend: File[] = [];
     const notes: string[] = [];
     for (const f of files.slice(0, room)) {
       const isVideo = f.type.startsWith("video/") || /\.(mp4|mov|m4v|avi|mkv)$/i.test(f.name);
       if (isVideo) {
-        setBusy(`Taking frames from ${f.name}…`);
+        setBusy(t("in.frames", { name: f.name }));
         try {
           toSend.push(...(await videoFrames(f)));
         } catch {
-          notes.push(`Couldn't read frames from ${f.name} in this browser.`);
+          notes.push(t("in.noFrames", { name: f.name }));
         }
         if (canHearMedia && f.size <= MEDIA_LIMIT) toSend.push(f); // speech and motion too
-        else if (!canHearMedia) notes.push(`${f.name}: frames attached; sound needs GOOGLE_API_KEY on the server.`);
+        else if (!canHearMedia) notes.push(t("in.noSound", { name: f.name }));
       } else {
         toSend.push(f);
       }
     }
-    if (files.length > room) notes.push(`Only the first ${room} files were added (20 at most).`);
+    if (files.length > room) notes.push(t("in.firstOnly", { n: room }));
     if (!toSend.length) { setBusy(""); setError(notes.join(" ")); return; }
-    setBusy(`Reading ${toSend.length} file${toSend.length > 1 ? "s" : ""}…`);
+    setBusy(t("in.reading", { n: toSend.length }));
     try {
       const got = await uploadFiles(toSend.slice(0, room));
       onChange([...latest.current, ...got]);
@@ -155,18 +157,18 @@ export function Attachments({ items, onChange, canHearMedia, compact }: {
           if (files.length) { e.preventDefault(); void add(files); }
         }}
         tabIndex={0}
-        aria-label="Attachments: drop files here, or paste"
+        aria-label={t("in.dropAria")}
       >
-        <span className="lab-drop-t">Drop photos, sketches, PDFs, CAD (STEP, STL, DXF), spreadsheets, docs, audio or video</span>
+        <span className="lab-drop-t">{t("in.drop")}</span>
         <div className="lab-row">
-          <button type="button" className="lab-btn" onClick={() => pick.current?.click()} disabled={!!busy}>Add files</button>
-          <button type="button" className="lab-btn" onClick={() => cam.current?.click()} disabled={!!busy}>Take photo</button>
+          <button type="button" className="lab-btn" onClick={() => pick.current?.click()} disabled={!!busy}>{t("in.addFiles")}</button>
+          <button type="button" className="lab-btn" onClick={() => cam.current?.click()} disabled={!!busy}>{t("in.photo")}</button>
         </div>
         <input ref={pick} type="file" multiple hidden onChange={(e) => { void add(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
         <input ref={cam} type="file" accept="image/*,video/*" capture="environment" hidden onChange={(e) => { void add(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
       </div>
       {busy && <p className="lab-muted" role="status"><span className="lab-spin" aria-hidden /> {busy}</p>}
-      {error && <p className="lab-warn-t" role="alert">{error}</p>}
+      {error && <p className="lab-warn-t" role="alert">{auto(error)}</p>}
       {items.length > 0 && (
         <ul className="lab-att-list">
           {items.map((a, i) => (
@@ -174,8 +176,8 @@ export function Attachments({ items, onChange, canHearMedia, compact }: {
               {a.thumb ? <img src={a.thumb} alt="" /> : <span className={`lab-att-k k-${a.kind}`}>{KIND_LABEL[a.kind]}</span>}
               <div className="lab-att-b">
                 <b title={a.name}><span className="mono">A{i + 1}</span> {a.name}</b>
-                <small>{a.summary}</small>
-                {a.warning && <small className="lab-warn-t">{a.warning}</small>}
+                <small>{auto(a.summary)}</small>
+                {a.warning && <small className="lab-warn-t">{auto(a.warning)}</small>}
                 {(a.facts.length > 0 || a.excerpt) && (
                   <button type="button" className="lab-link" onClick={() => setOpen(open === a.id ? null : a.id)} aria-expanded={open === a.id}>
                     {open === a.id ? "Hide what was read" : "Show what was read"}
@@ -188,7 +190,7 @@ export function Attachments({ items, onChange, canHearMedia, compact }: {
                   </div>
                 )}
               </div>
-              <button type="button" className="lab-x" onClick={() => remove(a.id)} aria-label={`Remove ${a.name}`}>×</button>
+              <button type="button" className="lab-x" onClick={() => remove(a.id)} aria-label={t("in.remove", { name: a.name })}>×</button>
             </li>
           ))}
         </ul>
@@ -219,7 +221,8 @@ function recognitionCtor(): (new () => Recognition) | null {
  * Mic button. Uses the browser's own live dictation where there is one (Chrome, Edge, Safari); otherwise it
  * records and the server transcribes (needs GOOGLE_API_KEY). Final text is handed to `onText`.
  */
-export function MicButton({ onText, onInterim, label = "Speak" }: { onText: (t: string) => void; onInterim?: (t: string) => void; label?: string }) {
+export function MicButton({ onText, onInterim, label }: { onText: (t: string) => void; onInterim?: (t: string) => void; label?: string }) {
+  const { t, auto, speech, language } = useI18n();
   const [state, setState] = useState<"idle" | "listening" | "recording" | "transcribing">("idle");
   const [error, setError] = useState("");
   const rec = useRef<Recognition | null>(null);
@@ -236,7 +239,7 @@ export function MicButton({ onText, onInterim, label = "Speak" }: { onText: (t: 
     const r = new Ctor();
     r.continuous = true;
     r.interimResults = true;
-    r.lang = navigator.language || "en-US";
+    r.lang = speech; // dictate in the language picked for the app
     r.onresult = (e) => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -247,7 +250,7 @@ export function MicButton({ onText, onInterim, label = "Speak" }: { onText: (t: 
       cb.current.onInterim?.(interim);
     };
     r.onerror = (e) => {
-      setError(e.error === "not-allowed" ? "Microphone access was blocked. Allow it in the browser's site settings." : e.error === "no-speech" ? "" : `Dictation stopped (${e.error}).`);
+      setError(e.error === "not-allowed" ? t("in.micBlocked") : e.error === "no-speech" ? "" : t("in.dictStopped", { why: e.error }));
     };
     r.onend = () => { setState("idle"); cb.current.onInterim?.(""); };
     rec.current = r;
@@ -268,6 +271,7 @@ export function MicButton({ onText, onInterim, label = "Speak" }: { onText: (t: 
         const ext = (m.mimeType || "audio/webm").includes("mp4") ? "m4a" : "webm";
         const form = new FormData();
         form.append("file", blob, `voice note.${ext}`);
+        form.append("language", speech);
         try {
           const res = await fetch("/api/lab/transcribe", { method: "POST", body: form });
           if (!res.ok) throw new Error(await errorOf(res));
@@ -283,7 +287,7 @@ export function MicButton({ onText, onInterim, label = "Speak" }: { onText: (t: 
       m.start();
       setState("recording");
     } catch {
-      setError("Microphone access was blocked or isn't available.");
+      setError(t("in.micMissing"));
     }
   }
 
@@ -298,11 +302,11 @@ export function MicButton({ onText, onInterim, label = "Speak" }: { onText: (t: 
   return (
     <span className="lab-mic-wrap">
       <button type="button" className={`lab-mic${on ? " on" : ""}`} onClick={toggle} disabled={state === "transcribing"}
-        aria-pressed={on} title={live ? "Dictate (your browser converts speech to text)" : "Record a voice note (the server transcribes it)"}>
+        aria-pressed={on} title={live ? t("in.dictTitle", { name: language.name }) : t("in.recTitle", { name: language.name })}>
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z" /></svg>
-        {state === "listening" ? "Listening… tap to stop" : state === "recording" ? "Recording… tap to stop" : state === "transcribing" ? "Transcribing…" : label}
+        {state === "listening" ? t("in.listening") : state === "recording" ? t("in.recording") : state === "transcribing" ? t("in.transcribing") : label ?? t("in.speak")}
       </button>
-      {error && <small className="lab-warn-t" role="alert">{error}</small>}
+      {error && <small className="lab-warn-t" role="alert">{auto(error)}</small>}
     </span>
   );
 }

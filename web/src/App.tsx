@@ -5,6 +5,7 @@ import { Landing } from "./Landing";
 import { Login, readProfile, writeProfile, type Profile } from "./Login";
 import { NetworkBackground } from "./fx/NetworkBackground";
 import { Intro, shouldPlayIntro } from "./fx/Intro";
+import { useI18n } from "./i18n";
 
 // The design preview (a fake call with sample data) only loads when someone opens #demo.
 const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
@@ -57,6 +58,7 @@ export default function App() {
   // set while the quick sign-in is showing: the call it should start afterwards (a room to resume, or a new one)
   const [signingIn, setSigningIn] = useState<{ room?: string } | null>(null);
   const [page, setPage] = useState<Page>(pageFromHash);
+  const { t, choice, lang } = useI18n();
   useEffect(() => {
     const onHash = () => setPage(pageFromHash());
     window.addEventListener("hashchange", onHash);
@@ -75,12 +77,13 @@ export default function App() {
       const res = await fetch("/api/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accepted_notice: accepted, room: resumeRoom ?? null }),
+        // the mechanic speaks the chosen language; "auto" means it answers in whatever language you speak
+        body: JSON.stringify({ accepted_notice: accepted, room: resumeRoom ?? null, language: choice, ui_language: lang }),
       });
       if (!res.ok) {
         const detail = (await res.json().catch(() => ({}))).detail;
         throw new Error(
-          detail ?? (res.status >= 500 ? "Can't reach the RepairMind server. Is the token server running?" : `Error ${res.status}`),
+          detail ?? (res.status >= 500 ? t("common.serverDown") : t("common.error", { n: res.status })),
         );
       }
       const body = await res.json();

@@ -25,11 +25,12 @@ from pydantic import BaseModel
 log = logging.getLogger("repairmind.checker")
 
 Provider = Literal["anthropic", "gemini"]
-Purpose = Literal["review", "vision", "design"]
+Purpose = Literal["review", "vision", "design", "translate"]
 
 ANTHROPIC_MODEL = {"review": os.getenv("RMX_REVIEW_MODEL", "claude-opus-5-5"),
                    "vision": os.getenv("RMX_VISION_MODEL", "claude-opus-5-5"),
-                   "design": os.getenv("RMX_DESIGN_MODEL", "claude-opus-5-5")}
+                   "design": os.getenv("RMX_DESIGN_MODEL", "claude-opus-5-5"),
+                   "translate": os.getenv("RMX_TRANSLATE_MODEL", "claude-opus-5-5")}
 GEMINI_MODEL = os.getenv("RMX_GEMINI_CHECK_MODEL", "gemini-3.5-flash")
 
 

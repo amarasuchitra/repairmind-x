@@ -959,3 +959,36 @@ html.sx-snap { scroll-snap-type: y proximity; }
 .anat-pin .halo { fill: none; stroke: #46e2ff; stroke-width: 1.2; animation: anat-ping 1.8s ease-out infinite; transform-origin: center; transform-box: fill-box; }
 @keyframes anat-ping { from { transform: scale(0.4); opacity: 1; } to { transform: scale(2.2); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .anat [data-asm], .anat-pin g { transition: none; } .anat-pin .halo { animation: none; } }
+
+/* ---- language picker and non-Latin scripts ---- */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.lang-pick { position: relative; display: inline-flex; align-items: center; gap: 6px; color: #a9b9d4; padding: 0 2px; }
+.lang-pick select {
+  appearance: none; -webkit-appearance: none; background: rgba(8, 14, 28, 0.55); color: inherit;
+  border: 1px solid rgba(169, 185, 212, 0.28); border-radius: 999px; padding: 6px 26px 6px 10px;
+  font: 500 0.8rem/1.2 var(--sans); max-width: 11.5rem; text-overflow: ellipsis; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 13px) 52%, calc(100% - 9px) 52%; background-size: 4px 4px; background-repeat: no-repeat;
+}
+.lang-pick select:hover, .lang-pick select:focus-visible { color: #fff; border-color: rgba(169, 185, 212, 0.6); outline: none; }
+.lang-pick option { background: #0b1324; color: #e7edf7; }
+.hud-top-r { display: flex; align-items: center; gap: 10px; }
+.hud .lang-pick select { font-family: var(--mono); font-size: 0.72rem; border-color: var(--glass-line); }
+.lab-lang { margin-left: auto; color: inherit; }
+.lab-lang select { background-color: transparent; }
+.sx-lang { opacity: 0.8; }
+@media (max-width: 720px) {
+  .lang-pick select { max-width: 7.5rem; padding-right: 22px; }
+  .hud-top-r { gap: 6px; }
+}
+/* Devanagari, Tamil, Arabic and other non-Latin scripts: letter spacing breaks joined letters, and
+   uppercase has no meaning, so headings keep their weight but drop the tracking. */
+html[data-script="other"] body * { letter-spacing: normal !important; }
+html[data-script="other"] .sx-h, html[data-script="other"] .sx-h1 { line-height: 1.25; }
+html[dir="rtl"] .lang-pick select { padding: 6px 10px 6px 26px; background-position: 13px 52%, 9px 52%; }
+.sx-links a { white-space: nowrap; }
+@media (max-width: 1180px) { .sx-links { gap: 16px; } }
+/* the script's own font after the Latin ones, so English words and numbers keep the house style */
+html[data-script="other"] body, html[data-script="other"] body * {
+  font-family: "Inter Tight", "Inter", var(--script-font, system-ui), system-ui, sans-serif !important;
+}

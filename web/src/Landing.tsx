@@ -8,6 +8,8 @@ import { Showroom } from "./fx/showroom/Showroom";
 import { Arrow } from "./ui/Icons";
 import { RingMark, Wordmark } from "./ui/RingMark";
 import { sound } from "./fx/sound";
+import { LanguagePicker, useI18n } from "./i18n";
+import type { Key } from "./i18n/en";
 
 export interface LandingProps {
   accepted: boolean;
@@ -26,17 +28,12 @@ export interface LandingProps {
   onSignOut: () => void;
 }
 
-const CHAPTERS = ["Overview", "Show it", "Talk it through", "Fix it", "Start"] as const;
+const CHAPTERS: Key[] = ["start.ch.overview", "start.ch.show", "start.ch.talk", "start.ch.fix", "start.ch.start"];
 const START = 4;
 /** How fast the record turns in each chapter's shot (matches the 3D scene), for the vinyl crackle. */
 const SPIN = [3.5, 0.4, 2.2, 0, 2];
 
-const NOTICE = [
-  { k: "Control", t: "The mechanic gives guidance, not a guarantee. You stay in control of every step." },
-  { k: "Limits", t: "It refuses dangerous jobs (microwave internals, mains wiring, gas, airbags, brakes, refrigerant, high-voltage or swollen batteries) and points you to a professional." },
-  { k: "Stop", t: "If you see smoke or sparks, smell gas or burning, or get hurt: stop and step away.", alert: true },
-  { k: "Privacy", t: "Your camera and microphone are streamed to the AI during the call. Video is not recorded." },
-];
+const NOTICE: { id: string; alert?: boolean }[] = [{ id: "control" }, { id: "limits" }, { id: "stop", alert: true }, { id: "privacy" }];
 
 /** A label pinned to a point on the 3D model. `side` says which way the leader line runs. */
 function Tag({ at, side = "r", k, children, minor }: { at: string; side?: "l" | "r"; k: string; children: ReactNode; minor?: boolean }) {
@@ -62,17 +59,19 @@ function Head({ i, kicker, children }: { i: number; kicker: string; children: Re
 
 /** Header switch for the sound design: four bars that move while sound is on. */
 function SoundSwitch() {
+  const { t } = useI18n();
   const [on, setOn] = useState(sound.enabled);
   useEffect(() => sound.subscribe(setOn), []);
   return (
-    <button className={`sx-sound${on ? " on" : ""}`} onClick={() => sound.toggle()} aria-pressed={on} aria-label={on ? "Sound on. Turn sound off" : "Sound off. Turn sound on"}>
+    <button className={`sx-sound${on ? " on" : ""}`} onClick={() => sound.toggle()} aria-pressed={on} aria-label={on ? t("start.sound.onAria") : t("start.sound.offAria")}>
       <span className="eq" aria-hidden><i /><i /><i /><i /></span>
-      <span className="t" aria-hidden>{on ? "Sound" : "Muted"}</span>
+      <span className="t" aria-hidden>{on ? t("start.sound.on") : t("start.sound.off")}</span>
     </button>
   );
 }
 
 export function Landing(p: LandingProps) {
+  const { t, tn, choice, language } = useI18n();
   const [ch, setCh] = useState(0);
   const prevCh = useRef(0);
   const hovered = useRef<Element | null>(null);
@@ -202,21 +201,21 @@ export function Landing(p: LandingProps) {
         <div ref={labels} className="sx-labels">
           <div key={ch}>
           {ch === 1 && <>
-            <Tag at="model" k="Identified" side="l">EX-TT20 · 94%</Tag>
-            <Tag at="tonearm" k="Tonearm">Static balance</Tag>
-            <Tag at="speed" k="Controls" side="l" minor>33⅓ / 45 rpm</Tag>
+            <Tag at="model" k={t("start.tag.identified")} side="l">EX-TT20 · 94%</Tag>
+            <Tag at="tonearm" k={t("start.tag.tonearm")}>{t("start.tag.tonearm.v")}</Tag>
+            <Tag at="speed" k={t("start.tag.controls")} side="l" minor>33⅓ / 45 rpm</Tag>
           </>}
           {ch === 2 && <>
-            <Tag at="platter" k="Cause 1 · 88%">Worn drive belt</Tag>
-            <Tag at="pulley" k="Cause 2 · 8%" side="l">Dirty motor pulley</Tag>
-            <Tag at="speed" k="Cause 3 · 4%" minor>Speed setting</Tag>
+            <Tag at="platter" k={`${t("start.tag.cause", { n: 1 })} · 88%`}>{t("start.cause.belt")}</Tag>
+            <Tag at="pulley" k={`${t("start.tag.cause", { n: 2 })} · 8%`} side="l">{t("start.cause.pulley")}</Tag>
+            <Tag at="speed" k={`${t("start.tag.cause", { n: 3 })} · 4%`} minor>{t("start.cause.speed")}</Tag>
           </>}
           {ch === 3 && <>
             <div className="sx-lock" data-anchor="pulley" data-r="0.14"><i /><i /><i /><i />
               <svg className="sx-turn" viewBox="0 0 100 100"><path d="M78 30A36 36 0 1 1 30 22" /><path d="M24 12l6 10-11 3" /></svg>
             </div>
-            <Tag at="pulley" k="Step 3 · Now" side="l">Loop the belt over the pulley</Tag>
-            <Tag at="record" k="Step 2 · Done" side="l">Platter lifted off</Tag>
+            <Tag at="pulley" k={t("start.tag.stepNow")} side="l">{t("start.tag.loop")}</Tag>
+            <Tag at="record" k={t("start.tag.stepDone")} side="l">{t("start.tag.lifted")}</Tag>
           </>}
           </div>
         </div>
@@ -226,127 +225,129 @@ export function Landing(p: LandingProps) {
       </div>
 
       <header className="sx-top">
-        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); go(0); }} aria-label="RepairMind X, back to top">
+        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); go(0); }} aria-label={t("start.backTop")}>
           <Wordmark />
         </a>
-        <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{CHAPTERS[ch]}</em></span>
+        <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{t(CHAPTERS[ch])}</em></span>
         <nav className="sx-links">
+          <LanguagePicker />
           <SoundSwitch />
-          <a href="#lab" onClick={(e) => { e.preventDefault(); p.onLab(); }}>Design lab</a>
-          <a href="#redesign" onClick={(e) => { e.preventDefault(); p.onRedesign(); }}>Redesign a part</a>
-          <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>Bulk inspection</a>
-          <button className="x-btn x-btn-line sx-cta" onClick={() => go(START)}>Start a repair <Arrow size={16} /></button>
+          <a href="#lab" onClick={(e) => { e.preventDefault(); p.onLab(); }}>{t("start.nav.lab")}</a>
+          <a href="#redesign" onClick={(e) => { e.preventDefault(); p.onRedesign(); }}>{t("start.nav.redesign")}</a>
+          <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>{t("start.nav.inspect")}</a>
+          <button className="x-btn x-btn-line sx-cta" onClick={() => go(START)}>{t("start.cta")} <Arrow size={16} /></button>
         </nav>
       </header>
 
       <main className="sx-flow">
-        <section ref={sec(0)} className="sx-sec sx-sec-l sx-hero" aria-label="Overview">
+        <section ref={sec(0)} className="sx-sec sx-sec-l sx-hero" aria-label={t("start.ch.overview")}>
           <div className="sx-col">
             <div data-a><RingMark size={170} /></div>
-            <span className="sx-kicker" data-a>Live video repair</span>
-            <h1 className="sx-h sx-h1" data-a>Every machine has a solution.</h1>
-            <p className="sx-p" data-a>Point your phone at the problem and talk. The mechanic sees what you see, marks the exact part on your screen and walks you through the fix, one checked step at a time.</p>
+            <span className="sx-kicker" data-a>{t("start.kicker")}</span>
+            <h1 className="sx-h sx-h1" data-a>{t("start.h1")}</h1>
+            <p className="sx-p" data-a>{t("start.lede")}</p>
             <div className="sx-actions" data-a>
-              <button className="x-btn x-btn-solid" onClick={() => go(START)}>Start a repair <Arrow size={18} /></button>
-              <button className="x-btn x-btn-ghost" onClick={() => go(1)}>See how it works</button>
+              <button className="x-btn x-btn-solid" onClick={() => go(START)}>{t("start.cta")} <Arrow size={18} /></button>
+              <button className="x-btn x-btn-ghost" onClick={() => go(1)}>{t("start.how")}</button>
             </div>
             <dl className="sx-specrow" data-a>
-              <div><dt>Vision</dt><dd>Live camera, AR</dd></div>
-              <div><dt>Voice</dt><dd>Natural, two-way</dd></div>
-              <div><dt>Safety</dt><dd>Cross-checked</dd></div>
+              <div><dt>{t("start.spec.vision")}</dt><dd>{t("start.spec.vision.v")}</dd></div>
+              <div><dt>{t("start.spec.voice")}</dt><dd>{t("start.spec.voice.v")}</dd></div>
+              <div><dt>{t("start.spec.safety")}</dt><dd>{t("start.spec.safety.v")}</dd></div>
             </dl>
           </div>
-          <span className="sx-scroll" aria-hidden><i />Scroll</span>
+          <span className="sx-scroll" aria-hidden><i />{t("start.scroll")}</span>
         </section>
 
-        <section ref={sec(1)} className="sx-sec sx-sec-r" aria-label="Show it">
+        <section ref={sec(1)} className="sx-sec sx-sec-r" aria-label={t("start.ch.show")}>
           <div className="sx-col">
-            <Head i={1} kicker="Step one">Show it.</Head>
-            <p className="sx-p" data-a>Point your camera at the device. The mechanic reads its shape and label, names the make and model, and asks to see the label when it isn't sure.</p>
+            <Head i={1} kicker={t("start.step1")}>{t("start.show.h")}</Head>
+            <p className="sx-p" data-a>{t("start.show.p")}</p>
             <aside className="sx-panel" data-a>
-              <h3 className="sx-ph">Identification <span className="ok">Confirmed</span></h3>
+              <h3 className="sx-ph">{t("start.show.panel")} <span className="ok">{t("start.show.confirmed")}</span></h3>
               <dl className="sx-rows">
-                <div><dt>Device</dt><dd>Belt-drive turntable</dd></div>
-                <div><dt>Model</dt><dd>EX-TT20</dd></div>
-                <div><dt>Label</dt><dd>Read from the back panel</dd></div>
+                <div><dt>{t("start.show.device")}</dt><dd>{t("start.show.device.v")}</dd></div>
+                <div><dt>{t("start.show.model")}</dt><dd>EX-TT20</dd></div>
+                <div><dt>{t("start.show.label")}</dt><dd>{t("start.show.label.v")}</dd></div>
               </dl>
-              <div className="sx-meter"><span>Match</span><b>94%</b><i style={{ ["--v" as string]: 0.94 }} /></div>
+              <div className="sx-meter"><span>{t("start.show.match")}</span><b>94%</b><i style={{ ["--v" as string]: 0.94 }} /></div>
             </aside>
           </div>
         </section>
 
-        <section ref={sec(2)} className="sx-sec sx-sec-l" aria-label="Talk it through">
+        <section ref={sec(2)} className="sx-sec sx-sec-l" aria-label={t("start.ch.talk")}>
           <div className="sx-col">
-            <Head i={2} kicker="Step two">Talk it through.</Head>
-            <p className="sx-p" data-a>Describe the fault in your own words. It asks a few sharp questions, ranks the likely causes and tells you how sure it is.</p>
+            <Head i={2} kicker={t("start.step2")}>{t("start.talk.h")}</Head>
+            <p className="sx-p" data-a>{t("start.talk.p")}</p>
             <aside className="sx-panel" data-a>
               <div className="sx-voice">
                 <div className="sx-orb"><VoiceOrb state="speaking" bands={[]} voice={voice} size={88} /></div>
                 <div className="sx-lines">
-                  <p className="me"><b>You</b>It plays slow and the music wobbles.</p>
-                  <p className="ai"><b>Mechanic</b>That sounds like the belt. Does it reach speed if you nudge the platter?</p>
+                  <p className="me"><b>{t("start.talk.you")}</b>{t("start.talk.youSaid")}</p>
+                  <p className="ai"><b>{t("start.talk.mechanic")}</b>{t("start.talk.mechSaid")}</p>
                 </div>
               </div>
-              <h4 className="sx-sub">Likely causes</h4>
+              <h4 className="sx-sub">{t("start.talk.causes")}</h4>
               <ol className="sx-bars">
-                {[["Worn drive belt", 0.88], ["Dirty motor pulley", 0.08], ["Wrong speed setting", 0.04]].map(([t, v]) => (
-                  <li key={t as string}><span>{t}</span><b>{Math.round((v as number) * 100)}%</b><i style={{ ["--v" as string]: v as number }} /></li>
+                {[[t("start.cause.belt"), 0.88], [t("start.cause.pulley"), 0.08], [t("start.cause.speed"), 0.04]].map(([c, v]) => (
+                  <li key={c as string}><span>{c}</span><b>{Math.round((v as number) * 100)}%</b><i style={{ ["--v" as string]: v as number }} /></li>
                 ))}
               </ol>
             </aside>
           </div>
         </section>
 
-        <section ref={sec(3)} className="sx-sec sx-sec-r" aria-label="Fix it">
+        <section ref={sec(3)} className="sx-sec sx-sec-r" aria-label={t("start.ch.fix")}>
           <div className="sx-col">
-            <Head i={3} kicker="Step three">Fix it.</Head>
-            <p className="sx-p" data-a>Each step is marked on your live video. A second AI checks every risky instruction, and anything that can't be undone waits for your OK.</p>
+            <Head i={3} kicker={t("start.step3")}>{t("start.fix.h")}</Head>
+            <p className="sx-p" data-a>{t("start.fix.p")}</p>
             <aside className="sx-panel" data-a>
-              <h3 className="sx-ph">Step 3 of 4</h3>
-              <p className="sx-step">Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon.</p>
-              <ul className="sx-chips"><li>Cross-checked</li><li>Manual, p. 9</li><li>Waits for your OK</li></ul>
+              <h3 className="sx-ph">{t("start.fix.stepOf")}</h3>
+              <p className="sx-step">{t("start.fix.step")}</p>
+              <ul className="sx-chips"><li>{t("start.fix.chip.checked")}</li><li>{t("start.fix.chip.manual")}</li><li>{t("start.fix.chip.waits")}</li></ul>
               <ol className="sx-steps">
-                <li className="done">Unplug the turntable</li>
-                <li className="done">Lift the platter off</li>
-                <li className="active">Fit the new belt</li>
-                <li>Check the speed</li>
+                <li className="done">{t("start.fix.s1")}</li>
+                <li className="done">{t("start.fix.s2")}</li>
+                <li className="active">{t("start.fix.s3")}</li>
+                <li>{t("start.fix.s4")}</li>
               </ol>
             </aside>
           </div>
         </section>
 
-        <section ref={sec(4)} className="sx-sec sx-sec-l sx-start" aria-label="Start">
+        <section ref={sec(4)} className="sx-sec sx-sec-l sx-start" aria-label={t("start.ch.start")}>
           <div className="sx-col">
-            <Head i={4} kicker="Before you start">Ready when you are.</Head>
-            <p className="sx-p" data-a>Read this once. The mechanic holds itself to the same rules for the whole call.</p>
+            <Head i={4} kicker={t("start.before")}>{t("start.ready.h")}</Head>
+            <p className="sx-p" data-a>{t("start.ready.p")}</p>
             <aside className="sx-panel sx-panel-solid" data-a>
-              <h3 className="sx-ph">Safety notice</h3>
+              <h3 className="sx-ph">{t("start.notice.h")}</h3>
               <ol className="sx-notice">
                 {NOTICE.map((x) => (
-                  <li key={x.k} className={x.alert ? "alert" : ""}><span className="k">{x.k}</span><span className="t">{x.t}</span></li>
+                  <li key={x.id} className={x.alert ? "alert" : ""}><span className="k">{t(`start.notice.${x.id}.k` as Key)}</span><span className="t">{t(`start.notice.${x.id}` as Key)}</span></li>
                 ))}
               </ol>
               <div className="sx-consent">
                 <label className="x-check">
                   <input type="checkbox" checked={p.accepted} onChange={(e) => { sound.confirm(e.target.checked); p.setAccepted(e.target.checked); }} />
                   <span className="box" aria-hidden />
-                  <span>I understand and want to continue</span>
+                  <span>{t("start.consent")}</span>
                 </label>
                 <div className="sx-go">
                   <button className="x-btn x-btn-solid" disabled={!p.accepted || p.loading} onClick={() => { sound.launch(); p.onStart(); }}>
-                    {p.loading ? "Connecting…" : "Start AI Mechanic"} <Arrow size={18} />
+                    {p.loading ? t("start.connecting") : t("start.go")} <Arrow size={18} />
                   </button>
                   {p.lastRoom && (
-                    <button className="x-btn x-btn-line" disabled={!p.accepted || p.loading} onClick={() => { sound.launch(); p.onStart(p.lastRoom!); }}>Resume last repair</button>
+                    <button className="x-btn x-btn-line" disabled={!p.accepted || p.loading} onClick={() => { sound.launch(); p.onStart(p.lastRoom!); }}>{t("start.resume")}</button>
                   )}
                 </div>
+                <p className="sx-who sx-lang">{choice === "auto" ? t("start.callLangAuto") : t("start.callLang", { name: language.name })}</p>
                 {p.error && <p className="x-error" role="alert">{p.error}</p>}
                 <p className="sx-who">
                   {p.profile && !p.profile.guest
-                    ? <>Signed in as <b>{p.profile.name}</b> · <button type="button" onClick={p.onSignOut}>Sign out</button></>
+                    ? <>{tn("start.signedIn", { name: <b>{p.profile.name}</b> })} · <button type="button" onClick={p.onSignOut}>{t("start.signOut")}</button></>
                     : p.profile?.guest
-                      ? <>Continuing as a guest · <button type="button" onClick={p.onSignOut}>Sign in</button></>
-                      : <>You'll sign in quickly before the call starts.</>}
+                      ? <>{t("start.guest")} · <button type="button" onClick={p.onSignOut}>{t("start.signIn")}</button></>
+                      : <>{t("start.willSignIn")}</>}
                 </p>
               </div>
             </aside>
@@ -354,11 +355,11 @@ export function Landing(p: LandingProps) {
         </section>
       </main>
 
-      <nav className="sx-rail" aria-label="Chapters">
+      <nav className="sx-rail" aria-label={t("start.chapters")}>
         <span className="sx-rail-bar"><span ref={bar} /></span>
         {CHAPTERS.map((c, i) => (
-          <button key={c} className={i === ch ? "on" : ""} aria-current={i === ch ? "step" : undefined} onClick={() => go(i)} aria-label={c}>
-            <span className="no">{n(i)}</span><span className="lb">{c}</span>
+          <button key={c} className={i === ch ? "on" : ""} aria-current={i === ch ? "step" : undefined} onClick={() => go(i)} aria-label={t(c)}>
+            <span className="no">{n(i)}</span><span className="lb">{t(c)}</span>
           </button>
         ))}
       </nav>

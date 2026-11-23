@@ -5,6 +5,7 @@ Run:  uvicorn repairmind.token_server:app --port 8000
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import secrets
@@ -16,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from livekit import api
 from pydantic import BaseModel
 
+from . import i18n
 from .agent import AGENT_NAME, SESSIONS_DIR
 from .expert import products as expert_products
 from .inspection.api import router as inspection_router
@@ -41,6 +43,10 @@ class TokenRequest(BaseModel):
     room: str | None = None
     name: str = "Technician"
     accepted_notice: bool = False
+    # Language the mechanic speaks: a code such as "hi" or "ta", or "auto" to answer in whatever the user speaks.
+    language: str = "auto"
+    # The app's display language, used to greet in the right language when `language` is "auto".
+    ui_language: str = ""
 
 
 class TokenResponse(BaseModel):
@@ -57,6 +63,7 @@ def health() -> dict:
 app.include_router(inspection_router)
 app.include_router(lab_router)
 app.include_router(redesign_router)
+app.include_router(i18n.api_router())
 
 
 @app.get("/api/products")
@@ -98,7 +105,11 @@ def token(req: TokenRequest) -> TokenResponse:
         .with_ttl(timedelta(hours=2))
         .with_grants(api.VideoGrants(room_join=True, room=room, can_publish=True, can_subscribe=True,
                                      can_publish_data=True))
-        .with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(agent_name=AGENT_NAME)]))
+        .with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(
+            agent_name=AGENT_NAME,
+            metadata=json.dumps({"language": i18n.normalize(req.language) or "auto",
+                                 "ui_language": i18n.normalize(req.ui_language)}),
+        )]))
         .to_jwt()
     )
     return TokenResponse(server_url=url, participant_token=jwt, room=room)
