@@ -439,6 +439,32 @@ class Mechanic(Agent):
         return await self._done(self.state.hazard(detail))
 
     @function_tool
+    async def record_failed_part(self, context: RunContext, part: str, function: str, failure_mode: str,
+                                 certainty: str, observations: list[str], material: str = "",
+                                 material_source: str = "", dimension_names: list[str] | None = None,
+                                 dimension_values: list[str] | None = None, load_names: list[str] | None = None,
+                                 load_values: list[str] | None = None) -> str:
+        """Record a broken physical part so the user can redesign it afterwards in the design lab.
+
+        Args:
+            part: The part that failed, e.g. "door hinge clip".
+            function: What it has to do, e.g. "hold the door shut against the seal".
+            failure_mode: overload_fracture, fatigue, wear, corrosion, thermal, creep, buckling, electrical or unknown.
+            certainty: "seen" if the break surface shows it on camera, otherwise "suspected".
+            observations: What you see on the part, e.g. "crack starts at the screw hole".
+            material: Material if known, e.g. "ABS plastic".
+            material_source: "label", "user" or "estimated".
+            dimension_names: Names of measured sizes, e.g. ["length", "wall thickness"].
+            dimension_values: Same order, each with a unit, e.g. ["42 mm", "2 mm"].
+            load_names: Names of loads or conditions, e.g. ["door closing force", "max temperature"].
+            load_values: Same order, each with a unit, e.g. ["20 N", "60 °C"].
+        """
+        dims = [{"name": n, "value": v, "source": "user"} for n, v in zip(dimension_names or [], dimension_values or [])]
+        loads = [{"name": n, "value": v, "source": "estimated"} for n, v in zip(load_names or [], load_values or [])]
+        return await self._done(self.state.record_failed_part(part, function, failure_mode, certainty, observations,
+                                                              material, material_source, dims, loads))
+
+    @function_tool
     async def clear_hazard(self, context: RunContext, user_words: str) -> str:
         """Only after the user clearly says the danger is gone and you have re-checked the scene."""
         return await self._done(self.state.clear_hazard(user_words))

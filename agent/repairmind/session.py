@@ -106,6 +106,7 @@ class RepairSession:
 
     steps: list[Step] = field(default_factory=list)
     expert_product_id: str = ""
+    failed_part: dict = field(default_factory=dict)  # for the redesign brief; see record_failed_part
     reviews: dict = field(default_factory=dict)  # normalised step text -> {"status", "reason"}
     review_required: bool = True
     hazard_stop: str = ""
@@ -227,6 +228,44 @@ class RepairSession:
                               "low_confidence")
         return GateResult(True, f"Diagnosis recorded ({confidence:.2f}). Explain it to the user: what you think, "
                           "why, and how sure you are, before proposing any step.")
+
+    # ------------------------------------------------------------ redesign
+    def record_failed_part(self, part: str, function: str, failure_mode: str, certainty: str,
+                           observations: list[str], material: str = "", material_source: str = "",
+                           dimensions: list[dict] | None = None, operating: list[dict] | None = None) -> GateResult:
+        """Note the broken part for a redesign brief. Sizes and loads must carry units."""
+        from .redesign import failure_modes, units  # local: keeps the call's import path unchanged
+
+        if not part.strip():
+            return GateResult(False, "Say which part failed.", "missing_part")
+        if failure_mode not in failure_modes.BY_ID and failure_mode != failure_modes.UNKNOWN:
+            return GateResult(False, "failure_mode must be one of: " + ", ".join(failure_modes.BY_ID)
+                              + ", unknown.", "bad_mode")
+        bad: list[str] = []
+        kept: dict[str, list[dict]] = {"dimensions": [], "operating": []}
+        for key, items, expect in (("dimensions", dimensions or [], "length"), ("operating", operating or [], None)):
+            for d in items:
+                name, value = str(d.get("name", "")).strip()[:80], str(d.get("value", "")).strip()[:40]
+                try:
+                    units.parse(value, expect=expect)
+                except units.UnitError as e:
+                    bad.append(f"{name or 'value'}: {e}")
+                    continue
+                kept[key].append({"name": name or "value", "value": value,
+                                  "source": d.get("source", "") if d.get("source") in
+                                  ("measured", "label", "spec", "user", "estimated") else ""})
+        self.failed_part = {
+            "part": part.strip()[:120], "function": function.strip()[:400], "failure_mode": failure_mode,
+            "certainty": "seen" if certainty == "seen" else "suspected",
+            "observations": [o[:300] for o in observations][:10], "material": material.strip()[:80],
+            "material_source": material_source if material_source in ("label", "user", "estimated") else "",
+            **kept,
+        }
+        self._record("failed_part", part=part, mode=failure_mode)
+        msg = "Broken part recorded for a redesign brief."
+        if bad:
+            msg += " These values were left out because of their units, ask again with a unit: " + "; ".join(bad)
+        return GateResult(True, msg, data={"skipped": bad} if bad else {})
 
     # ------------------------------------------------------------ precautions
     def confirm_precaution(self, precaution_id: str, verified_on_camera: bool) -> GateResult:
