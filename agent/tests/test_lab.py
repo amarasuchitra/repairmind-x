@@ -11,7 +11,7 @@ from repairmind import checker, token_server
 from repairmind.lab import designer
 from repairmind.lab.schema import Design, Revision
 
-EXAMPLES = json.loads((Path(__file__).parent / "data" / "lab_examples.json").read_text())
+EXAMPLES = json.loads((Path(__file__).parent / "data" / "lab_examples.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture

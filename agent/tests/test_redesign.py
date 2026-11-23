@@ -146,7 +146,7 @@ def test_library_keeps_no_personal_text(tmp_path):
     b = good_brief(id=briefs.new_id(), room="rmx-abcdef123456", observations=["my name is Asha, 12 MG Road"])
     rec = library.add(tmp_path, b)
     assert "room" not in rec and "observations" not in rec
-    assert "Asha" not in (tmp_path / "failure_library.jsonl").read_text()
+    assert "Asha" not in (tmp_path / "failure_library.jsonl").read_text(encoding="utf-8")
 
 
 def test_library_search_stats_outcome(tmp_path):

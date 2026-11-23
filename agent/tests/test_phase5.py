@@ -36,10 +36,10 @@ def png(level: int, size=(32, 24)) -> bytes:
 def product_dir(tmp_path, monkeypatch):
     d = tmp_path / "products" / "example-desk-fan"
     shutil.copytree(EXAMPLE, d)
-    raw = yaml.safe_load((d / "product.yaml").read_text())
+    raw = yaml.safe_load((d / "product.yaml").read_text(encoding="utf-8"))
     raw["detector"] = {"backend": "anomalib", "weights": "detector/model.pt", "threshold_good": 0.3,
                        "threshold_defective": 0.7}
-    (d / "product.yaml").write_text(yaml.safe_dump(raw))
+    (d / "product.yaml").write_text(yaml.safe_dump(raw), encoding="utf-8")
     monkeypatch.setattr(products, "PRODUCTS_DIR", tmp_path / "products")
     products.load_all.cache_clear()
     yield d

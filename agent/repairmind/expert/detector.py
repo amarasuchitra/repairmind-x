@@ -144,7 +144,7 @@ class ResNetAEBackend:
         self.ae.load_state_dict(torch.load(weights / "autoencoder_best.pth", map_location="cpu"))
         self.clf.eval()
         self.ae.eval()
-        self.ae_threshold = float((weights / "ae_threshold.txt").read_text().strip().splitlines()[-1])
+        self.ae_threshold = float((weights / "ae_threshold.txt").read_text(encoding="utf-8").strip().splitlines()[-1])
         self.defective_idx = 0  # class_mapping {'defective': 0, 'good': 1}
         self.norm = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor(),
                                         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
