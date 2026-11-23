@@ -17,7 +17,6 @@ function takeBrief(): { idea: string; context: string } | null {
   try {
     const raw = sessionStorage.getItem(BRIEF_KEY);
     if (!raw) return null;
-    sessionStorage.removeItem(BRIEF_KEY);
     const b = JSON.parse(raw);
     return { idea: String(b.idea ?? "").slice(0, 4000), context: String(b.context ?? "").slice(0, 4000) };
   } catch {
@@ -76,6 +75,10 @@ export function Lab({ onBack }: { onBack: () => void }) {
   const [overrides, setOverrides] = useState<Record<string, number>>({});
   const [tab, setTab] = useState<Tab>("Overview");
   const [brief] = useState(takeBrief);
+  // forget the hand-off once read (in an effect, so StrictMode's double initialiser still sees it)
+  useEffect(() => {
+    try { sessionStorage.removeItem(BRIEF_KEY); } catch { /* nothing to forget */ }
+  }, []);
   const [idea, setIdea] = useState(brief?.idea ?? "");
   const [context, setContext] = useState(brief?.context ?? "");
   const [note, setNote] = useState("");
