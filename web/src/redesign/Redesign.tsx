@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import "../lab/lab.css";
 import "./redesign.css";
+import { Attachments, MicButton, type AttachmentInfo } from "../lab/inputs.tsx";
 import {
   api, BRIEF_ID_KEY, EMPTY_BRIEF, LAB_BRIEF_KEY, LAST_CALL_KEY, read, store,
   type Check, type DesignBrief, type FailureMode, type LibraryRecord, type LibraryStats, type Measure, type Outcome,
@@ -11,6 +12,14 @@ const SOURCES: { v: Measure["source"]; label: string }[] = [
   { v: "measured", label: "measured" }, { v: "label", label: "from label" }, { v: "spec", label: "from spec" },
   { v: "user", label: "user said" }, { v: "estimated", label: "estimate" },
 ];
+/** This page's attachments survive a reload in this tab; they go to the design lab, never the failure library. */
+const ATT_KEY = "rmx.redesign.attachments";
+function readAtt(): AttachmentInfo[] {
+  try { return JSON.parse(sessionStorage.getItem(ATT_KEY) ?? "[]"); } catch { return []; }
+}
+function writeAtt(a: AttachmentInfo[]) {
+  try { sessionStorage.setItem(ATT_KEY, JSON.stringify(a)); } catch { /* not kept across reloads; fine */ }
+}
 const OUTCOME_LABEL: Record<Outcome, string> = { pending: "Not known yet", holding: "Fix is holding", failed_again: "Failed again" };
 
 /** Turn a repair call into a checked design brief, send it to the design lab, and keep a failure library. */
@@ -24,6 +33,12 @@ export function Redesign({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const lastRoom = read(LAST_CALL_KEY);
+  const [files, setFilesState] = useState<AttachmentInfo[]>(readAtt);
+  const [canHear, setCanHear] = useState(false);
+  const setFiles = (a: AttachmentInfo[]) => { setFilesState(a); writeAtt(a); };
+  useEffect(() => {
+    api<{ media?: boolean }>("/api/lab/status").then((s) => setCanHear(!!s.media)).catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     api<{ modes: FailureMode[] }>("/api/redesign/failure-modes").then((r) => setModes(r.modes)).catch(() =>
@@ -65,7 +80,7 @@ export function Redesign({ onBack }: { onBack: () => void }) {
       take(saved);
       const handoff = await api<{ idea: string; context: string }>(`/api/redesign/briefs/${saved.brief.id}/lab`, {});
       try {
-        sessionStorage.setItem(LAB_BRIEF_KEY, JSON.stringify(handoff));
+        sessionStorage.setItem(LAB_BRIEF_KEY, JSON.stringify({ ...handoff, attachment_ids: files.map((f) => f.id) }));
       } catch {
         throw new Error("This browser blocked the hand-off. Copy the brief into the design lab by hand.");
       }
@@ -175,10 +190,17 @@ export function Redesign({ onBack }: { onBack: () => void }) {
                 </div>
               )}
               <Field label="Diagnosis" value={brief.diagnosis} onChange={(v) => set("diagnosis", v)} long />
+              <MicButton label="Describe it by voice" onText={(t) => set("diagnosis", (brief.diagnosis ? `${brief.diagnosis.trimEnd()} ${t}` : t).slice(0, 400))} />
               {!!brief.observations.length && (
                 <details><summary className="lab-muted">{brief.observations.length} notes from the call</summary>
                   <ul>{brief.observations.map((o, i) => <li key={i}>{o}</li>)}</ul></details>
               )}
+            </fieldset>
+
+            <fieldset className="lab-card">
+              <legend className="lab-kicker">Photos, drawings and files</legend>
+              <small>Photos of the broken part (with a ruler or coin for scale), sketches, the old part's CAD, datasheets or a voice note. They go to the design lab with the brief, never to the failure library.</small>
+              <Attachments items={files} onChange={setFiles} canHearMedia={canHear} compact />
             </fieldset>
 
             <fieldset className="lab-card">

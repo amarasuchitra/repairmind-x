@@ -169,3 +169,5 @@ class Design(BaseModel):
     trl: int = Field(description="Technology readiness level 1-9 of the design as described")
     next_steps: list[str]
     revisions: list[Revision]
+    inputs_used: list[str] = Field(default_factory=list,
+                                   description="One line per attachment (A1, A2, ...): what was taken from it. Empty if none.")

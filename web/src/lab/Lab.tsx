@@ -5,20 +5,22 @@ import { analyze, type Finding } from "./analysis.ts";
 import { EXAMPLES } from "./examples.ts";
 import { SimView, runHeadless } from "./SimView.tsx";
 import { fmt } from "./units.ts";
+import { Attachments, MicButton, fetchAttachments, type AttachmentInfo } from "./inputs.tsx";
 
 const STORE = "rmx.lab.design";
 /**
- * Hand-off from other pages (e.g. a repair call's design brief): put {idea, context} here as JSON in
- * sessionStorage, then open #lab. The lab prefills the form once and removes the key.
+ * Hand-off from other pages (e.g. a repair call's design brief): put {idea, context, attachment_ids?} here as
+ * JSON in sessionStorage, then open #lab. The lab prefills the form once and removes the key.
  */
 export const BRIEF_KEY = "rmx.lab.brief";
 
-function takeBrief(): { idea: string; context: string } | null {
+function takeBrief(): { idea: string; context: string; attachment_ids: string[] } | null {
   try {
     const raw = sessionStorage.getItem(BRIEF_KEY);
     if (!raw) return null;
     const b = JSON.parse(raw);
-    return { idea: String(b.idea ?? "").slice(0, 4000), context: String(b.context ?? "").slice(0, 4000) };
+    const ids = Array.isArray(b.attachment_ids) ? b.attachment_ids.filter((x: unknown) => typeof x === "string").slice(0, 20) : [];
+    return { idea: String(b.idea ?? "").slice(0, 4000), context: String(b.context ?? "").slice(0, 4000), attachment_ids: ids };
   } catch {
     return null;
   }
@@ -55,7 +57,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   return res.json();
 }
 
-interface Status { ready: boolean; model: string | null; lessons: number }
+interface Status { ready: boolean; model: string | null; lessons: number; media?: boolean }
 
 function Health({ findings, simFindings, checking }: { findings: Finding[]; simFindings: Finding[] | null; checking: boolean }) {
   const all = [...findings, ...(simFindings ?? [])];
@@ -81,6 +83,11 @@ export function Lab({ onBack }: { onBack: () => void }) {
   }, []);
   const [idea, setIdea] = useState(brief?.idea ?? "");
   const [context, setContext] = useState(brief?.context ?? "");
+  const [files, setFiles] = useState<AttachmentInfo[]>([]);
+  const [interim, setInterim] = useState("");
+  useEffect(() => {
+    if (brief?.attachment_ids.length) fetchAttachments(brief.attachment_ids).then(setFiles);
+  }, [brief]);
   const [note, setNote] = useState("");
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState("");
@@ -119,7 +126,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
     setError("");
     setBusy("Designing… the engineer is working through requirements, physics and risks (this can take a minute or two).");
     try {
-      const d = await api<Design>("/api/lab/design", { idea, context });
+      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id) });
       load(d);
       setTab("Overview");
     } catch (e) {
@@ -183,10 +190,15 @@ export function Lab({ onBack }: { onBack: () => void }) {
         <aside className="lab-side">
           <section className="lab-card">
             <span className="lab-kicker">New idea</span>
-            <textarea value={idea} onChange={(e) => setIdea(e.target.value)} rows={5}
-              placeholder="Describe what you want to build and why. e.g. A balcony wind turbine that charges a 12 V battery in a city with 4 m/s average wind." />
+            <div className="lab-idea">
+              <textarea value={interim ? `${idea}${idea && !idea.endsWith(" ") ? " " : ""}${interim}` : idea} onChange={(e) => setIdea(e.target.value)} rows={5}
+                aria-label="Your idea"
+                placeholder="Describe what you want to build and why, by typing or speaking. e.g. A balcony wind turbine that charges a 12 V battery in a city with 4 m/s average wind." />
+              <MicButton onInterim={setInterim} onText={(t) => setIdea((v) => (v ? `${v.trimEnd()} ${t}` : t).slice(0, 4000))} />
+            </div>
             <textarea value={context} onChange={(e) => setContext(e.target.value)} rows={2}
               placeholder="Constraints, budget, materials you have, where it will be used (optional)" />
+            <Attachments items={files} onChange={setFiles} canHearMedia={!!status?.media} />
             <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={create}>Design it</button>
             {status && !status.ready && <p className="lab-muted">Set ANTHROPIC_API_KEY or GOOGLE_API_KEY in agent/.env to design new ideas. The worked examples below work without one.</p>}
           </section>
@@ -252,6 +264,12 @@ export function Lab({ onBack }: { onBack: () => void }) {
                 {allFindings.length ? (
                   <ul className="lab-findings">{allFindings.map((f, i) => <li key={i} className={f.severity}><b>{f.where}</b> {f.text}</li>)}</ul>
                 ) : <p className="lab-muted">Nothing found by the checks.</p>}
+                {(design.inputs_used?.length ?? 0) > 0 && (
+                  <>
+                    <h4>From your attachments</h4>
+                    <ul>{design.inputs_used!.map((a) => <li key={a}>{a}</li>)}</ul>
+                  </>
+                )}
                 <h4>Assumptions</h4>
                 <ul>{design.assumptions.map((a) => <li key={a}>{a}</li>)}</ul>
                 <h4>Open questions</h4>
