@@ -25,10 +25,11 @@ from pydantic import BaseModel
 log = logging.getLogger("repairmind.checker")
 
 Provider = Literal["anthropic", "gemini"]
-Purpose = Literal["review", "vision"]
+Purpose = Literal["review", "vision", "design"]
 
 ANTHROPIC_MODEL = {"review": os.getenv("RMX_REVIEW_MODEL", "claude-opus-5-5"),
-                   "vision": os.getenv("RMX_VISION_MODEL", "claude-opus-5-5")}
+                   "vision": os.getenv("RMX_VISION_MODEL", "claude-opus-5-5"),
+                   "design": os.getenv("RMX_DESIGN_MODEL", "claude-opus-5-5")}
 GEMINI_MODEL = os.getenv("RMX_GEMINI_CHECK_MODEL", "gemini-3.5-flash")
 
 
@@ -63,14 +64,14 @@ class Result:
 
 
 async def parse(system: str, frames_b64: list[str], text: str, schema: type[BaseModel], purpose: Purpose,
-                effort: str = "medium", timeout: float = 30.0) -> Result:
+                effort: str = "medium", timeout: float = 30.0, max_tokens: int = 4000) -> Result:
     """One structured call to the configured provider. Never raises: failures come back as errors."""
     p = provider()
     if p is None:
         return Result(None, error="No checking model configured (set GOOGLE_API_KEY or ANTHROPIC_API_KEY).")
     try:
         if p == "anthropic":
-            return await _anthropic(system, frames_b64, text, schema, purpose, effort, timeout)
+            return await _anthropic(system, frames_b64, text, schema, purpose, effort, timeout, max_tokens)
         return await _gemini(system, frames_b64, text, schema, timeout)
     except Exception as e:  # network, quota, bad response: fail closed
         log.warning("%s check failed: %s", p, e)
@@ -78,7 +79,7 @@ async def parse(system: str, frames_b64: list[str], text: str, schema: type[Base
 
 
 async def _anthropic(system: str, frames_b64: list[str], text: str, schema: type[BaseModel], purpose: Purpose,
-                     effort: str, timeout: float) -> Result:
+                     effort: str, timeout: float, max_tokens: int = 4000) -> Result:
     import anthropic
 
     content: list[dict] = [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": f}}
@@ -87,7 +88,7 @@ async def _anthropic(system: str, frames_b64: list[str], text: str, schema: type
     client = anthropic.AsyncAnthropic(timeout=timeout, max_retries=1)
     try:
         resp = await client.messages.parse(
-            model=ANTHROPIC_MODEL[purpose], max_tokens=4000, system=system,
+            model=ANTHROPIC_MODEL[purpose], max_tokens=max_tokens, system=system,
             output_config={"effort": effort}, messages=[{"role": "user", "content": content}],
             output_format=schema,
         )

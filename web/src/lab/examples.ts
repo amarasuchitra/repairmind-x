@@ -1,0 +1,236 @@
+/**
+ * Worked designs that ship with the app, so the lab is useful with no server or API key. Each one is a
+ * complete breakdown whose simulation reproduces at least one of its own hand calculations.
+ */
+
+import type { Check, Design, SimBody, SimJoint } from "./design.ts";
+
+const none: Check = { kind: "none", limit: 0, limit_unit: "", factor_of_safety: 1, label: "" };
+const body = (b: Partial<SimBody> & Pick<SimBody, "id" | "shape" | "size" | "position">): SimBody => ({
+  label: b.id, rotation_deg: [0, 0, 0], fixed: false, mass_kg: 1, mass_symbol: "", friction: 0.7, restitution: 0.05,
+  initial_velocity: [0, 0, 0], color: "", ...b,
+});
+const joint = (j: Partial<SimJoint> & Pick<SimJoint, "kind" | "a" | "b">): SimJoint => ({
+  anchor_a: [0, 0, 0], anchor_b: [0, 0, 0], axis: [0, 0, 1], motor_speed: 0, motor_max_torque: 0, stiffness: 0,
+  damping: 0, rest_length: 0, stiffness_symbol: "", ...j,
+});
+
+const rover: Design = {
+  title: "Four-wheel inspection rover",
+  idea: "A small battery rover that can carry a camera up a 10 degree ramp in a factory.",
+  summary: "A 10 kg skid-steer rover with four direct-drive hub motors. The governing case is climbing the 10° ramp at 0.5 m/s: each wheel must supply about 0.55 N·m, so a 2 N·m motor has margin even with a factor of safety of 2.",
+  objective: "Carry a 1 kg camera payload at walking-pace inspection speed and climb the plant's 10° ramps.",
+  operating_context: "Indoor concrete floors and steel ramps, 5 to 40 °C, dust, occasional oil films that lower friction.",
+  constraints: ["Mass at most 12 kg so one person can lift it", "Fits a 0.7 m × 0.5 m footprint", "24 V battery bus"],
+  requirements: [
+    { id: "R1", text: "Climb a 10° ramp at 0.5 m/s with payload", kind: "performance", verification: "analysis", rationale: "Steepest ramp in the plant" },
+    { id: "R2", text: "Not tip over on the ramp, including when braking", kind: "safety", verification: "analysis", rationale: "A falling rover can hurt people" },
+    { id: "R3", text: "Run for at least 2 hours per charge", kind: "performance", verification: "analysis", rationale: "One full inspection shift" },
+    { id: "R4", text: "Demonstrate the climb on the real ramp before release", kind: "performance", verification: "test", rationale: "Analysis assumes friction we must confirm" },
+  ],
+  assumptions: ["Rolling resistance coefficient 0.05 on concrete", "Centre of mass at the chassis centre", "Wheels don't slip (friction coefficient 0.7 > tan 10° = 0.18)"],
+  components: [
+    { name: "Chassis plate", function: "Carries everything, sets track and wheelbase", material: "6061-T6 aluminium", mass_kg: 6, notes: "" },
+    { name: "Hub motors ×4", function: "Drive and brake each wheel", material: "", mass_kg: 2, notes: "2 N·m peak each" },
+    { name: "Battery 24 V 10 Ah", function: "Energy store", material: "Li-ion NMC", mass_kg: 1, notes: "With BMS" },
+    { name: "Camera payload", function: "Inspection imaging", material: "", mass_kg: 1, notes: "" },
+  ],
+  variables: [
+    { symbol: "m", name: "Total mass", value: 10, unit: "kg", source: "Component roll-up" },
+    { symbol: "theta", name: "Ramp angle", value: 10, unit: "deg", source: "Plant drawing" },
+    { symbol: "C_rr", name: "Rolling resistance coefficient", value: 0.05, unit: "1", source: "Assumption, rubber on concrete" },
+    { symbol: "r", name: "Wheel radius", value: 0.1, unit: "m", source: "Design choice" },
+    { symbol: "n_w", name: "Driven wheels", value: 4, unit: "1", source: "Design choice" },
+    { symbol: "omega_w", name: "Wheel speed command", value: 5, unit: "rad/s", source: "Controller setpoint" },
+    { symbol: "tau_max", name: "Motor peak torque", value: 2, unit: "N*m", source: "Motor datasheet" },
+    { symbol: "h_cg", name: "Centre of mass height", value: 0.18, unit: "m", source: "CAD estimate" },
+    { symbol: "b", name: "Half wheelbase", value: 0.22, unit: "m", source: "Design choice" },
+    { symbol: "E_batt", name: "Battery energy", value: 240, unit: "Wh", source: "24 V × 10 Ah" },
+    { symbol: "P_aux", name: "Camera and computer power", value: 25, unit: "W", source: "Datasheets" },
+    { symbol: "eta", name: "Drivetrain efficiency", value: 0.7, unit: "1", source: "Assumption" },
+  ],
+  equations: [
+    { id: "E1", name: "Climbing force", symbol: "F_climb", expression: "m * g0 * (sin(theta) + C_rr * cos(theta))", unit: "N",
+      explanation: "On a slope, gravity has a component m·g·sinθ along the ramp, and rolling resistance adds C_rr times the normal force m·g·cosθ. At steady speed the wheels must push with the sum.", assumptions: "Steady speed, no aerodynamic drag at 0.5 m/s", requirement_id: "R1", check: none },
+    { id: "E2", name: "Torque per wheel", symbol: "tau_w", expression: "F_climb * r / n_w", unit: "N*m",
+      explanation: "Each wheel turns its share of the traction force into torque through its radius: τ = F·r / n.", assumptions: "Load shared equally between wheels", requirement_id: "R1",
+      check: { kind: "max", limit: 2, limit_unit: "N*m", factor_of_safety: 2, label: "within motor peak torque, FS 2" } },
+    { id: "E3", name: "Ground speed", symbol: "v", expression: "omega_w * r", unit: "m/s",
+      explanation: "With no slip, the contact patch is momentarily at rest, so the axle moves at ω·r.", assumptions: "No slip", requirement_id: "R1",
+      check: { kind: "min", limit: 0.5, limit_unit: "m/s", factor_of_safety: 1, label: "at least 0.5 m/s" } },
+    { id: "E4", name: "Tip-over angle", symbol: "theta_tip", expression: "atan(b / h_cg)", unit: "deg",
+      explanation: "The rover tips when the gravity vector through the centre of mass passes outside the downhill wheel contact, at tanθ = b / h.", assumptions: "Static, rigid suspension", requirement_id: "R2",
+      check: { kind: "min", limit: 10, limit_unit: "deg", factor_of_safety: 2, label: "twice the ramp angle" } },
+    { id: "E5", name: "Climbing power", symbol: "P_climb", expression: "F_climb * v / eta", unit: "W",
+      explanation: "Mechanical power is force times speed; divide by efficiency for the electrical power drawn.", assumptions: "", requirement_id: "R3", check: none },
+    { id: "E6", name: "Endurance", symbol: "t_run", expression: "E_batt / (P_climb + P_aux)", unit: "h",
+      explanation: "Usable battery energy divided by total power. Using the climbing power everywhere is conservative.", assumptions: "100% depth of discharge; derate in practice", requirement_id: "R3",
+      check: { kind: "min", limit: 2, limit_unit: "h", factor_of_safety: 1.25, label: "2 h with 25% reserve" } },
+  ],
+  trade_study: {
+    question: "Which drive layout?",
+    criteria: [{ name: "Ramp traction", weight: 3 }, { name: "Simplicity", weight: 2 }, { name: "Mass", weight: 2 }, { name: "Cost", weight: 1 }],
+    options: [
+      { name: "Four hub motors", description: "Skid steer, each wheel driven", scores: [9, 8, 6, 6] },
+      { name: "Two motors + casters", description: "Differential drive", scores: [5, 9, 8, 8] },
+      { name: "Tracks", description: "Rubber tracks, two motors", scores: [10, 5, 4, 5] },
+    ],
+    recommendation: "Four hub motors: best traction for the ramp without the complexity and mass of tracks.",
+  },
+  risks: [
+    { id: "K1", failure_mode: "Wheels slip on an oily ramp", cause: "Friction drops below tan 10°", effect: "Rover slides back", severity: 7, occurrence: 4, detection: 5, mitigation: "Wheel-speed vs IMU slip detection, stop and hold with motor braking" },
+    { id: "K2", failure_mode: "Tip-over while braking downhill", cause: "Deceleration shifts load forward", effect: "Damage, injury", severity: 8, occurrence: 2, detection: 4, mitigation: "Limit deceleration to 1 m/s² on slopes; keep CG low" },
+    { id: "K3", failure_mode: "Battery over-discharge", cause: "Shift longer than planned", effect: "Cell damage", severity: 5, occurrence: 3, detection: 2, mitigation: "BMS cutoff and return-to-dock at 20%" },
+  ],
+  simulation: {
+    title: "Drive onto a 10° ramp",
+    description: "Four torque-limited wheel motors at 5 rad/s. The rover should hold 0.5 m/s (E3) on the flat and up the ramp, because each motor has more torque than the ramp needs (E2).",
+    gravity: 9.80665, duration_s: 7, ground: true,
+    bodies: [
+      body({ id: "chassis", label: "Chassis", shape: "box", size: [0.6, 0.12, 0.4], position: [0, 0.18, 0], mass_kg: 8, color: "#38d6e8" }),
+      ...[[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([sx, sz], i) => body({
+        id: `w${i}`, label: "Wheel", shape: "cylinder", size: [0.1, 0.05], position: [0.22 * sx, 0.1, 0.25 * sz],
+        rotation_deg: [90, 0, 0], mass_kg: 0.5, friction: 1, color: "#2a3346",
+      })),
+      body({ id: "ramp", label: "Ramp", shape: "box", size: [4, 0.2, 1.4], position: [3.47, 0.249, 0], rotation_deg: [0, 0, 10], fixed: true, friction: 0.9, color: "#3b465c" }),
+    ],
+    joints: [0, 1, 2, 3].map((i) => joint({
+      kind: "revolute", a: "chassis", b: `w${i}`,
+      anchor_a: [i < 2 ? 0.22 : -0.22, -0.08, i % 2 === 0 ? 0.25 : -0.25], axis: [0, 0, -1],
+      motor_speed: 5, motor_max_torque: 2,
+    })),
+    probes: [
+      { id: "P1", label: "Chassis speed", body: "chassis", quantity: "speed", compare: "final", predicted_by: "E3", tolerance_pct: 15 },
+      { id: "P2", label: "Chassis height", body: "chassis", quantity: "y", compare: "max", predicted_by: "", tolerance_pct: 10 },
+      { id: "P3", label: "Chassis tilt", body: "chassis", quantity: "tilt_deg", compare: "max", predicted_by: "", tolerance_pct: 10 },
+    ],
+  },
+  research: [
+    { topic: "Traction on slopes", explanation: "Split gravity into components along and normal to the ramp. The along-ramp part must be beaten by traction; the normal part sets how much traction friction can give (μ·N). The rover climbs only if tanθ < μ, independent of mass.", key_equations: ["F = m·g·(sinθ + C_rr·cosθ)", "tanθ < μ"], further_reading: ["Wong, Theory of Ground Vehicles", "Gillespie, Fundamentals of Vehicle Dynamics"] },
+    { topic: "Static stability", explanation: "A body on a slope stays upright while its centre of mass projects inside the support polygon. Lowering the CG or widening the base raises the tip angle; dynamic loads (braking) shift the effective gravity vector and reduce it.", key_equations: ["θ_tip = atan(b / h)"], further_reading: ["Siegwart, Introduction to Autonomous Mobile Robots"] },
+  ],
+  open_questions: ["What is the real friction coefficient of the ramp surface when oily?", "Is there a lip at the bottom of the ramp the wheels must climb?"],
+  trl: 3,
+  next_steps: ["Measure ramp friction with a sled test", "Bench test one motor at 0.55 N·m for 2 h for heating", "Build a chassis prototype and repeat the ramp climb (R4)"],
+  revisions: [],
+};
+
+const pod: Design = {
+  title: "Drone payload drop pod",
+  idea: "A pod a drone can drop from a few metres that protects a 2 kg medical kit when it lands.",
+  summary: "Dropped from 5 m, the pod hits at about 9.9 m/s with 98 J of energy. A crushable foam pad with a 6 cm stroke keeps the average deceleration near 85 g, which is too much for the kit's 50 g limit, so this design shows a failed check on purpose: run Rethink to see the agent fix it.",
+  objective: "Deliver a 2 kg medical kit from a hovering drone without landing the drone.",
+  operating_context: "Outdoor drop from 5 m onto packed earth or concrete, wind up to 8 m/s, -10 to 45 °C.",
+  constraints: ["Pod plus kit at most 2 kg (drone payload limit)", "Single use pad is acceptable", "No parachute (drift in wind)"],
+  requirements: [
+    { id: "R1", text: "Kit sees at most 50 g average deceleration on impact", kind: "safety", verification: "analysis", rationale: "Kit manufacturer's shock rating" },
+    { id: "R2", text: "Survive a 5 m drop onto concrete", kind: "environmental", verification: "test", rationale: "Worst landing surface" },
+  ],
+  assumptions: ["No air drag (conservative: it slows the pod)", "Constant crush force over the stroke (ideal foam plateau)"],
+  components: [
+    { name: "Shell", function: "Holds the kit, takes local impacts", material: "PETG", mass_kg: 0.3, notes: "" },
+    { name: "Crush pad", function: "Absorbs impact energy by crushing", material: "EPS foam 30 kg/m³", mass_kg: 0.1, notes: "60 mm thick" },
+    { name: "Medical kit", function: "Payload", material: "", mass_kg: 1.6, notes: "" },
+  ],
+  variables: [
+    { symbol: "m", name: "Pod mass", value: 2, unit: "kg", source: "Requirement" },
+    { symbol: "h", name: "Drop height", value: 5, unit: "m", source: "Operating concept" },
+    { symbol: "s", name: "Crush stroke", value: 60, unit: "mm", source: "Pad thickness" },
+  ],
+  equations: [
+    { id: "E1", name: "Impact speed", symbol: "v_i", expression: "sqrt(2 * g0 * h)", unit: "m/s",
+      explanation: "Energy conservation: potential energy m·g·h becomes kinetic energy ½·m·v², so v = √(2gh). Mass cancels.", assumptions: "No drag", requirement_id: "R1", check: none },
+    { id: "E2", name: "Impact energy", symbol: "E_i", expression: "0.5 * m * v_i^2", unit: "J",
+      explanation: "The energy the pad must absorb.", assumptions: "", requirement_id: "R1", check: none },
+    { id: "E3", name: "Average deceleration", symbol: "a_avg", expression: "v_i^2 / (2 * s) / g0", unit: "1",
+      explanation: "Stopping from v over a distance s at constant deceleration needs a = v² / 2s. Dividing by g0 gives it in g.", assumptions: "Constant crush force", requirement_id: "R1",
+      check: { kind: "max", limit: 50, limit_unit: "1", factor_of_safety: 1.5, label: "50 g kit rating, FS 1.5" } },
+  ],
+  trade_study: {
+    question: "How to absorb the landing?",
+    criteria: [{ name: "Peak g", weight: 3 }, { name: "Mass", weight: 2 }, { name: "Cost", weight: 1 }],
+    options: [
+      { name: "Crushable foam", description: "EPS pad", scores: [6, 8, 9] },
+      { name: "Airbag", description: "Vented bag", scores: [9, 5, 3] },
+      { name: "Parachute", description: "Slow the fall", scores: [10, 7, 6] },
+    ],
+    recommendation: "Crushable foam, but it needs a longer stroke to meet R1.",
+  },
+  risks: [
+    { id: "K1", failure_mode: "Lands on a corner", cause: "Pod tumbles in wind", effect: "Pad bypassed, kit damaged", severity: 8, occurrence: 5, detection: 6, mitigation: "" },
+  ],
+  simulation: {
+    title: "5 m drop", description: "A rigid pod dropped from 5 m. Its peak speed should match E1.",
+    gravity: 9.80665, duration_s: 2, ground: true,
+    bodies: [body({ id: "pod", label: "Pod", shape: "box", size: [0.25, 0.25, 0.25], position: [0, 5.125, 0], mass_kg: 2, mass_symbol: "m", restitution: 0.2, color: "#f5b544" })],
+    joints: [],
+    probes: [{ id: "P1", label: "Peak speed", body: "pod", quantity: "speed", compare: "max", predicted_by: "E1", tolerance_pct: 3 }],
+  },
+  research: [
+    { topic: "Impact attenuation", explanation: "Damage scales with deceleration, and deceleration is set by how far you stop over. Doubling the stroke halves the average g. Real foams have a rising force curve at the end (densification), so usable stroke is about 70% of thickness.", key_equations: ["a = v²/(2s)", "E = ½mv²"], further_reading: ["Gibson & Ashby, Cellular Solids", "NASA-STD-7003 Pyroshock and shock test criteria"] },
+  ],
+  open_questions: ["What is the kit's shock rating per axis?", "Does it need to survive tumbling, i.e. pads on all faces?"],
+  trl: 2,
+  next_steps: ["Increase the stroke and re-run the analysis", "Drop test with an accelerometer inside"],
+  revisions: [],
+};
+
+const rig: Design = {
+  title: "Quarter-car suspension test rig",
+  idea: "Size a spring and damper for a 4 kg wheel-module so it rides smoothly but doesn't bottom out.",
+  summary: "A 4 kg mass on a 2,000 N/m spring sags 19.6 mm and bounces at 3.6 Hz. A 40 N·s/m damper gives a damping ratio of 0.22, a common ride compromise.",
+  objective: "Choose spring rate and damping for a small rover's wheel module.",
+  operating_context: "Bench rig, then a rover on gravel.",
+  constraints: ["Static sag at most 25 mm", "Total travel 50 mm"],
+  requirements: [
+    { id: "R1", text: "Static sag no more than 25 mm", kind: "performance", verification: "analysis", rationale: "Keep half the travel for bumps" },
+    { id: "R2", text: "Damping ratio between 0.2 and 0.7", kind: "performance", verification: "analysis", rationale: "Ride vs control" },
+  ],
+  assumptions: ["Linear spring", "Viscous damper"],
+  components: [
+    { name: "Coil spring", function: "Carries static load", material: "Music wire", mass_kg: 0.05, notes: "" },
+    { name: "Damper", function: "Dissipates bounce", material: "", mass_kg: 0.1, notes: "" },
+  ],
+  variables: [
+    { symbol: "m", name: "Sprung mass", value: 4, unit: "kg", source: "Rover mass / 4" },
+    { symbol: "k", name: "Spring rate", value: 2000, unit: "N/m", source: "Catalogue spring" },
+    { symbol: "c", name: "Damping coefficient", value: 40, unit: "N*s/m", source: "Damper datasheet" },
+    { symbol: "L0", name: "Spring free length", value: 0.3, unit: "m", source: "Catalogue spring" },
+    { symbol: "y_top", name: "Mount height", value: 1.0, unit: "m", source: "Rig frame" },
+  ],
+  equations: [
+    { id: "E1", name: "Static sag", symbol: "delta", expression: "m * g0 / k", unit: "mm",
+      explanation: "Hooke's law at equilibrium: the spring force k·δ balances the weight m·g.", assumptions: "", requirement_id: "R1",
+      check: { kind: "max", limit: 25, limit_unit: "mm", factor_of_safety: 1, label: "at most 25 mm" } },
+    { id: "E2", name: "Natural frequency", symbol: "f_n", expression: "sqrt(k / m) / (2 * pi)", unit: "Hz",
+      explanation: "An undamped mass-spring oscillates at ω = √(k/m); dividing by 2π gives cycles per second.", assumptions: "", requirement_id: "R2", check: none },
+    { id: "E3", name: "Damping ratio", symbol: "zeta", expression: "c / (2 * sqrt(k * m))", unit: "1",
+      explanation: "Ratio of the actual damping to critical damping 2√(km), the least that stops any overshoot.", assumptions: "", requirement_id: "R2",
+      check: { kind: "min", limit: 0.2, limit_unit: "1", factor_of_safety: 1, label: "at least 0.2" } },
+    { id: "E4", name: "Equilibrium height", symbol: "y_eq", expression: "y_top - L0 - m * g0 / k", unit: "m",
+      explanation: "Where the mass settles below the mount: free length plus sag.", assumptions: "", requirement_id: "R1", check: none },
+  ],
+  trade_study: {
+    question: "Spring type", criteria: [{ name: "Linearity", weight: 2 }, { name: "Cost", weight: 1 }],
+    options: [{ name: "Coil spring", description: "", scores: [9, 8] }, { name: "Elastomer", description: "", scores: [5, 9] }],
+    recommendation: "Coil spring",
+  },
+  risks: [{ id: "K1", failure_mode: "Bottoming out", cause: "Large bump", effect: "Shock load into frame", severity: 5, occurrence: 4, detection: 3, mitigation: "Bump stop" }],
+  simulation: {
+    title: "Release from the free length", description: "The mass starts at the spring's free length and should settle at y_eq (E4).",
+    gravity: 9.80665, duration_s: 4, ground: true,
+    bodies: [
+      body({ id: "frame", label: "Mount", shape: "box", size: [0.3, 0.04, 0.3], position: [0, 1.0, 0], fixed: true, color: "#3b465c" }),
+      body({ id: "mass", label: "Sprung mass", shape: "box", size: [0.16, 0.08, 0.16], position: [0, 0.7, 0], mass_kg: 4, mass_symbol: "m", color: "#8b7bff" }),
+    ],
+    joints: [joint({ kind: "spring", a: "frame", b: "mass", stiffness: 2000, stiffness_symbol: "k", damping: 40, rest_length: 0.3 })],
+    probes: [{ id: "P1", label: "Mass height", body: "mass", quantity: "y", compare: "final", predicted_by: "E4", tolerance_pct: 2 }],
+  },
+  research: [
+    { topic: "Second-order systems", explanation: "m·ẍ + c·ẋ + k·x = F describes springs, circuits and control loops alike. ω_n sets how fast it responds, ζ how much it overshoots: at ζ = 0.2 the first overshoot is about 53%, at 0.7 about 5%.", key_equations: ["ω_n = √(k/m)", "ζ = c / (2√(km))", "overshoot = exp(−πζ/√(1−ζ²))"], further_reading: ["Rao, Mechanical Vibrations", "Ogata, System Dynamics"] },
+  ],
+  open_questions: ["What bump height and speed define the worst case?"],
+  trl: 3, next_steps: ["Bench test with a displacement sensor"], revisions: [],
+};
+
+export const EXAMPLES: Design[] = [rover, pod, rig];

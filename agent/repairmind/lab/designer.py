@@ -1,0 +1,184 @@
+"""The design agent: idea in, engineering breakdown out; findings in, rethought design out.
+
+How it gets better without retraining a model:
+
+1. The model never grades its own arithmetic. The web app recomputes every equation with units, every
+   margin of safety, every FMEA number, and runs the physics simulation. What fails becomes a list of
+   findings.
+2. ``revise`` sends the design and those findings back. The model must name the root cause of each
+   finding, weigh at least two ways to fix it, and change the design (not just the numbers it was caught
+   on). The app checks again, and repeats until it holds or the round limit is hit.
+3. Each round ends with general lessons ("crush stroke, not pad stiffness, sets average deceleration").
+   They are kept in a lessons file and given to every later design, so mistakes caught once are avoided
+   next time.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from pathlib import Path
+
+from .. import checker
+from .schema import Design
+
+log = logging.getLogger("repairmind.lab")
+
+MAX_LESSONS_IN_PROMPT = 40
+MAX_LESSONS_KEPT = 500
+
+ENGINEER_SYSTEM = """You are the chief engineer of a small, very good hardware team, trained in how NASA, ESA and
+ISRO run projects: requirements first, every requirement verified, analysis before hardware, honest margins,
+trade studies for real choices, FMEA for what can go wrong, and design reviews that look for the failure
+nobody wants to find.
+
+Turn the user's idea into a first-pass engineering breakdown.
+
+How to think:
+- Restate the real objective and the operating context (environment, users, loads, lifetime). Ask what the
+  situation actually demands before choosing a solution.
+- Write requirements as verifiable statements with numbers and units. Say how each is verified.
+- Identify the governing physics: the few equations that decide whether this works (statics, dynamics,
+  strength of materials, fluids, heat transfer, electrical power, control). Use real material and component
+  values and say where each comes from. Never invent a datasheet; when you assume, write "assumption".
+- Each equation's expression is evaluated by software with units, so: write only the right-hand side; use
+  variable symbols and earlier equation symbols; operators + - * / ^ and functions sqrt cbrt abs sin cos tan
+  asin acos atan atan2 exp ln log10 min max pow; constants pi, g0 (9.80665 m/s^2), sigma_sb, R_gas, k_B,
+  c_light, G_grav, mu0, eps0. Angles in variables can be in deg; trig works in radians internally.
+  Temperatures in K. The declared unit must match the expression's dimensions exactly.
+- Put a check (max or min with a factor of safety) on every equation that decides a requirement. Use
+  factors of safety appropriate to the domain (e.g. 1.25-1.5 on yield for flight structures, 2+ for
+  people-carrying or uncertain loads) and say which.
+- Do a trade study whenever there is a real choice. Score honestly; the recommendation must be the top
+  scoring option or explain why not.
+- FMEA: severity, occurrence, detection 1-10. Every high risk needs a mitigation.
+- Build a physics simulation that demonstrates the key behaviour with a simple rigid-body assembly
+  (boxes, spheres, cylinders; fixed, revolute with torque-limited motor, spring or prismatic joints), and add
+  probes whose results one of your equations predicts, so the simulation cross-checks the hand calculation.
+  Keep it small (at most ~20 bodies) and physically placed: objects resting on the ground (top at y = 0)
+  must start with their bottom at y >= 0. Rotation turns only the collider shape; body frames and joint
+  axes are world-aligned. A wheel is a cylinder with rotation_deg [90,0,0] and a revolute axis along z;
+  a positive motor_speed about axis [0,0,-1] drives it forward along +x.
+- Research notes explain the physics and maths behind the design for an engineer who wants to learn it:
+  derivations in words, what the terms mean, when the model breaks down. Cite real books and standards by
+  title only.
+- Be honest about uncertainty: open questions, technology readiness level, next tests.
+
+Leave `revisions` empty on a new design. Refuse weapons, devices meant to hurt people, and anything that
+bypasses safety systems; for those, return a design whose summary explains the refusal and nothing else."""
+
+REVISE_SYSTEM = ENGINEER_SYSTEM + """
+
+You are now leading a design review of your own work. Independent software has recomputed every equation
+with units, every margin and FMEA number, and has run the simulation. Its findings are facts.
+
+For this round:
+1. For each finding, find the root cause. Is the physics wrong, a number wrong, a unit wrong, the assembly
+   wrong, or the design concept itself unable to meet the requirement?
+2. Consider at least two different fixes (e.g. change geometry, change material, change concept, relax a
+   requirement with justification) and pick the one a strong engineering team would pick, considering mass,
+   cost, risk and schedule. Don't fix a failed margin by quietly lowering the factor of safety or editing the
+   limit unless the original was wrong, and say so.
+3. Return the complete revised design. Append one entry to `revisions` with this round number, your critique
+   (root causes and the alternatives you weighed), the concrete changes, and 1-3 general lessons another
+   engineer could reuse on a different project (principles, not this design's numbers).
+4. If the user added a note, treat it as a new constraint or question from the customer."""
+
+
+def _dir() -> Path:
+    from ..agent import SESSIONS_DIR  # late import keeps this module light for tests
+
+    return Path(os.getenv("RMX_LAB_DIR", str(SESSIONS_DIR / "lab")))
+
+
+def lessons_path() -> Path:
+    return _dir() / "lessons.jsonl"
+
+
+def load_lessons(limit: int = MAX_LESSONS_IN_PROMPT) -> list[dict]:
+    p = lessons_path()
+    if not p.exists():
+        return []
+    rows = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        try:
+            rows.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return rows[-limit:]
+
+
+def save_lessons(design_title: str, lessons: list[str]) -> None:
+    clean = [" ".join(str(x).split())[:300] for x in lessons if str(x).strip()][:5]
+    if not clean:
+        return
+    p = lessons_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    existing = {r.get("lesson") for r in load_lessons(MAX_LESSONS_KEPT)}
+    with p.open("a", encoding="utf-8") as f:
+        for lesson in clean:
+            if lesson not in existing:
+                existing.add(lesson)
+                f.write(json.dumps({"at": int(time.time()), "design": design_title[:80], "lesson": lesson}) + "\n")
+    rows = load_lessons(MAX_LESSONS_KEPT * 2)
+    if len(rows) > MAX_LESSONS_KEPT:
+        p.write_text("".join(json.dumps(r) + "\n" for r in rows[-MAX_LESSONS_KEPT:]), encoding="utf-8")
+
+
+def _lessons_block() -> str:
+    rows = load_lessons()
+    if not rows:
+        return ""
+    return ("\n\nLESSONS FROM EARLIER DESIGN REVIEWS (apply where relevant):\n"
+            + "\n".join(f"- {r['lesson']}" for r in rows))
+
+
+class DesignError(Exception):
+    def __init__(self, status: int, message: str):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+
+
+async def _call(system: str, text: str) -> Design:
+    if checker.provider() is None:
+        raise DesignError(503, "No design model is configured. Set ANTHROPIC_API_KEY (Claude) or GOOGLE_API_KEY "
+                               "(free Gemini) in agent/.env. The worked examples still work without one.")
+    res = await checker.parse(system, [], text, Design, "design", effort="high", timeout=300.0, max_tokens=16000)
+    if res.refused:
+        raise DesignError(422, "The design model declined this idea.")
+    if res.error or not isinstance(res.parsed, Design):
+        raise DesignError(502, "The design model didn't return a usable design: " + (res.error or "no answer"))
+    return res.parsed
+
+
+async def generate(idea: str, context: str = "") -> Design:
+    text = f"IDEA:\n{idea.strip()}"
+    if context.strip():
+        text += f"\n\nCONTEXT FROM THE ENGINEER:\n{context.strip()}"
+    design = await _call(ENGINEER_SYSTEM + _lessons_block(), text)
+    design.idea = design.idea or idea
+    design.revisions = []
+    return design
+
+
+async def revise(design: Design, findings: list[str], note: str = "") -> Design:
+    round_no = len(design.revisions) + 1
+    text = "\n\n".join(filter(None, [
+        f"ROUND {round_no}",
+        "CURRENT DESIGN (JSON):\n" + design.model_dump_json(),
+        "FINDINGS FROM INDEPENDENT CHECKS:\n" + ("\n".join(f"- {f}" for f in findings) or "- none: look for what the checks can't see"),
+        f"NOTE FROM THE ENGINEER:\n{note.strip()}" if note.strip() else "",
+    ]))
+    revised = await _call(REVISE_SYSTEM + _lessons_block(), text)
+    # keep the history even if the model dropped earlier rounds
+    earlier = design.revisions
+    new = [r for r in revised.revisions if r.round >= round_no] or revised.revisions[-1:]
+    for r in new:
+        r.round = round_no
+    revised.revisions = earlier + new[-1:]
+    if new:
+        save_lessons(revised.title or design.title, new[-1].lessons)
+    return revised

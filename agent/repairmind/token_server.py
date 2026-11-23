@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from .agent import AGENT_NAME, SESSIONS_DIR
 from .expert import products as expert_products
 from .inspection.api import router as inspection_router
+from .lab.api import router as lab_router
 from .manuals import ManualIndex, manual_path
 
 load_dotenv()
@@ -53,6 +54,7 @@ def health() -> dict:
 
 
 app.include_router(inspection_router)
+app.include_router(lab_router)
 
 
 @app.get("/api/products")

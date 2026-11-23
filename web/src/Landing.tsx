@@ -17,6 +17,7 @@ export interface LandingProps {
   lastRoom: string | null;
   onStart: (room?: string) => void;
   onInspect: () => void;
+  onLab: () => void;
   /** false while the intro is still on screen: the entrance waits for it */
   entering: boolean;
   /** who signed in with the quick sign-in on this device, if anyone */
@@ -230,6 +231,7 @@ export function Landing(p: LandingProps) {
         <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{CHAPTERS[ch]}</em></span>
         <nav className="sx-links">
           <SoundSwitch />
+          <a href="#lab" onClick={(e) => { e.preventDefault(); p.onLab(); }}>Design lab</a>
           <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>Bulk inspection</a>
           <button className="x-btn x-btn-line sx-cta" onClick={() => go(START)}>Start a repair <Arrow size={16} /></button>
         </nav>

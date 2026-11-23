@@ -8,6 +8,8 @@ import { Intro, shouldPlayIntro } from "./fx/Intro";
 
 // The design preview (a fake call with sample data) only loads when someone opens #demo.
 const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
+// The design lab (physics engine, 3D sandbox) only loads when someone opens #lab.
+const Lab = lazy(() => import("./lab/Lab.tsx").then((m) => ({ default: m.Lab })));
 
 interface Connection {
   serverUrl: string;
@@ -34,9 +36,11 @@ function writeLastRoom(room: string | null) {
   }
 }
 
-type Page = "call" | "inspect" | "demo";
-const pageFromHash = (): Page =>
-  window.location.hash === "#inspect" ? "inspect" : window.location.hash.startsWith("#demo") ? "demo" : "call";
+type Page = "call" | "inspect" | "demo" | "lab";
+const pageFromHash = (): Page => {
+  const h = window.location.hash;
+  return h === "#inspect" ? "inspect" : h === "#lab" ? "lab" : h.startsWith("#demo") ? "demo" : "call";
+};
 
 export default function App() {
   const [accepted, setAccepted] = useState(false);
@@ -55,8 +59,8 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  function go(next: "call" | "inspect") {
-    window.location.hash = next === "inspect" ? "inspect" : "";
+  function go(next: "call" | "inspect" | "lab") {
+    window.location.hash = next === "call" ? "" : next;
     setPage(next);
   }
 
@@ -102,6 +106,8 @@ export default function App() {
         }}
       />
     );
+  } else if (page === "lab") {
+    content = <Suspense fallback={null}><Lab onBack={() => go("call")} /></Suspense>;
   } else if (page === "demo") {
     content = <Suspense fallback={null}><Demo /></Suspense>;
   } else if (signingIn) {
@@ -131,6 +137,7 @@ export default function App() {
         profile={profile}
         onSignOut={() => { writeProfile(null); setProfile(null); }}
         onInspect={() => go("inspect")}
+        onLab={() => go("lab")}
         entering={!intro}
       />
     );
@@ -139,7 +146,7 @@ export default function App() {
   return (
     <>
       {/* the landing page draws its own 3D scene */}
-      {(conn || signingIn || page !== "call") && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
+      {(conn || signingIn || (page !== "call" && page !== "lab")) && <NetworkBackground intensity={conn || page === "demo" ? 0.55 : 1} />}
       {content}
       {intro && !conn && <Intro onDone={() => setIntro(false)} />}
     </>
