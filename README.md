@@ -168,6 +168,17 @@ Beyond repair: bring an idea, get an engineering breakdown that is checked, simu
 | Lessons memory | `sessions/lab/lessons.jsonl` (`RMX_LAB_DIR`) | Each review round ends with general lessons, which are added to every later design prompt. This is how it improves over time without retraining a model. |
 | Worked examples | `web/src/lab/examples.ts` | A ramp-climbing rover, a drop pod (fails its shock check on purpose, to show the rethink loop) and a suspension rig. They work with no server or key, and tests check that each simulation reproduces its own hand calculation. |
 
+### Measuring the engineer (`agent/evals/`)
+
+A fixed test set of 50 real ideas (`agent/evals/ideas.json`): new inventions, upgrades, ambitious ideas (jetpack, cubesat, exoskeleton), ones that break physics as asked (free energy, perpetual wheels, anti-gravity) and one that must be declined (a weapon). Each lists the acceptable feasibility verdicts and the ideas an expert answer must contain (for the 10 m well: the suction limit or a submersible pump; for a balcony turbine: the cube law or Betz). The scorer (`repairmind/evals.py`) also checks the shape of a strong answer: rough numbers with units, a path that starts with something buildable, at least two concepts, a measurable pass condition for the riskiest assumption, and at most four questions.
+
+```bash
+cd agent && .venv/bin/python scripts/eval_ideas.py              # all 50, about 15-25 minutes on free Gemini
+.venv/bin/python scripts/eval_ideas.py --only free-energy,solar-pump-10m --level student
+```
+
+Each run is saved in `agent/evals/results/` and compared with the previous one, listing ideas that got 10 or more points worse or better. Run it before and after changing a prompt, a model or the library, so "it feels smarter" becomes a number.
+
 ## Idea to reality (`#build`)
 
 For people with an idea but no hardware background. Describe a new invention, or something you own and how
