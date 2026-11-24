@@ -86,3 +86,28 @@
 .sbx-broken td { color: #ffc4c4; }
 .sbx-table .lab-pill { margin-left: 6px; }
 .sbx-events { margin-top: 8px; }
+
+/* the product's body (#build → Body) */
+.body { display: flex; flex-direction: column; gap: 12px; }
+.body > .lab-muted { margin: 0; }
+.body-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 860px) { .body-grid { grid-template-columns: 1fr; } }
+.body-view { position: relative; height: 440px; border: 1px solid var(--lab-line); border-radius: 12px; overflow: hidden; background: #060b16; }
+@media (max-width: 860px) { .body-view { height: 320px; } }
+.body-fit { position: absolute; left: 10px; right: 10px; bottom: 10px; font-size: 0.8rem; padding: 6px 10px; border-radius: 8px; background: rgba(4, 12, 28, 0.86); border: 1px solid var(--lab-line); }
+.body-fit.ok { color: #c9ffe6; border-color: rgba(62, 207, 142, 0.5); }
+.body-fit.bad { color: #ffe1b0; border-color: rgba(245, 181, 68, 0.6); }
+.body-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.body-side .lab-card { gap: 8px; }
+.body-side .lab-muted { margin: 0; font-size: 0.82rem; }
+.body-side label.lab-btn { cursor: pointer; }
+.body-side .lab-btn.held { border-color: var(--cyan); background: rgba(56, 214, 232, 0.14); }
+.body-num { display: flex; gap: 8px; align-items: center; }
+.body-num input[type="range"] { flex: 1; min-width: 0; }
+.body-num input[type="number"] { width: 72px; background: rgba(6, 17, 38, 0.8); color: var(--text); border: 1px solid var(--lab-line); border-radius: 8px; padding: 0.25rem 0.4rem; font: inherit; font-size: 0.82rem; }
+.body-side select, .body-math select { background: rgba(6, 17, 38, 0.8); color: var(--text); border: 1px solid var(--lab-line); border-radius: 8px; padding: 0.35rem 0.5rem; font: inherit; }
+.body-math-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.body-math .body-f { color: var(--lab-dim); font-size: 0.8rem; }
+.body-math tr.body-good td { color: #c9ffe6; }
+.body-math tr.body-bad td { color: #ffd0a0; }
+.body-math .lab-muted { margin: 0; }
