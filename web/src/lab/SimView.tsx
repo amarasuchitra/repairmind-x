@@ -7,6 +7,9 @@ import type { Analysis } from "./analysis.ts";
 import { DT, Sandbox, loadRapier, simFindings, type ProbeResult } from "./physics.ts";
 import { fmt } from "./units.ts";
 import { useI18n } from "../i18n";
+import { applyEdits, breakList, type Edits } from "../sim/edit.ts";
+import { SandboxEdit, SandboxEvents } from "../sim/SandboxEdit.tsx";
+import "../sim/sim.css";
 
 type RapierLib = Awaited<ReturnType<typeof loadRapier>>;
 
@@ -64,7 +67,7 @@ function BodyMesh({ spec, index, sandbox }: { spec: SimBody; index: number; sand
 
 /** Springs drawn as a coil between their anchors, so the assembly reads as an assembly. */
 function Springs({ sandbox, design }: { sandbox: Sandbox; design: Design }) {
-  const springs = design.simulation.joints.filter((j) => j.kind === "spring" && sandbox.bodies.has(j.a) && sandbox.bodies.has(j.b));
+  const springs = design.simulation.joints.map((j, index) => ({ ...j, index })).filter((j) => j.kind === "spring" && sandbox.bodies.has(j.a) && sandbox.bodies.has(j.b));
   const lines = useMemo(() => springs.map(() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(42 * 3), 3));
@@ -72,7 +75,9 @@ function Springs({ sandbox, design }: { sandbox: Sandbox; design: Design }) {
   }), [springs.length]); // eslint-disable-line react-hooks/exhaustive-deps
   useFrame(() => {
     if (sandbox.freed) return;
+    const broken = new Set(sandbox.jointLoads.filter((l) => l.broken).map((l) => l.index));
     springs.forEach((j, k) => {
+      lines[k].visible = !broken.has(j.index);
       const a = sandbox.bodies.get(j.a)!, b = sandbox.bodies.get(j.b)!;
       const pa = new THREE.Vector3(...(j.anchor_a.length === 3 ? j.anchor_a : [0, 0, 0])).applyQuaternion(new THREE.Quaternion(...Object.values(a.rotation()) as [number, number, number, number])).add(new THREE.Vector3(...Object.values(a.translation()) as [number, number, number]));
       const pb = new THREE.Vector3(...(j.anchor_b.length === 3 ? j.anchor_b : [0, 0, 0])).applyQuaternion(new THREE.Quaternion(...Object.values(b.rotation()) as [number, number, number, number])).add(new THREE.Vector3(...Object.values(b.translation()) as [number, number, number]));
@@ -130,8 +135,13 @@ function Spark({ r }: { r: ProbeResult }) {
 }
 
 /** The 3D physics sandbox for a design: watch the assembly, compare probes against the hand calculations. */
-export function SimView({ design, analysis }: { design: Design; analysis: Analysis }) {
+export function SimView({ design: original, analysis }: { design: Design; analysis: Analysis }) {
   const { t } = useI18n();
+  // what the person changed in the sandbox, applied to a copy of the design
+  const [edits, setEdits] = useState<Edits>({});
+  useEffect(() => setEdits({}), [original]);
+  const design = useMemo(() => applyEdits(original, edits), [original, edits]);
+  const breakN = useMemo(() => breakList(original, edits), [original, edits]);
   const [R, setR] = useState<RapierLib | null>(null);
   const [err, setErr] = useState("");
   const [playing, setPlaying] = useState(true);
@@ -149,14 +159,14 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
     if (!R) return;
     let sb: Sandbox | null = null;
     try {
-      sb = new Sandbox(R, design, analysis);
+      sb = new Sandbox(R, design, analysis, { breakN });
       setErr("");
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     }
     setSandbox(sb);
     return () => sb?.free();
-  }, [R, design, analysis, run]);
+  }, [R, design, analysis, run, breakN]);
 
   const sim = design.simulation;
   const results = sandbox && !sandbox.freed ? sandbox.results() : [];
@@ -217,6 +227,8 @@ export function SimView({ design, analysis }: { design: Design; analysis: Analys
         {sandbox && !sandbox.freed && <span className="lab-clock">t = {sandbox.time.toFixed(2)} s / {sandbox.duration.toFixed(1)} s{sandbox.done ? " · done" : ""}</span>}
       </div>
       {sim.description && <p className="lab-muted">{sim.description}</p>}
+      {sandbox && !sandbox.freed && <SandboxEvents events={sandbox.events} />}
+      <SandboxEdit design={original} edits={edits} setEdits={(e) => { setEdits(e); setPlaying(true); }} loads={sandbox && !sandbox.freed ? sandbox.jointLoads : []} />
       {sandbox && sandbox.warnings.length > 0 && <ul className="lab-warn">{sandbox.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       {results.length > 0 && (
         <details className="lab-fold lab-probe-fold">

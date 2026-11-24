@@ -6,6 +6,8 @@ import { MicButton, uploadFiles, type AttachmentInfo } from "../lab/inputs.tsx";
 import { LAB_BRIEF_KEY } from "../redesign/brief";
 import { catalogForServer, offlineAssess, toProject, type Assessment, type IdeaInput } from "./assess.ts";
 import { AssessmentView, IdeaStart } from "./Assistant.tsx";
+import { BenchView } from "../sim/Bench.tsx";
+import { BodyView } from "../sim/Body.tsx";
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Key } from "../i18n/en";
 import { BY_ID, CATEGORIES, ALL, isBoard, isPower, type Part } from "./parts.ts";
@@ -61,7 +63,7 @@ function pruneRules(p: Project): Project {
   return { ...p, rules: p.rules.filter((r) => ok(TRIGGERS.find((t) => t.id === r.when)!.needs) && ok(ACTIONS.find((a) => a.id === r.then)!.needs)) };
 }
 
-type Tab = "wiring" | "parts" | "code" | "steps" | "details";
+type Tab = "wiring" | "try" | "body" | "parts" | "code" | "steps" | "details";
 
 const IDEA_STORE = "rmx.build.idea";
 interface IdeaState { input: IdeaInput; assessment: Assessment | null; offline: boolean; files: AttachmentInfo[] }
@@ -352,12 +354,14 @@ function Workspace(p: {
 
       <section className="bd-out">
         <nav className="lab-tabs" role="tablist">
-          {(["wiring", "parts", "code", "steps", "details"] as Tab[]).map((x) => (
+          {(["wiring", "try", "body", "parts", "code", "steps", "details"] as Tab[]).map((x) => (
             <button key={x} role="tab" aria-selected={tab === x} className={tab === x ? "on" : ""} onClick={() => setTab(x)}>{t(`bd.tab.${x}` as Key)}</button>
           ))}
         </nav>
         <div className="lab-panel">
           {tab === "wiring" && <WiringTab report={report} />}
+          {tab === "try" && <BenchView project={project} report={report} />}
+          {tab === "body" && <BodyView project={project} />}
           {tab === "parts" && <PartsTab report={report} />}
           {tab === "code" && <CodeTab project={project} report={report} />}
           {tab === "steps" && <StepsTab report={report} />}
