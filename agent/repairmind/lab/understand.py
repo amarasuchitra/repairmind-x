@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from .. import checker, i18n
+from .. import checker, i18n, library
 from .designer import DesignError, _lessons_block
 from .schema import Brief
 
@@ -80,7 +80,9 @@ async def understand(idea: str, context: str = "", answers: list[QA] | None = No
 
     who = LEVELS.get(level, LEVELS["beginner"])
     system = (UNDERSTAND_SYSTEM + f"\n\nWrite for {who}." + (ATTACHMENTS_RULES if att_text else "")
-              + i18n.design_rules(language) + _lessons_block())
+              + i18n.design_rules(language) + _lessons_block()
+              + library.prompt_block(library.search(library.query_for(
+                  idea, context, correction, " ".join(f"{x.q} {x.a}" for x in answers or [])))))
     res = await checker.parse(system, images, "\n\n".join(parts), Brief, "design", effort="high", timeout=180.0,
                               max_tokens=8000)
     if res.refused:

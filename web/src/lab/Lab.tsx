@@ -10,6 +10,7 @@ import { LanguagePicker, useI18n } from "../i18n";
 import type { Brief, QA } from "./brief.ts";
 import { ThinkFirst } from "./ThinkFirst.tsx";
 import { Learn } from "./Learn.tsx";
+import { LibraryPanel } from "./LibraryPanel.tsx";
 import { readLevel, storeLevel, type Level } from "./learn.ts";
 import type { Key } from "../i18n/en";
 
@@ -249,6 +250,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
               placeholder={t("lab.contextPh")} />
             <Attachments items={files} onChange={setFiles} canHearMedia={!!status?.media} />
           </details>
+          <LibraryPanel query={idea} />
           {status && !status.ready && <p className="lab-muted">{t("lab.needKey")}</p>}
           <div className="lab-try">
             <span className="lab-muted">{t("lab.tryEx")}</span>
@@ -343,6 +345,12 @@ export function Lab({ onBack }: { onBack: () => void }) {
                 {allFindings.length ? (
                   <ul className="lab-findings">{allFindings.map((f, i) => <li key={i} className={f.severity}><b>{f.where}</b> {auto(f.text)}</li>)}</ul>
                 ) : <p className="lab-muted">{t("lab.noFindings")}</p>}
+                {(design.library_used?.length ?? 0) > 0 && (
+                  <>
+                    <h4>{t("lib.used")}</h4>
+                    <ul>{design.library_used!.map((a) => <li key={a}>{auto(a)}</li>)}</ul>
+                  </>
+                )}
                 {(design.inputs_used?.length ?? 0) > 0 && (
                   <>
                     <h4>{t("lab.fromAttachments")}</h4>

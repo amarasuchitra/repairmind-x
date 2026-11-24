@@ -18,6 +18,8 @@ export interface Brief {
   recommended_concept: string;
   recommended_why: string;
   questions: { q: string; why: string; options: string[] }[];
+  /** "[L2] what was taken from it", one per engineering library entry used */
+  library_used?: string[];
 }
 
 export interface QA { q: string; a: string }

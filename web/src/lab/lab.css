@@ -266,3 +266,8 @@
 .tf-kind.build { color: var(--green, #3ecf8e); }
 .tf-kind.research { color: var(--amber, #f5b544); }
 .tf-kind.invent { color: var(--violet, #8b7bff); }
+
+/* engineering library */
+.lib .lib-h { margin: 10px 0 4px; font-weight: 600; font-size: 0.92rem; }
+.lib .lib-hits { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; }
+.lib .lib-hits small { display: block; margin-left: 2px; }

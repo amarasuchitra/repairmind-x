@@ -171,6 +171,8 @@ export interface Design {
   revisions: Revision[];
   /** one line per attachment (A1, A2, ...): what the engineer took from it */
   inputs_used?: string[];
+  /** "[L2] what was taken from it", one per engineering library entry used */
+  library_used?: string[];
   /** steps that teach the physics behind this design; the page runs each step's experiment itself */
   learn?: LearnStep[];
 }
