@@ -21,8 +21,8 @@ export interface LandingProps {
   onInspect: () => void;
   onLab: () => void;
   onRedesign: () => void;
-  /** back to the assistant start page */
-  onHome?: () => void;
+  /** the calm assistant: one box to say or type what you need */
+  onAssistant: () => void;
   /** false while the intro is still on screen: the entrance waits for it */
   entering: boolean;
   /** who signed in with the quick sign-in on this device, if anyone */
@@ -227,13 +227,14 @@ export function Landing(p: LandingProps) {
       </div>
 
       <header className="sx-top">
-        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); if (p.onHome) p.onHome(); else go(0); }} aria-label={p.onHome ? t("home.homeAria") : t("start.backTop")}>
+        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); go(0); }} aria-label={t("start.backTop")}>
           <Wordmark />
         </a>
         <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{t(CHAPTERS[ch])}</em></span>
         <nav className="sx-links">
           <LanguagePicker />
           <SoundSwitch />
+          <a href="#assistant" className="sx-assist" onClick={(e) => { e.preventDefault(); p.onAssistant(); }}><i aria-hidden />{t("start.nav.assistant")}</a>
           <a href="#lab" onClick={(e) => { e.preventDefault(); p.onLab(); }}>{t("start.nav.lab")}</a>
           <a href="#redesign" onClick={(e) => { e.preventDefault(); p.onRedesign(); }}>{t("start.nav.redesign")}</a>
           <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>{t("start.nav.inspect")}</a>
@@ -250,6 +251,7 @@ export function Landing(p: LandingProps) {
             <p className="sx-p" data-a>{t("start.lede")}</p>
             <div className="sx-actions" data-a>
               <button className="x-btn x-btn-solid" onClick={() => go(START)}>{t("start.cta")} <Arrow size={18} /></button>
+              <button className="x-btn x-btn-line" onClick={p.onAssistant}>{t("start.askAssistant")}</button>
               <button className="x-btn x-btn-ghost" onClick={() => go(1)}>{t("start.how")}</button>
             </div>
             <dl className="sx-specrow" data-a>

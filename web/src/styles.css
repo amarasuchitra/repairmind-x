@@ -1023,3 +1023,8 @@ html[data-script="other"] body, html[data-script="other"] body * {
   .now-t { font-size: 1.02rem; }
   .hud-more { margin: 8px 0 0; }
 }
+/* start page: the way to the calm assistant */
+.sx-links .sx-assist { display: inline-flex; align-items: center; gap: 8px; }
+.sx-assist i { width: 8px; height: 8px; border-radius: 50%; background: var(--hud); box-shadow: 0 0 10px var(--hud); animation: sx-assist 2.4s ease-in-out infinite; }
+@keyframes sx-assist { 50% { opacity: 0.45; box-shadow: 0 0 4px var(--hud); } }
+@media (prefers-reduced-motion: reduce) { .sx-assist i { animation: none; } }

@@ -124,7 +124,7 @@ export function Home(p: HomeProps) {
   return (
     <div className={`as${mode ? " as-engaged" : ""}`}>
       <header className="as-top">
-        <a className="as-brand" href="#" onClick={(e) => { e.preventDefault(); setMode(null); }} aria-label={t("home.homeAria")}>
+        <a className="as-brand" href="#" onClick={(e) => { e.preventDefault(); p.onTour(); }} aria-label={t("home.homeAria")}>
           <Wordmark />
         </a>
         <div className="as-top-r">

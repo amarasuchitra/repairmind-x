@@ -34,6 +34,8 @@ export const en = {
   "start.sound.onAria": "Sound on. Turn sound off",
   "start.sound.offAria": "Sound off. Turn sound on",
   "start.backTop": "RepairMind X, back to top",
+  "start.nav.assistant": "Assistant",
+  "start.askAssistant": "Ask the assistant",
   "start.nav.lab": "Design lab",
   "start.nav.redesign": "Redesign a part",
   "start.nav.inspect": "Bulk inspection",
@@ -110,7 +112,7 @@ export const en = {
   "start.callLangAuto": "The mechanic will answer in the language you speak.",
 
   // start page: the assistant
-  "home.homeAria": "RepairMind X, home",
+  "home.homeAria": "RepairMind X, back to the start page",
   "home.more": "More",
   "home.hi.morning": "Good morning",
   "home.hi.afternoon": "Good afternoon",
