@@ -22,7 +22,6 @@ export function ThinkFirst(p: {
   const [correction, setCorrection] = useState("");
   const answers = () => collectAnswers(b, picked, concept, p.earlier);
   const unanswered = b.questions.filter((q) => !(picked[q.q] ?? "").trim()).length;
-  const blocked = b.feasibility.verdict === "not_physically_possible";
 
   return (
     <section className="tf" aria-label={t("tf.title")}>
@@ -53,6 +52,22 @@ export function ThinkFirst(p: {
         )}
         {b.feasibility.closest_alternative && <p><b>{t("tf.instead")}</b> {auto(b.feasibility.closest_alternative)}</p>}
       </div>
+
+      {(b.feasibility.path ?? []).length > 0 && (
+        <div className="tf-path">
+          <h3>{t("tf.path")}</h3>
+          <ol>
+            {b.feasibility.path.map((st) => (
+              <li key={st.name} className={st.kind}>
+                <span className={`tf-kind ${st.kind}`}>{t(`tf.kind.${st.kind}` as Key)}</span>
+                <b>{auto(st.name)}</b> <small className="lab-muted">{auto(st.time)}</small>
+                <p>{auto(st.what)}</p>
+                {st.needs && <p className="lab-muted">{t("tf.needs")} {auto(st.needs)}</p>}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {b.questions.length > 0 && (
         <div className="tf-qs">
@@ -106,7 +121,7 @@ export function ThinkFirst(p: {
       </details>
 
       <div className="lab-row tf-go">
-        <button className="lab-btn solid" disabled={p.busy || blocked} onClick={() => p.onDesign(answers())}>
+        <button className="lab-btn solid" disabled={p.busy} onClick={() => p.onDesign(answers())}>
           {unanswered && b.questions.length ? t("tf.designAnyway") : t("tf.design")}
         </button>
         {Object.values(picked).some((v) => v.trim()) && (

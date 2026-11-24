@@ -4,14 +4,15 @@
  * the cheapest test that could prove it wrong.
  */
 export type Source = "you_said" | "photo" | "file" | "typical" | "assumed";
-export type FeasibilityVerdict = "feasible" | "feasible_with_changes" | "not_feasible_now" | "not_physically_possible";
+export type FeasibilityVerdict = "build_now" | "build_with_changes" | "needs_research" | "beyond_known_physics";
+export interface PathStage { name: string; kind: "build" | "research" | "invent"; what: string; needs: string; time: string }
 
 export interface Brief {
   restated: string;
   kind: "new" | "improve";
   real_goal: string;
   known: { fact: string; source: Source; ref: string }[];
-  feasibility: { verdict: FeasibilityVerdict; why: string; deciding_numbers: string[]; closest_alternative: string };
+  feasibility: { verdict: FeasibilityVerdict; why: string; deciding_numbers: string[]; closest_alternative: string; path: PathStage[] };
   riskiest: { statement: string; why_it_matters: string; cheapest_test: string; pass_if: string; test_cost_inr: number; test_time: string };
   concepts: { name: string; how_it_works: string; pros: string[]; cons: string[] }[];
   recommended_concept: string;

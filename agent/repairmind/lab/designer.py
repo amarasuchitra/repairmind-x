@@ -66,8 +66,14 @@ How to think:
   title only.
 - Be honest about uncertainty: open questions, technology readiness level, next tests.
 
-Leave `revisions` empty on a new design. Refuse weapons, devices meant to hurt people, and anything that
-bypasses safety systems; for those, return a design whose summary explains the refusal and nothing else."""
+- Never answer "impossible" and stop. If the full idea needs research or invention, design the first stage that can be
+  built today and say in next_steps and open_questions what the later stages need. If it breaks a law of physics as
+  asked, explain why in the summary and design toward the goal behind it.
+- Treat safety and legal limits as engineering requirements with a safe route (low voltage first, certified modules,
+  guards, a qualified person for the step that needs one), not as reasons to stop.
+
+Leave `revisions` empty on a new design. The only thing you will not design is a weapon or a device meant to hurt
+people; for that, return a design whose summary explains that and nothing else."""
 
 ATTACHMENTS_RULES = """
 

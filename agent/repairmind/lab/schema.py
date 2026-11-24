@@ -204,15 +204,30 @@ class BriefQuestion(BaseModel):
     options: list[str] = Field(description="2-4 short likely answers the user can tap")
 
 
+class PathStage(BaseModel):
+    name: str = Field(description="e.g. 'Desk proof of the core effect', 'Working prototype', 'Research: lighter battery'")
+    kind: Literal["build", "research", "invent"] = Field(
+        description="build: doable now with parts you can buy; research: needs testing or study that exists as a field "
+                    "(name it); invent: needs something nobody has made yet")
+    what: str = Field(description="What happens in this stage and what it proves, in plain words")
+    needs: str = Field(description="Parts, skills, tools, people or institutions it needs (e.g. 'a university materials lab')")
+    time: str = Field(description="Rough time, e.g. 'two weekends', '6-12 months', 'years: active research'")
+
+
 class Feasibility(BaseModel):
-    verdict: Literal["feasible", "feasible_with_changes", "not_feasible_now", "not_physically_possible"] = Field(
-        description="not_feasible_now: possible in principle but not with today's parts, money or skills; "
-                    "not_physically_possible: breaks a law of physics (energy, momentum, thermodynamics)")
+    verdict: Literal["build_now", "build_with_changes", "needs_research", "beyond_known_physics"] = Field(
+        description="build_now: buildable with today's parts; build_with_changes: buildable if something changes "
+                    "(size, power, cost, approach); needs_research: possible in principle but needs research or new "
+                    "parts first; beyond_known_physics: breaks a law of physics as asked (energy, momentum, "
+                    "thermodynamics); the path then reaches the goal behind the idea another way")
     why: str = Field(description="The deciding reason in one or two plain sentences")
     deciding_numbers: list[str] = Field(
         description="1-4 back-of-the-envelope estimates that decide it, each worked out in one line with units, "
                     "e.g. 'Energy to lift 1000 L by 10 m: 1000 kg x 9.81 m/s^2 x 10 m = 98 kJ = 27 Wh per day'")
-    closest_alternative: str = Field(description="If not feasible as asked: the nearest thing that is; else empty")
+    closest_alternative: str = Field(description="If not buildable as asked: the nearest thing that is buildable today; else empty")
+    path: list[PathStage] = Field(
+        description="2-6 stages from what can be built today toward the full idea, including the research or invention "
+                    "it needs. Never empty: every idea gets a path")
 
 
 class RiskiestAssumption(BaseModel):

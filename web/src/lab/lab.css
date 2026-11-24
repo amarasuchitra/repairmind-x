@@ -214,8 +214,8 @@
 .tf-fix { display: grid; gap: 8px; }
 .tf-fix textarea, .tf-own { background: rgba(255,255,255,0.03); border: 1px solid var(--lab-line); color: inherit; border-radius: 8px; padding: 8px 10px; font: inherit; }
 .tf-verdict { border-left: 3px solid var(--green, #3ecf8e); padding: 8px 12px; background: rgba(62, 207, 142, 0.06); border-radius: 0 10px 10px 0; }
-.tf-verdict.feasible_with_changes, .tf-verdict.not_feasible_now { border-color: var(--amber, #f5b544); background: rgba(245, 181, 68, 0.06); }
-.tf-verdict.not_physically_possible { border-color: var(--red, #ff5d5d); background: rgba(255, 93, 93, 0.06); }
+.tf-verdict.build_with_changes, .tf-verdict.needs_research { border-color: var(--amber, #f5b544); background: rgba(245, 181, 68, 0.06); }
+.tf-verdict.beyond_known_physics { border-color: var(--red, #ff5d5d); background: rgba(255, 93, 93, 0.06); }
 .tf-nums { margin: 6px 0 0; padding-left: 18px; }
 .tf-nums code { white-space: normal; overflow-wrap: anywhere; font-size: 0.88rem; }
 .tf-q { margin-bottom: 10px; }
@@ -258,3 +258,11 @@
 .learn-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--lab-line); }
 .learn-dots i.done { background: var(--lab-dim); }
 .learn-dots i.on { background: var(--cyan, #38d6e8); }
+.tf-path ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; counter-reset: st; }
+.tf-path li { border: 1px solid var(--lab-line); border-radius: 10px; padding: 8px 12px; }
+.tf-path li.research { border-style: dashed; }
+.tf-path li.invent { border-style: dotted; border-color: var(--violet, #8b7bff); }
+.tf-kind { display: inline-block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 99px; margin-right: 6px; border: 1px solid currentColor; }
+.tf-kind.build { color: var(--green, #3ecf8e); }
+.tf-kind.research { color: var(--amber, #f5b544); }
+.tf-kind.invent { color: var(--violet, #8b7bff); }

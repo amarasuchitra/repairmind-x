@@ -14,7 +14,7 @@ def brief(**kw) -> Brief:
         "kind": "new", "real_goal": "1000 L of water a day without grid power",
         "known": [{"fact": "Well depth 10 m", "source": "you_said", "ref": ""},
                   {"fact": "Pump mounted on a steel frame", "source": "photo", "ref": "A1"}],
-        "feasibility": {"verdict": "feasible", "why": "The energy needed is small.",
+        "feasibility": {"verdict": "build_now", "why": "The energy needed is small.", "path": [{"name": "Desk test", "kind": "build", "what": "pump a bucket", "needs": "a 12 V pump", "time": "a weekend"}],
                         "deciding_numbers": ["1000 kg x 9.81 m/s^2 x 10 m = 98 kJ = 27 Wh per day"],
                         "closest_alternative": ""},
         "riskiest": {"statement": "A 100 W panel gives enough sun hours", "why_it_matters": "No sun, no water",
