@@ -1,0 +1,74 @@
+/* The virtual bench (#build → Try it). Builds on the lab's dark theme. */
+.sim { display: flex; flex-direction: column; gap: 12px; }
+.sim > .lab-muted { margin: 0; }
+.sim-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--lab-line); border-radius: 12px; background: rgba(6, 17, 38, 0.55); }
+.sim-power { display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 0.55rem 1.1rem; font-weight: 700; background: rgba(255, 255, 255, 0.05); color: var(--text); border: 1px solid var(--lab-line); }
+.sim-power span { font-size: 1.05rem; }
+.sim-power.on { background: rgba(62, 207, 142, 0.16); border-color: var(--green); color: #c9ffe6; }
+.sim-state { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
+.sim-state .mono { font-size: 0.8rem; color: var(--lab-dim); }
+.sim-dot { font-size: 0.92rem; display: inline-flex; align-items: center; gap: 6px; }
+.sim-dot::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #56627a; }
+.sim-dot.running::before { background: var(--green); box-shadow: 0 0 8px var(--green); }
+.sim-dot.reset::before, .sim-dot.booting::before { background: var(--amber); }
+.sim-dot.dead::before { background: var(--red); }
+.sim-clock { color: var(--lab-dim); font-size: 0.8rem; }
+
+.sim-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 860px) { .sim-grid { grid-template-columns: 1fr; } }
+.sim-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sim-part { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--lab-line); border-radius: 12px; background: rgba(6, 17, 38, 0.5); min-width: 0; }
+.sim-part.low { border-color: rgba(245, 181, 68, 0.5); }
+.sim-part.stressed { border-color: rgba(245, 181, 68, 0.8); }
+.sim-part.broken { border-color: rgba(255, 93, 93, 0.7); background: rgba(60, 10, 14, 0.35); }
+.sim-part.off { opacity: 0.75; }
+.sim-vis { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; }
+.sim-vis svg { width: 44px; height: 44px; overflow: visible; }
+.sim-part-t { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sim-part-t b { font-size: 0.86rem; font-weight: 600; line-height: 1.25; }
+.sim-part-t small { color: var(--lab-dim); font-size: 0.72rem; }
+.sim-chip { align-self: flex-start; font-size: 0.68rem; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; }
+.sim-chip.low, .sim-chip.stressed { color: var(--amber); }
+.sim-chip.broken { color: var(--red); }
+.sim-icon { font-size: 1.45rem; line-height: 1; }
+.sim-icon.sound { animation: sim-pulse 0.35s ease-in-out infinite alternate; }
+.sim-icon.busy { animation: sim-shake 0.12s linear infinite; }
+@keyframes sim-pulse { from { transform: scale(1); filter: none; } to { transform: scale(1.18); filter: drop-shadow(0 0 6px var(--cyan)); } }
+@keyframes sim-shake { 0% { transform: translateX(-1px); } 50% { transform: translateX(1px); } 100% { transform: translateX(-1px); } }
+@media (prefers-reduced-motion: reduce) { .sim-icon.sound, .sim-icon.busy { animation: none; outline: 2px solid var(--cyan); border-radius: 6px; } }
+.sim-oled { width: 44px; height: 26px; background: #000; border: 2px solid #22304a; color: #9fe8ff; font-size: 0.42rem; line-height: 1.1; overflow: hidden; padding: 2px; word-break: break-all; }
+
+.sim-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.sim-side .lab-card { gap: 8px; }
+.sim-side .lab-muted { margin: 0; font-size: 0.82rem; }
+.sim-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.sim-btns .lab-btn { touch-action: none; user-select: none; }
+.sim-btns .lab-btn.held { border-color: var(--cyan); background: rgba(56, 214, 232, 0.16); }
+.sim-slider { display: flex; flex-direction: column; gap: 2px; font-size: 0.84rem; }
+.sim-slider span { display: flex; justify-content: space-between; gap: 8px; }
+.sim-slider b { font-weight: 500; color: var(--cyan); font-size: 0.8rem; }
+.sim-slider input { width: 100%; accent-color: var(--cyan); }
+.sim-toggle { display: flex; gap: 8px; align-items: center; font-size: 0.86rem; cursor: pointer; }
+.sim-toggle input { accent-color: var(--cyan); width: 16px; height: 16px; }
+.sim-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 0.86rem; }
+.sim-row label { display: flex; flex-direction: column; gap: 2px; flex: 1 1 120px; }
+.sim-row select, .sim-rails select { background: rgba(6, 17, 38, 0.8); color: var(--text); border: 1px solid var(--lab-line); border-radius: 8px; padding: 0.35rem 0.5rem; font: inherit; }
+.sim-rails summary { cursor: pointer; font-size: 0.86rem; color: var(--cyan); }
+.sim-rails .sim-row { justify-content: space-between; margin-top: 6px; }
+.sim-rails .sim-row span { flex: 1; min-width: 0; }
+.sim-short.on { border-color: var(--red); color: #ffd0d0; background: rgba(255, 93, 93, 0.12); }
+
+.sim-none { margin: 0; }
+.sim-events { display: flex; flex-direction: column; gap: 8px; }
+.sim-ev { border: 1px solid var(--lab-line); border-left-width: 3px; border-radius: 10px; padding: 10px 12px; background: rgba(6, 17, 38, 0.55); }
+.sim-ev.broken { border-left-color: var(--red); }
+.sim-ev.stopped { border-left-color: var(--amber); }
+.sim-ev.warning { border-left-color: var(--amber); }
+.sim-ev header { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.sim-ev header small { color: var(--lab-dim); }
+.sim-ev p { margin: 6px 0 0; font-size: 0.88rem; line-height: 1.45; }
+.sim-ev .sim-fix { color: #c9ffe6; }
+.sim-ev .lab-btn { margin-top: 8px; padding: 0.35rem 0.7rem; font-size: 0.82rem; }
+.sim-serial { max-height: 180px; overflow: auto; background: #030914; border: 1px solid var(--lab-line); border-radius: 8px; padding: 8px 10px; font-size: 0.76rem; color: #b9f3c9; white-space: pre-wrap; margin: 8px 0 0; }
+.sim-code .lab-row { margin-top: 8px; }
+.sim-code .lab-row label.lab-btn { cursor: pointer; flex: 0 0 auto; }
