@@ -75,11 +75,20 @@ class Result:
 # models, then the other provider when its key is set and RMX_CHECK_PROVIDER is "auto". Errors that retrying can't
 # fix (bad request, refused, bad key) are not retried on the same model.
 
-GEMINI_FALLBACKS = [m.strip() for m in os.getenv(
-    "RMX_GEMINI_FALLBACK_MODELS", "gemini-flash-latest,gemini-flash-lite-latest").split(",") if m.strip()]
+def _models(var: str, default: str) -> list[str]:
+    return [m.strip() for m in os.getenv(var, default).split(",") if m.strip()]
+
+
+# Backups for every purpose. Must be ids the API offers (the "-latest" aliases 404 on the SDK's default API).
+GEMINI_FALLBACKS = _models("RMX_GEMINI_FALLBACK_MODELS", "gemini-3.8-flash")
+# Extra backups for design, analysis and translation only. A lighter model is fine for drafting a design that the
+# page then checks itself, but not for the safety second opinion or camera checks, so those never use these.
+GEMINI_DESIGN_FALLBACKS = _models("RMX_GEMINI_DESIGN_FALLBACK_MODELS", "gemini-3.5-flash-lite")
 ATTEMPTS_PER_MODEL = max(1, int(os.getenv("RMX_MODEL_ATTEMPTS", "3")))
-# How long one call may take in total, as a multiple of its per-request timeout. Live-call checks keep it short.
+# How long one call may take in total, across every retry and backup: a multiple of its per-request timeout,
+# capped in seconds so a busy provider can't keep the page waiting for minutes.
 BUDGET = {"review": 1.5, "vision": 1.5, "design": 2.0, "translate": 2.0}
+MAX_SECONDS = {"review": 60.0, "vision": 45.0, "design": float(os.getenv("RMX_DESIGN_MAX_SECONDS", "240")), "translate": 90.0}
 
 
 _sleep = asyncio.sleep
@@ -126,7 +135,8 @@ def _classify(e: Exception) -> _Failure:
 def _chain(p: Provider, purpose: Purpose) -> list[tuple[Provider, str]]:
     """The models to try, in order: the configured one first, then backups."""
     out: list[tuple[Provider, str]] = []
-    gem = [GEMINI_MODEL] + [m for m in GEMINI_FALLBACKS if m != GEMINI_MODEL]
+    extra = GEMINI_DESIGN_FALLBACKS if purpose in ("design", "translate") else []
+    gem = list(dict.fromkeys([GEMINI_MODEL, *GEMINI_FALLBACKS, *extra]))
     if p == "anthropic":
         out.append(("anthropic", ANTHROPIC_MODEL[purpose]))
         if os.getenv("RMX_CHECK_PROVIDER", "auto").strip().lower() == "auto" and _google_key():
@@ -176,7 +186,7 @@ async def parse(system: str, frames_b64: list[str], text: str, schema: type[Base
     if p is None:
         return Result(None, error="No checking model configured (set GOOGLE_API_KEY or ANTHROPIC_API_KEY).")
     start = time.monotonic()
-    budget = timeout * BUDGET.get(purpose, 2.0)
+    budget = min(timeout * BUDGET.get(purpose, 2.0), MAX_SECONDS.get(purpose, 240.0))
     tried: list[tuple[Provider, str, _Failure]] = []
     for prov, model in _chain(p, purpose):
         for attempt in range(ATTEMPTS_PER_MODEL):

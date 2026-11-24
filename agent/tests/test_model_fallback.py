@@ -20,6 +20,7 @@ def keys(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "g")
     monkeypatch.setattr(checker, "GEMINI_MODEL", "main-model")
     monkeypatch.setattr(checker, "GEMINI_FALLBACKS", ["backup-model"])
+    monkeypatch.setattr(checker, "GEMINI_DESIGN_FALLBACKS", ["lite-model"])
 
 
 def script(monkeypatch, plan):
@@ -92,7 +93,8 @@ def test_failure_message_is_plain_and_names_what_was_tried(monkeypatch, keys):
     res = run()
     assert res.parsed is None
     assert res.error.startswith("Gemini check failed after")
-    assert "main-model" in res.error and "backup-model" in res.error and "overloaded" in res.error
+    assert "main-model" in res.error and "backup-model" in res.error and "lite-model" in res.error
+    assert "overloaded" in res.error
     assert "try again in a minute" in res.error
     assert "ANTHROPIC_API_KEY" in res.error  # suggests a backup provider
 
@@ -115,3 +117,26 @@ def test_classification():
     assert checker._classify(gerrors.ClientError(403, {"error": {"message": "PERMISSION_DENIED"}})).kind == "key"
     assert not checker._classify(gerrors.ClientError(400, {"error": {"message": "bad schema"}})).transient
     assert checker._classify(asyncio.TimeoutError()).kind == "timeout"
+
+
+def test_lite_backup_is_for_design_only_never_for_safety_checks(monkeypatch, keys):
+    calls = script(monkeypatch, {})
+    run("design")
+    assert "lite-model" in calls
+    calls = script(monkeypatch, {})
+    run("review")
+    assert "lite-model" not in calls and "backup-model" in calls
+
+
+def test_total_time_is_capped(monkeypatch, keys):
+    clock = [0.0]
+    monkeypatch.setattr(checker.time, "monotonic", lambda: clock[0])
+
+    async def slow(system, frames, text, schema, timeout, model=""):
+        clock[0] += timeout  # every attempt uses its whole allowance, then times out
+        raise TimeoutError()
+
+    monkeypatch.setattr(checker, "_gemini", slow)
+    res = asyncio.run(checker.parse("sys", [], "hi", Out, "design", timeout=300))
+    assert res.parsed is None and clock[0] <= checker.MAX_SECONDS["design"]
+    assert "took too long" in res.error
