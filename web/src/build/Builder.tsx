@@ -91,6 +91,7 @@ export function Builder({ onBack }: { onBack: () => void }) {
   const [goal, setGoal] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
+  const [failed, setFailed] = useState<{ input: IdeaInput; extra: { correction?: string } } | null>(null);
   const [over, setOver] = useState(false);
   const fileIn = useRef<HTMLInputElement>(null);
 
@@ -104,6 +105,7 @@ export function Builder({ onBack }: { onBack: () => void }) {
   async function think(input: IdeaInput, extra: { correction?: string } = {}) {
     setBusy(true);
     setError("");
+    setFailed(null);
     const withFiles = { ...input, attachment_ids: idea.files.map((f) => f.id) };
     try {
       const res = await fetch("/api/upgrade/assess", {
@@ -117,7 +119,8 @@ export function Builder({ onBack }: { onBack: () => void }) {
       const body = await res.json().catch(() => null);
       if (res.ok && body) { setIdea({ ...idea, input: withFiles, assessment: body as Assessment, offline: false }); setView("plan"); return; }
       const detail = body && typeof body.detail === "string" ? body.detail : "";
-      if (res.status !== 503 && detail) { setError(detail); return; }
+      // the AI is configured but couldn't answer: say so and offer a retry, never a template answer in its place
+      if (res.status !== 503 && detail) { setError(detail); setFailed({ input, extra }); return; }
       throw new Error("offline");
     } catch {
       const merged = extra.correction ? { ...withFiles, idea: `${withFiles.idea}. ${extra.correction}` } : withFiles;
@@ -210,7 +213,21 @@ export function Builder({ onBack }: { onBack: () => void }) {
         </div>
         <input ref={fileIn} type="file" accept=".json,application/json,image/*" hidden onChange={(e) => { void takeFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
       </header>
-      {error && <p className="lab-err" role="alert">{auto(error)}</p>}
+      {error && !failed && <p className="lab-err" role="alert">{auto(error)}</p>}
+      {error && failed && (
+        <div className="lab-fail" role="alert">
+          <b>{t("ia.fail")}</b>
+          <p>{auto(error)}</p>
+          <div className="lab-row">
+            <button className="lab-btn solid" disabled={busy} onClick={() => void think(failed.input, failed.extra)}>{t("lab.fail.retry")}</button>
+            <button className="lab-btn" disabled={busy} onClick={() => {
+              const merged = failed.extra.correction ? { ...failed.input, idea: `${failed.input.idea}. ${failed.extra.correction}` } : failed.input;
+              setIdea({ ...idea, input: { ...failed.input, attachment_ids: idea.files.map((f) => f.id) }, assessment: offlineAssess(merged), offline: true });
+              setError(""); setFailed(null); setView("plan");
+            }}>{t("ia.fail.basic")}</button>
+          </div>
+        </div>
+      )}
 
       {view === "idea" && (
         <IdeaStart input={idea.input} setInput={(input) => setIdea({ ...idea, input })} files={idea.files} setFiles={(files) => setIdea({ ...idea, files })}

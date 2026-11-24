@@ -208,6 +208,8 @@ models choose the language themselves).
 
 You need: a free LiveKit Cloud project (URL, API key, secret) and a free Google AI Studio API key. That's all; the app runs entirely on free tiers.
 
+**When the model is busy.** Every AI call (design lab, idea analyst, checks, translation) retries temporary errors (503 "overloaded", 429 rate limits, timeouts) with exponential backoff, then moves to backup models: `RMX_GEMINI_FALLBACK_MODELS` (default `gemini-flash-latest,gemini-flash-lite-latest`), then the other provider when both keys are set and `RMX_CHECK_PROVIDER` is `auto`. A refusal is never retried on another model. If everything fails, the page says in plain words which models were tried, what went wrong and what to do, and offers Try again; a worked example or basic analysis is never shown as if it were the answer to your idea.
+
 **Free vs paid checking.** The second-opinion review, label reading, part markers and camera step checks use a separate Gemini model (`gemini-3.5-flash` by default; Google no longer offers `gemini-2.5-flash` to new keys) on the Google free tier, with the same key as the live voice. The rules are identical either way: a disagreement, an error or a used-up free quota blocks the risky step, it never lets it through. Adding an optional `ANTHROPIC_API_KEY` switches these checks to Claude, which is a fully independent model family and the stronger second opinion; `RMX_CHECK_PROVIDER` forces one or the other. The free tier has per-minute and daily limits, so a long session can hit them; when it does, risky steps wait or are handed to a human rather than going ahead unchecked.
 
 ```bash

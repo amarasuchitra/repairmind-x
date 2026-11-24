@@ -99,6 +99,8 @@ export function Lab({ onBack }: { onBack: () => void }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  // which request failed last, so the error can offer the right retry
+  const [lastAsk, setLastAsk] = useState<"design" | "revise">("design");
   const [simF, setSimF] = useState<Finding[] | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -132,6 +134,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
 
   async function create() {
     setError("");
+    setLastAsk("design");
     setBusy(t("lab.designing"));
     try {
       // the engineer writes the design in the app's language; symbols, units and equations stay as they are
@@ -148,6 +151,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
   /** The self-correction loop: check, send the failures back, check the answer, until it holds. */
   async function rethink(auto: boolean) {
     setError("");
+    setLastAsk("revise");
     let current = design;
     // carry edited inputs into the design so the agent reasons about the numbers the engineer chose
     if (Object.keys(overrides).length) {
@@ -181,6 +185,8 @@ export function Lab({ onBack }: { onBack: () => void }) {
     }
   }
 
+  // a worked example on screen is never presented as the answer to the user's idea
+  const isExample = !design.revisions.length && EXAMPLES.some((d) => d.title === design.title);
   const reqById = new Map(design.requirements.map((r) => [r.id, r]));
   const riskById = new Map(analysis.risks.map((r) => [r.id, r]));
   const allFindings = [...analysis.findings, ...(simF ?? [])];
@@ -226,11 +232,21 @@ export function Lab({ onBack }: { onBack: () => void }) {
 
         <div className="lab-main">
           {busy && <div className="lab-busy" role="status"><span className="lab-spin" aria-hidden />{busy}</div>}
-          {error && <p className="lab-err" role="alert">{auto(error)}</p>}
+          {error && (
+            <div className="lab-fail" role="alert">
+              <b>{lastAsk === "design" ? t("lab.fail.design") : t("lab.fail.revise")}</b>
+              <p>{auto(error)}</p>
+              <div className="lab-row">
+                {lastAsk === "design" && <button className="lab-btn solid" disabled={!!busy || idea.trim().length < 8} onClick={create}>{t("lab.fail.retry")}</button>}
+                <button className="lab-btn ghost" onClick={() => setError("")}>{t("lab.fail.dismiss")}</button>
+              </div>
+              {isExample && <p className="lab-muted">{t("lab.fail.exampleBelow")}</p>}
+            </div>
+          )}
 
           <div className="lab-title">
             <div>
-              <span className="lab-kicker">{design.revisions.length ? t("lab.revision", { n: design.revisions.length }) : t("lab.firstPass")}</span>
+              <span className={`lab-kicker${isExample ? " example" : ""}`}>{isExample ? t("lab.exampleTag") : design.revisions.length ? t("lab.revision", { n: design.revisions.length }) : t("lab.firstPass")}</span>
               <h1>{design.title}</h1>
             </div>
             <Health findings={analysis.findings} simFindings={simF} checking={checking} />
