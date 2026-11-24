@@ -20,21 +20,28 @@ export interface HomeProps {
   onInspect: () => void;
   onLab: () => void;
   onRedesign: () => void;
+  /** the hardware project builder */
+  onBuild: () => void;
   /** the scrolling 3D walkthrough of how a repair call works */
   onTour: () => void;
   profile: { name: string; guest?: boolean } | null;
   onSignOut: () => void;
 }
 
-type Intent = "fix" | "design" | "redesign";
+type Intent = "fix" | "design" | "redesign" | "build";
+
+/** Hand-off to the hardware builder, which suggests parts for this goal once. Same key as build/Builder.tsx. */
+const BUILD_GOAL_KEY = "rmx.build.goal";
 
 /**
  * A first guess at what someone typed or said. English keywords only: anything else starts a repair,
- * which is the main job, and the three suggestions under the box are always there to pick another.
+ * which is the main job, and the suggestions under the box are always there to pick another.
  */
 export function guessIntent(text: string): Intent {
   const x = text.toLowerCase();
   if (/\b(redesign|re-design|replacement part|new part|stronger part|3d[- ]?print|print (a|me|one))\b/.test(x)) return "redesign";
+  const broken = /\b(broken|fix|repair|not working|stopped|won't|doesn't)\b/.test(x);
+  if (!broken && /\b(toy|gadget|sensors?|arduino|esp32|electronics?|circuit|robot|leds?|smart|wiring|microcontroller|make (it|my \w+) (talk|speak|glow|light up|listen|move|beep))\b/.test(x)) return "build";
   if (/\b(design|build|invent|create|prototype|idea for|make (a|an|me))\b/.test(x)) return "design";
   return "fix";
 }
@@ -92,6 +99,13 @@ export function Home(p: HomeProps) {
       return;
     }
     if (intent === "redesign") { p.onRedesign(); return; }
+    if (intent === "build") {
+      if (words) {
+        try { sessionStorage.setItem(BUILD_GOAL_KEY, words); } catch { /* the builder just opens on its start page */ }
+      }
+      p.onBuild();
+      return;
+    }
     setSaid(words);
     setMode("fix");
   }
@@ -123,6 +137,7 @@ export function Home(p: HomeProps) {
               <div className="as-menu-list" role="menu">
                 <button role="menuitem" onClick={() => { setMenu(false); choose("fix"); }}>{t("home.s.fix")}<small>{t("home.s.fix.d")}</small></button>
                 <button role="menuitem" onClick={() => { setMenu(false); p.onLab(); }}>{t("start.nav.lab")}<small>{t("home.s.design.d")}</small></button>
+                <button role="menuitem" onClick={() => { setMenu(false); p.onBuild(); }}>{t("start.nav.build")}<small>{t("home.s.build.d")}</small></button>
                 <button role="menuitem" onClick={() => { setMenu(false); p.onRedesign(); }}>{t("start.nav.redesign")}<small>{t("home.s.redesign.d")}</small></button>
                 <button role="menuitem" onClick={() => { setMenu(false); p.onInspect(); }}>{t("start.nav.inspect")}<small>{t("home.inspect.d")}</small></button>
                 <hr />
@@ -160,6 +175,7 @@ export function Home(p: HomeProps) {
             <div className="as-suggest" aria-label={t("home.suggest")}>
               <button onClick={() => choose("fix")}><b>{t("home.s.fix")}</b><span>{t("home.s.fix.d")}</span></button>
               <button onClick={() => choose("design")}><b>{t("home.s.design")}</b><span>{t("home.s.design.d")}</span></button>
+              <button onClick={() => choose("build")}><b>{t("home.s.build")}</b><span>{t("home.s.build.d")}</span></button>
               <button onClick={() => choose("redesign")}><b>{t("home.s.redesign")}</b><span>{t("home.s.redesign.d")}</span></button>
             </div>
           </>
