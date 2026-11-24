@@ -21,6 +21,8 @@ export interface LandingProps {
   onInspect: () => void;
   onLab: () => void;
   onRedesign: () => void;
+  /** back to the assistant start page */
+  onHome?: () => void;
   /** false while the intro is still on screen: the entrance waits for it */
   entering: boolean;
   /** who signed in with the quick sign-in on this device, if anyone */
@@ -225,7 +227,7 @@ export function Landing(p: LandingProps) {
       </div>
 
       <header className="sx-top">
-        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); go(0); }} aria-label={t("start.backTop")}>
+        <a className="sx-brand" href="#" onClick={(e) => { e.preventDefault(); if (p.onHome) p.onHome(); else go(0); }} aria-label={p.onHome ? t("home.homeAria") : t("start.backTop")}>
           <Wordmark />
         </a>
         <span className="sx-count" aria-live="polite">{n(ch)} <i>/</i> {n(CHAPTERS.length - 1)} <em>{t(CHAPTERS[ch])}</em></span>

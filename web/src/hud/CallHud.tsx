@@ -59,6 +59,8 @@ export function CallHud(p: CallHudProps) {
   const v = p.view;
   const risk = v?.risk_level ?? "green";
   const elapsed = useElapsed();
+  // the full diagnostics, safety list, procedure and manual upload stay one tap away
+  const [details, setDetails] = useState(false);
   return (
     <div className="call-grid hud">
       <header className="call-top">
@@ -82,8 +84,6 @@ export function CallHud(p: CallHudProps) {
         {p.overlay}
         <div className="hud-readout" aria-label="Session status">
           <div><b>{t("call.device")}</b> {v?.device ? auto(v.device) : t("call.scanning")}</div>
-          <div className="ro-extra"><b>{t("call.model")}</b> {v?.device ? (v.model_confirmed ? t("call.confirmed") : t("call.notConfirmed")) : "—"}</div>
-          {v?.diagnosis && <div className="ro-extra"><b>{t("call.diag")}</b> {Math.round(v.confidence * 100)}%</div>}
         </div>
         {risk !== "green" && (
           <div className={`risk-banner risk-${risk}`} role="status">
@@ -118,16 +118,25 @@ export function CallHud(p: CallHudProps) {
 
       <aside className="panel">
         <div className={`presence presence-${p.orbState}`}>
-          <VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={220} detail="full" />
+          <VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={160} detail="full" />
           <div className="presence-text">
             <span className="hud-h">{t("call.mechanic")}</span>
             <b>{p.status}</b>
             <span className="dim small">{t(STATE_LINE[p.orbState])}</span>
           </div>
         </div>
+        <NowCard view={v} />
         {p.side}
-        <RepairPanel view={v} />
-        {p.tools}
+        <button className="hud-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
+          {details ? t("call.details.hide") : t("call.details.show")}
+          <span aria-hidden className="chev" />
+        </button>
+        {details && (
+          <>
+            <RepairPanel view={v} />
+            {p.tools}
+          </>
+        )}
       </aside>
 
       <footer className="controls">
@@ -175,6 +184,62 @@ export function brackets(x0: number, y0: number, x1: number, y1: number, c: numb
     `M ${x0} ${y0 + c} V ${y0} H ${x0 + c}`, `M ${x1 - c} ${y0} H ${x1} V ${y0 + c}`,
     `M ${x1} ${y1 - c} V ${y1} H ${x1 - c}`, `M ${x0 + c} ${y1} H ${x0} V ${y1 - c}`,
   ].join(" ");
+}
+
+/** The one thing that matters right now, in plain words: the current step, or what's wrong so far. */
+function NowCard({ view }: { view: SessionView | null }) {
+  const { t, auto } = useI18n();
+  if (!view) {
+    return (
+      <div className="hud-card now">
+        <span className="now-k">{t("call.now.start")}</span>
+        <p className="now-t">{t("call.now.show")}</p>
+      </div>
+    );
+  }
+  const steps = view.steps;
+  const cur = steps.findIndex((s) => s.status === "active" || s.status === "awaiting_confirmation" || s.status === "blocked" || s.status === "failed");
+  const step = cur >= 0 ? steps[cur] : null;
+  const allDone = steps.length > 0 && steps.every((s) => s.status === "done");
+  const left = view.precautions.filter((x) => !x.done).length;
+  const pct = Math.round((view.diagnosis ? view.confidence : view.hypotheses[0]?.confidence ?? 0) * 100);
+  let k: string, body: string, sub = "";
+  if (step) {
+    k = step.status === "awaiting_confirmation" ? t("call.step.awaiting_confirmation") : t("call.now.step", { n: cur + 1, total: steps.length });
+    body = auto(step.text);
+    if (step.irreversible.length) sub = t("call.irreversible", { what: step.irreversible.map(auto).join(", ") });
+  } else if (allDone) {
+    k = t("call.now.doneK");
+    body = t("call.now.done");
+  } else if (view.diagnosis) {
+    k = t("call.now.diag");
+    body = auto(view.diagnosis);
+    sub = t("call.sure", { pct });
+  } else if (view.hypotheses.length) {
+    k = t("call.now.likely");
+    body = auto(view.hypotheses[0].cause);
+    sub = t("call.sure", { pct });
+  } else if (view.device) {
+    k = t("call.now.device");
+    body = auto(view.device);
+    if (!view.model_confirmed) sub = t("call.showLabel");
+  } else {
+    k = t("call.now.start");
+    body = t("call.now.show");
+  }
+  return (
+    <div className={`hud-card now${step?.status === "awaiting_confirmation" ? " now-ok" : ""}`}>
+      <span className="now-k">{k}</span>
+      <p className="now-t">{body}</p>
+      {sub && <p className={`now-s${step ? " warn" : ""}`}>{sub}</p>}
+      {steps.length > 0 && (
+        <div className="now-bar" aria-hidden>
+          {steps.map((s) => <i key={s.id} className={`st-${s.status}`} />)}
+        </div>
+      )}
+      {left > 0 && view.risk_level !== "green" && <p className="now-safety">{t("call.now.safety", { n: left })}</p>}
+    </div>
+  );
 }
 
 function RepairPanel({ view }: { view: SessionView | null }) {
