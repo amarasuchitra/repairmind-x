@@ -164,6 +164,23 @@ Beyond repair: bring an idea, get an engineering breakdown that is checked, simu
 | Lessons memory | `sessions/lab/lessons.jsonl` (`RMX_LAB_DIR`) | Each review round ends with general lessons, which are added to every later design prompt. This is how it improves over time without retraining a model. |
 | Worked examples | `web/src/lab/examples.ts` | A ramp-climbing rover, a drop pod (fails its shock check on purpose, to show the rethink loop) and a suspension rig. They work with no server or key, and tests check that each simulation reproduces its own hand calculation. |
 
+## Idea to reality (`#build`)
+
+For people with an idea but no hardware background. Describe a new invention, or something you own and how
+it should be better, in plain words (typed or spoken), and drop in photos or documents.
+
+| Step | Where | What happens |
+|---|---|---|
+| Understand | `agent/repairmind/upgrade/assess.py`, `POST /api/upgrade/assess` | The analyst (Claude or free Gemini) restates the idea, works out what the product is and what is likely inside (marked seen, likely or guess), and asks a few plain questions with tap-to-answer choices. |
+| Judge | same | Each wish is possible, possible with changes, or not possible, backed by physics, power, space, cost, safety, skill and legal factors, with the closest buildable alternative when it can't be done. `safety.py` runs on the product and wishes in plain code and can only make the answer stricter (no relays or internal changes on mains or red-level products). |
+| Plan | same | A staged path from a cheap desk prototype to a finished product, the catalogue parts and reactions for the buildable wishes, other things needed beyond the catalogue, and a hand-off to the design lab when there are mechanisms or loads. |
+| Learn | `RMX_UPGRADE_DIR` (default `sessions/upgrade`) | Every judgement is kept as a precedent and every user correction ("it runs on 3 AAA cells") as a learned fact; both go into later prompts so a corrected mistake isn't repeated. |
+| Build | `web/src/build/` | "Build it" opens the plan on a drag-and-drop parts canvas. The checker (`engine.ts`) verifies pins, voltages, the power budget, battery life and fit, offers one-tap fixes, and produces a wiring diagram, a parts list in rupees, a starter Arduino sketch (`firmware.ts`) and build steps with safety notes. |
+
+Without an AI key, `web/src/build/assess.ts` gives a basic offline analysis from built-in product knowledge,
+so the flow still works. The generated sketches are syntax-checked in development, not compiled against the
+real Arduino toolchain: compile before flashing.
+
 ## Languages
 
 The whole app speaks 16 languages: English, Hindi, Bengali, Telugu, Marathi, Tamil, Gujarati, Kannada, Malayalam,
