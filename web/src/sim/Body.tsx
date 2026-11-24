@@ -12,9 +12,9 @@ import "./sim.css";
 
 const STORE = "rmx.build.body";
 
-interface Saved { spec: ShellSpec; source: string; keep: boolean; squeeze: number }
+export interface Saved { spec: ShellSpec; source: string; keep: boolean; squeeze: number }
 
-function load(): Saved | null {
+export function load(): Saved | null {
   try { const raw = localStorage.getItem(STORE); return raw ? (JSON.parse(raw) as Saved) : null; } catch { return null; }
 }
 
@@ -24,9 +24,9 @@ const fresh = (): Saved => ({ spec: { outline: PRESETS[0].make(), width: 100, he
  * The product's body: its outer shape in 3D from a photo or a preset and the measured size, remodelled with
  * sliders, the electronics placed inside, the maths behind the shell, and printable STL halves.
  */
-export function BodyView({ project }: { project: Project }) {
+export function BodyView({ project, initial }: { project: Project; initial?: Saved }) {
   const { t, auto } = useI18n();
-  const [s, setS] = useState<Saved>(() => load() ?? fresh());
+  const [s, setS] = useState<Saved>(() => initial ?? load() ?? fresh());
   const [err, setErr] = useState("");
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(true);

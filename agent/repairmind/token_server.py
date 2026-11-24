@@ -21,6 +21,7 @@ from . import i18n
 from .agent import AGENT_NAME, SESSIONS_DIR
 from .expert import products as expert_products
 from .inspection.api import router as inspection_router
+from .guide.api import router as guide_router
 from .lab.api import router as lab_router
 from .library.api import router as library_router
 from .redesign.api import router as redesign_router
@@ -63,6 +64,7 @@ def health() -> dict:
 
 
 app.include_router(inspection_router)
+app.include_router(guide_router)
 app.include_router(lab_router)
 app.include_router(library_router)
 app.include_router(redesign_router)

@@ -13,10 +13,14 @@ import { AvrRunner } from "./avr.ts";
  * The "Try it" tab: the project on a virtual bench. Switch it on, play with the world around it, change values
  * and wiring, and watch what the parts do, including the ways they fail.
  */
-export function BenchView({ project, report }: { project: Project; report: Report }) {
+export function BenchView({ project, report, initial }: {
+  project: Project; report: Report;
+  /** a set-up to start from (the build guide uses this to show what it just tested); remount to apply again */
+  initial?: { env?: Env; mods?: Mods; power?: boolean };
+}) {
   const { t, auto } = useI18n();
-  const [mods, setMods] = useState<Mods>(() => defaultMods(report));
-  const [env, setEnv] = useState<Env>(defaultEnv);
+  const [mods, setMods] = useState<Mods>(() => initial?.mods ?? defaultMods(report));
+  const [env, setEnv] = useState<Env>(() => initial?.env ?? defaultEnv());
   const [frame, setFrame] = useState<Frame | null>(null);
   const [speed, setSpeed] = useState(1);
   const [hex, setHex] = useState<{ name: string; text: string } | null>(null);
@@ -36,6 +40,7 @@ export function BenchView({ project, report }: { project: Project; report: Repor
     return { bench: b, loadErr };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
   bench.mods = mods;
+  useEffect(() => { if (initial?.power) bench.setPower(true); }, [bench]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let raf = 0, last = performance.now(), lastShow = 0, acc = 0;

@@ -168,6 +168,24 @@ Beyond repair: bring an idea, get an engineering breakdown that is checked, simu
 | Lessons memory | `sessions/lab/lessons.jsonl` (`RMX_LAB_DIR`) | Each review round ends with general lessons, which are added to every later design prompt. This is how it improves over time without retraining a model. |
 | Worked examples | `web/src/lab/examples.ts` | A ramp-climbing rover, a drop pod (fails its shock check on purpose, to show the rethink loop) and a suspension rig. They work with no server or key, and tests check that each simulation reproduces its own hand calculation. |
 
+## Make it with me (`#make`): one guide for the whole build
+
+The main way in for making things. One calm screen: a conversation with the guide, by voice or text, in the
+person's language, and beside it only the one view that helps right now (the plan, the parts and checks, the
+wiring, the virtual bench, the body, the design, or a build step). Tabs and engineering detail stay out of the
+way; "More" opens any view, the full builder (`#build`) or the full design lab (`#lab`) on the same project.
+
+| Part | Where | What it does |
+|---|---|---|
+| Guide | `agent/repairmind/guide/`, `POST /api/guide/turn` | One model call per turn (Gemini or Claude through `checker.parse`, so the same retries, backup models and plain-language failures as the rest of the app; `RMX_GUIDE_MODEL`, capped at `RMX_GUIDE_MAX_SECONDS`, default 75 s). Each turn returns what to say, the tools to run, an optional checkpoint about the real build ("Did the LED light up?") with tap answers, quick replies, the project stage and facts to remember. Plain-code `safety.py` reads what the person said and can only make the guide more careful. |
+| Tools | `web/src/guide/tools.ts` | The guide never does the maths. It asks for tools and the page runs them on the real engines: the idea analyst (`/api/upgrade/assess`), laying out and fixing parts with the checker (`engine.ts`), behaviours, a headless virtual bench run with any world and fault settings (`bench.ts`: clap, light, distance, battery charge, a missing resistor...), the 3D body shaped and fitted around the parts (`shell.ts`), the design lab's engineer and its rethink loop (`/api/lab/design`, `/api/lab/revise`, checked by `analysis.ts` and the physics sandbox), and build steps. Results go back to the guide as facts, and it continues on its own (up to 4 rounds) to explain them and react to failures. |
+| Screen | `web/src/guide/Studio.tsx`, `studio.css` | The orb, the conversation, a progress rail (Idea, Plan, Design, Try it, Body, Build), mic and spoken replies (the browser's own speech), photos and files, the checkpoint card with "Send a photo", and the one view the guide opened. On phones the view sits above the conversation. |
+| Memory | browser storage (`rmx.guide`, plus the builder's and lab's own keys) | The conversation, the stage, the build steps done and the current one, the open checkpoint and remembered facts survive a reload, so the guide picks up where the person left off. |
+
+| Start | It tests the idea on the bench | Build along with checkpoints | Phone |
+|---|---|---|---|
+| ![Start](docs/screenshots/guide/desktop-1-start.png) | ![Bench](docs/screenshots/guide/desktop-2-bench.png) | ![Step](docs/screenshots/guide/desktop-3-step.png) | ![Phone](docs/screenshots/guide/phone-3-step.png) |
+
 ## Idea to reality (`#build`)
 
 For people with an idea but no hardware background. Describe a new invention, or something you own and how

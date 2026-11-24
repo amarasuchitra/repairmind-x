@@ -6,7 +6,6 @@ import { sound } from "../fx/sound";
 import { Arrow } from "../ui/Icons";
 import { Wordmark } from "../ui/RingMark";
 import { MicButton } from "../lab/inputs";
-import { LAB_BRIEF_KEY as BRIEF_KEY } from "../redesign/brief";
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Key } from "../i18n/en";
 
@@ -92,10 +91,11 @@ export function Home(p: HomeProps) {
 
   function choose(intent: Intent, words = "") {
     if (intent === "design") {
+      // one guide for making things: it decides when the idea needs the design lab's engineer
       if (words) {
-        try { sessionStorage.setItem(BRIEF_KEY, JSON.stringify({ idea: words, context: "" })); } catch { /* the lab just opens empty */ }
+        try { sessionStorage.setItem(BUILD_GOAL_KEY, words); } catch { /* the guide just opens and asks */ }
       }
-      p.onLab();
+      p.onBuild();
       return;
     }
     if (intent === "redesign") { p.onRedesign(); return; }

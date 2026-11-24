@@ -16,6 +16,8 @@ const Lab = lazy(() => import("./lab/Lab.tsx").then((m) => ({ default: m.Lab }))
 const Redesign = lazy(() => import("./redesign/Redesign.tsx").then((m) => ({ default: m.Redesign })));
 // The hardware project builder (drag parts, get wiring, code and costs) only loads when someone opens #build.
 const Builder = lazy(() => import("./build/Builder.tsx").then((m) => ({ default: m.Builder })));
+// The build guide (one conversation that drives the builder, bench, body and design lab) loads when someone opens #make.
+const Studio = lazy(() => import("./guide/Studio.tsx").then((m) => ({ default: m.Studio })));
 
 interface Connection {
   serverUrl: string;
@@ -44,10 +46,10 @@ function writeLastRoom(room: string | null) {
   }
 }
 
-type Page = "call" | "inspect" | "demo" | "lab" | "redesign" | "build" | "assistant";
+type Page = "call" | "inspect" | "demo" | "lab" | "redesign" | "build" | "make" | "assistant";
 const pageFromHash = (): Page => {
   const h = window.location.hash;
-  return h === "#inspect" ? "inspect" : h === "#assistant" ? "assistant" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h === "#build" ? "build" : h.startsWith("#demo") ? "demo" : "call";
+  return h === "#inspect" ? "inspect" : h === "#assistant" ? "assistant" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h === "#build" ? "build" : h === "#make" ? "make" : h.startsWith("#demo") ? "demo" : "call";
 };
 
 export default function App() {
@@ -68,7 +70,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  function go(next: "call" | "inspect" | "lab" | "redesign" | "build" | "assistant") {
+  function go(next: "call" | "inspect" | "lab" | "redesign" | "build" | "make" | "assistant") {
     window.location.hash = next === "call" ? "" : next;
     setPage(next);
   }
@@ -118,6 +120,8 @@ export default function App() {
     );
   } else if (page === "redesign") {
     content = <Suspense fallback={null}><Redesign onBack={() => go("call")} /></Suspense>;
+  } else if (page === "make") {
+    content = <Suspense fallback={null}><Studio onBack={() => go("call")} /></Suspense>;
   } else if (page === "build") {
     content = <Suspense fallback={null}><Builder onBack={() => go("call")} /></Suspense>;
   } else if (page === "lab") {
@@ -153,6 +157,7 @@ export default function App() {
           onSignOut={() => { writeProfile(null); setProfile(null); }}
           onInspect={() => go("inspect")}
           onLab={() => go("lab")}
+          onMake={() => go("make")}
           onRedesign={() => go("redesign")}
           onAssistant={() => go("assistant")}
           entering={!intro}
@@ -172,7 +177,7 @@ export default function App() {
         onInspect={() => go("inspect")}
         onLab={() => go("lab")}
         onRedesign={() => go("redesign")}
-        onBuild={() => go("build")}
+        onBuild={() => go("make")}
         onTour={() => go("call")}
       />
     );
@@ -181,7 +186,7 @@ export default function App() {
   return (
     <>
       {/* the walkthrough draws its own 3D scene; the lab and redesign pages have their own backdrop */}
-      {(conn || signingIn || (page !== "call" && page !== "lab" && page !== "redesign" && page !== "build")) && (
+      {(conn || signingIn || (page !== "call" && page !== "lab" && page !== "redesign" && page !== "build" && page !== "make")) && (
         <NetworkBackground intensity={conn || page === "demo" ? 0.55 : page === "assistant" ? 0.7 : 1} />
       )}
       {content}
