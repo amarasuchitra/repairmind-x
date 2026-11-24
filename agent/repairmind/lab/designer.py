@@ -21,7 +21,7 @@ import os
 import time
 from pathlib import Path
 
-from .. import checker, i18n
+from .. import checker, i18n, library
 from .schema import Design
 
 log = logging.getLogger("repairmind.lab")
@@ -209,11 +209,13 @@ async def generate(idea: str, context: str = "", attachments: list | None = None
     agreed = brief_block(brief, answers)
     if agreed:
         text += "\n\n" + agreed
+    lib = library.prompt_block(library.search(library.query_for(
+        idea, context, brief.restated if brief else "", " ".join(f"{x.q} {x.a}" for x in answers or []))))
     att_text, images = for_prompt(attachments or [])
     if att_text:
         text += "\n\n" + att_text
     design = await _call(ENGINEER_SYSTEM + (ATTACHMENTS_RULES if att_text else "") + level_rules(level)
-                         + i18n.design_rules(language) + _lessons_block(), text, images)
+                         + i18n.design_rules(language) + _lessons_block() + lib, text, images)
     design.idea = design.idea or idea
     design.revisions = []
     return design
@@ -228,7 +230,9 @@ async def revise(design: Design, findings: list[str], note: str = "", language: 
         "FINDINGS FROM INDEPENDENT CHECKS:\n" + ("\n".join(f"- {f}" for f in findings) or "- none: look for what the checks can't see"),
         f"NOTE FROM THE ENGINEER:\n{note.strip()}" if note.strip() else "",
     ]))
-    revised = await _call(REVISE_SYSTEM + level_rules(level) + i18n.design_rules(language) + _lessons_block(), text)
+    lib = library.prompt_block(library.search(library.query_for(
+        design.idea, design.title, design.summary, " ".join(findings)[:1500], note)))
+    revised = await _call(REVISE_SYSTEM + level_rules(level) + i18n.design_rules(language) + _lessons_block() + lib, text)
     # keep the history even if the model dropped earlier rounds
     earlier = design.revisions
     new = [r for r in revised.revisions if r.round >= round_no] or revised.revisions[-1:]

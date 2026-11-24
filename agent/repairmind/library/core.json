@@ -1,0 +1,466 @@
+[
+{
+"id": "mat-steel-mild",
+"topic": "materials",
+"title": "Mild structural steel (S235 / ASTM A36)",
+"text": "Density about 7850 kg/m^3. Young's modulus E about 200-210 GPa. Minimum yield strength 235 MPa (S235) or 250 MPa (A36); tensile strength about 360-510 MPa. Endurance limit for polished specimens roughly half the tensile strength; welded joints are far lower and are governed by fatigue detail categories. Rusts without paint or galvanising. Easy to weld and drill; the default for frames, brackets and stands.",
+"source": "EN 10025-2 and ASTM A36 minimum properties; Shigley's Mechanical Engineering Design (Budynas & Nisbett) for fatigue",
+"tags": ""
+},
+{
+"id": "mat-steel-s355",
+"topic": "materials",
+"title": "Higher-strength structural steel (S355)",
+"text": "Same stiffness and density as mild steel (E about 210 GPa, 7850 kg/m^3) with minimum yield 355 MPa and tensile strength 470-630 MPa. Using stronger steel does not make a part stiffer: deflection depends on E and geometry, not strength.",
+"source": "EN 10025-2",
+"tags": ""
+},
+{
+"id": "mat-stainless-304",
+"topic": "materials",
+"title": "Stainless steel 304",
+"text": "Density about 8000 kg/m^3, E about 193 GPa, yield about 215 MPa annealed (much higher when cold worked), tensile about 505 MPa. Good corrosion resistance in fresh water and food contact; chlorides (sea water, pools) can pit it, where 316 is preferred. Work-hardens when drilled: use sharp bits and low speed.",
+"source": "ASM Handbook Vol. 1; typical mill certificate values",
+"tags": ""
+},
+{
+"id": "mat-al-6061",
+"topic": "materials",
+"title": "Aluminium alloy 6061-T6",
+"text": "Density about 2700 kg/m^3 (about one third of steel), E about 69 GPa (about one third of steel, so an aluminium part deflects about three times more than the same steel part), yield about 276 MPa, tensile about 310 MPa. Fatigue strength about 96 MPa at 5e8 cycles; aluminium has no true endurance limit. Welding drops the heat-affected zone to roughly T4/O strength (yield near 110 MPa) unless re-heat-treated.",
+"source": "MIL-HDBK-5J / MMPDS (public domain U.S. DoD handbook); Aluminum Association Aluminum Design Manual",
+"tags": ""
+},
+{
+"id": "mat-al-6063",
+"topic": "materials",
+"title": "Aluminium 6063-T5/T6 (extrusions, T-slot profile)",
+"text": "E about 69 GPa, yield about 145 MPa (T5) to 214 MPa (T6). Used for window frames and T-slot extrusion. Lower strength than 6061 but better surface finish and easier to extrude.",
+"source": "Aluminum Association Aluminum Standards and Data",
+"tags": ""
+},
+{
+"id": "mat-pla",
+"topic": "materials",
+"title": "PLA (3D printing)",
+"text": "Density about 1240 kg/m^3, E about 3-3.5 GPa, tensile strength about 50-60 MPa in bulk but a printed part is weaker, especially across layers (often 30-60% of bulk). Softens near 55-60 C (glass transition): a PLA part left in a car or in sun can sag. Creeps under sustained load. Brittle; fine for prototypes and jigs, poor for hot, loaded or outdoor parts.",
+"source": "Typical filament datasheets; Ngo et al., 'Additive manufacturing (3D printing): A review', Composites Part B (2018)",
+"tags": "3d print printed printer plastic"
+},
+{
+"id": "mat-petg",
+"topic": "materials",
+"title": "PETG (3D printing)",
+"text": "E about 2 GPa, tensile about 45-50 MPa bulk, glass transition about 80 C. Tougher and more heat- and UV-tolerant than PLA, better for outdoor and functional parts. Layer adhesion is good but printed parts still have weaker layer lines.",
+"source": "Typical filament datasheets",
+"tags": "3d print printed printer plastic outdoor"
+},
+{
+"id": "mat-abs-asa",
+"topic": "materials",
+"title": "ABS and ASA",
+"text": "E about 2-2.3 GPa, tensile about 40 MPa, glass transition about 100-105 C. ASA resists UV for outdoor use. Warps while printing without an enclosure. Common for appliance housings (injection moulded ABS).",
+"source": "Typical resin datasheets",
+"tags": "3d print printed plastic housing case enclosure"
+},
+{
+"id": "mat-nylon",
+"topic": "materials",
+"title": "Nylon (PA6 / PA12)",
+"text": "E about 1-3 GPa depending on moisture, tensile about 50-80 MPa, tough and wear resistant, low friction: good for gears, bushings and clips. Absorbs water, which lowers stiffness and changes size.",
+"source": "Typical resin datasheets",
+"tags": ""
+},
+{
+"id": "mat-hdpe",
+"topic": "materials",
+"title": "HDPE",
+"text": "Density about 950 kg/m^3 (floats), E about 0.8-1.2 GPa, yield about 25 MPa. Chemically resistant and food safe; used for tanks, pipes and cutting boards. Hard to glue; join by welding or fasteners.",
+"source": "Typical resin datasheets",
+"tags": ""
+},
+{
+"id": "mat-pvc",
+"topic": "materials",
+"title": "PVC pipe",
+"text": "E about 3 GPa, tensile about 50 MPa. Pressure ratings fall sharply with temperature (derate above about 23 C); not for hot water (use CPVC). Becomes brittle in cold and in long UV exposure unless protected.",
+"source": "IS 4985 / ASTM D1785 pressure pipe standards",
+"tags": ""
+},
+{
+"id": "mat-cfrp",
+"topic": "materials",
+"title": "Carbon-fibre composite (CFRP)",
+"text": "Density about 1500-1600 kg/m^3. Quasi-isotropic laminate E about 50-70 GPa; unidirectional along fibres E about 120-150 GPa and tensile 1000+ MPa, but weak across fibres and in compression after impact. Very stiff and light for its weight; failure is sudden. Conducts electricity: keep away from exposed live parts.",
+"source": "MIL-HDBK-17 / CMH-17 Composite Materials Handbook",
+"tags": ""
+},
+{
+"id": "mat-wood",
+"topic": "materials",
+"title": "Wood (softwood and plywood)",
+"text": "Clear softwood along the grain: density about 400-550 kg/m^3, E about 9-13 GPa, bending strength (modulus of rupture) about 60-90 MPa for small clear samples; design values for graded lumber are much lower (about 5-15 MPa allowable bending) because of knots and moisture. Across the grain it is many times weaker. Plywood is more uniform in two directions. Strength falls when wet; long-term loads cause creep.",
+"source": "USDA Forest Products Laboratory, Wood Handbook FPL-GTR-282 (public domain); IS 883",
+"tags": ""
+},
+{
+"id": "mat-concrete",
+"topic": "materials",
+"title": "Concrete",
+"text": "Density about 2400 kg/m^3, compressive strength 20-40 MPa for common grades (M20-M40), but tensile strength only about 10% of compressive: unreinforced concrete cracks under bending. Needs steel reinforcement for beams and slabs.",
+"source": "IS 456: Plain and Reinforced Concrete code of practice",
+"tags": ""
+},
+{
+"id": "mat-rubber",
+"topic": "materials",
+"title": "Rubber and elastomers",
+"text": "Very low stiffness (shear modulus about 0.3-1 MPa) and nearly incompressible (Poisson ratio about 0.5): a rubber pad's stiffness depends heavily on its shape factor. Used for vibration isolation, seals and grip. Natural rubber degrades in ozone and oil; nitrile resists oil; silicone handles heat.",
+"source": "Gent, Engineering with Rubber",
+"tags": ""
+},
+{
+"id": "fric-coeffs",
+"topic": "mechanics",
+"title": "Friction coefficients (typical)",
+"text": "Static friction coefficients, dry: rubber tyre on dry concrete about 0.7-1.0, on wet concrete about 0.4-0.7; steel on steel about 0.5-0.8 dry, 0.1-0.2 lubricated; wood on wood about 0.25-0.5; PTFE on steel about 0.04-0.1; nylon on steel about 0.2-0.3. Rolling resistance coefficient: car tyre on asphalt about 0.01-0.015, hard plastic caster on concrete about 0.02-0.05, small rubber wheel on carpet about 0.05-0.1. Real values vary widely: measure on the actual surfaces with an incline test (mu = tan of the slip angle).",
+"source": "Marks' Standard Handbook for Mechanical Engineers; Machinery's Handbook",
+"tags": ""
+},
+{
+"id": "fos",
+"topic": "design practice",
+"title": "Factors of safety by domain",
+"text": "Typical design factors: aerospace flight structures 1.25 on yield and 1.4-1.5 on ultimate (with tested materials and analysis); general machinery 1.5-2.5 on yield; parts that hold people or are in public use 3-4 or more; lifting gear and ropes 5 or more (wire rope slings often 5:1); 3D-printed or poorly characterised materials 3+; brittle materials higher. A factor of safety covers uncertainty in loads, materials and analysis; it is not a licence to skip testing.",
+"source": "NASA-STD-5001B Structural Design and Test Factors of Safety for Spaceflight Hardware (public domain); Shigley's Mechanical Engineering Design; ASME B30.9 slings",
+"tags": ""
+},
+{
+"id": "margin-of-safety",
+"topic": "design practice",
+"title": "Margin of safety",
+"text": "MS = allowable / (applied load x factor of safety) - 1. MS >= 0 means the design meets the requirement with the chosen factor; a negative margin is a failed check. Report the minimum margin for every failure mode: yielding, ultimate fracture, buckling, fatigue, joint and fastener failure, deflection limits.",
+"source": "NASA-STD-5001B; NASA Structures Design and Test Factors",
+"tags": ""
+},
+{
+"id": "beam-bending",
+"topic": "mechanics",
+"title": "Beam bending stress and deflection",
+"text": "Bending stress sigma = M*c/I (M bending moment, c distance from the neutral axis to the outer fibre, I second moment of area). Rectangle b wide, h deep: I = b*h^3/12, so doubling depth makes a beam 8 times stiffer and 4 times stronger in bending; doubling width only doubles both. Simply supported beam with central load F over span L: M_max = F*L/4, deflection = F*L^3/(48*E*I). Cantilever with end load: M_max = F*L, deflection = F*L^3/(3*E*I). Uniform load w on a simply supported span: M_max = w*L^2/8, deflection = 5*w*L^4/(384*E*I). Tubes: I = pi*(D^4 - d^4)/64.",
+"source": "Roark's Formulas for Stress and Strain (Young & Budynas); Gere, Mechanics of Materials",
+"tags": "shelf bracket beam frame table bridge stand"
+},
+{
+"id": "buckling",
+"topic": "mechanics",
+"title": "Column buckling (Euler)",
+"text": "A slender column under compression fails by buckling before it crushes. Critical load P_cr = pi^2*E*I/(K*L)^2, where K is the effective length factor: 1.0 pinned-pinned, 0.5 fixed-fixed (theoretical; use about 0.65 in practice), 2.0 fixed-free (a flagpole). Halving the length makes it four times stronger against buckling. Short, stocky columns fail by yielding instead (Johnson parabola region). Use a factor of at least 2-3 on buckling because imperfections reduce it sharply.",
+"source": "Timoshenko & Gere, Theory of Elastic Stability; AISC Steel Construction Manual",
+"tags": "column leg legs pole post tower stand"
+},
+{
+"id": "torsion",
+"topic": "mechanics",
+"title": "Shafts in torsion",
+"text": "Shear stress in a solid round shaft tau = 16*T/(pi*d^3); twist angle theta = T*L/(G*J) with J = pi*d^4/32 and G about 80 GPa for steel, 26 GPa for aluminium. Power and torque: P = T*omega, with omega = 2*pi*rpm/60. A 1 kW motor at 1500 rpm gives about 6.4 N*m.",
+"source": "Shigley's Mechanical Engineering Design",
+"tags": ""
+},
+{
+"id": "bolts",
+"topic": "mechanics",
+"title": "Bolts and fasteners",
+"text": "Metric property class 8.8: proof strength about 580-600 MPa, tensile about 800 MPa; class 4.6 (common hardware store): yield about 240 MPa. Tensile stress areas: M3 5.03 mm^2, M4 8.78, M5 14.2, M6 20.1, M8 36.6, M10 58.0, M12 84.3. A bolt in single shear carries roughly 0.6 x its tensile strength over its shank area. Preload clamps the joint so friction carries the load; vibration loosens nuts unless locked (nyloc, thread-locker, wedge washers). Threads in plastic or wood strip far below the bolt's strength: use inserts.",
+"source": "ISO 898-1; Machinery's Handbook; VDI 2230",
+"tags": ""
+},
+{
+"id": "welds",
+"topic": "mechanics",
+"title": "Welded joints",
+"text": "Fillet weld strength is set by the throat (0.707 x leg size). Typical allowable shear for E70/E7018 electrodes about 145 MPa (AISC 0.3 x 483 MPa). Welds are the usual fatigue weak spot: cyclic loads should be checked against fatigue detail categories, not static strength.",
+"source": "AISC 360 Specification for Structural Steel Buildings; IS 816 / IS 800",
+"tags": ""
+},
+{
+"id": "fatigue",
+"topic": "mechanics",
+"title": "Fatigue",
+"text": "Parts that see repeated loads fail at stresses well below their static strength. Steels have an endurance limit about 0.5 x tensile strength for polished samples (reduced by surface finish, size and notches, often to 0.2-0.35 x tensile in real parts); aluminium and most plastics have none and need a cycle-life target. Stress concentrations at holes, fillets and weld toes (factor 2-3) start most cracks. Rotating shafts, vibrating brackets and anything driven by a motor or wheels need a fatigue check.",
+"source": "Shigley's Mechanical Engineering Design; MIL-HDBK-5J",
+"tags": ""
+},
+{
+"id": "gears-belts",
+"topic": "mechanics",
+"title": "Gears, belts and mechanical advantage",
+"text": "A gear or pulley ratio n multiplies torque by n (minus losses) and divides speed by n; power is conserved. Efficiencies: spur gear pair about 97-99%, belt about 95-98%, chain about 97-98%, worm gear 40-90% (low-ratio worms can back-drive, high-ratio ones usually self-lock). Levers, pulleys and screws trade force for distance: work in equals work out minus friction.",
+"source": "Machinery's Handbook; Shigley's",
+"tags": ""
+},
+{
+"id": "wheel-drive",
+"topic": "mechanics",
+"title": "Driving wheels and ramps",
+"text": "Force to climb a slope at constant speed: F = m*g*(sin(theta) + Crr*cos(theta)), plus acceleration m*a and air drag. Wheel torque = F*r shared among driven wheels; motor power = F*v. Traction limit: driven-wheel normal force x friction coefficient; on a wet ramp the wheels slip before the motor stalls. A 10 kg robot on a 10 degree ramp needs about 17 N plus rolling resistance.",
+"source": "Gillespie, Fundamentals of Vehicle Dynamics",
+"tags": "robot rover car cart vehicle wheel wheels ramp slope wheelchair"
+},
+{
+"id": "springs",
+"topic": "mechanics",
+"title": "Springs and vibration",
+"text": "Spring force F = k*x; energy stored = k*x^2/2. A mass on a spring has natural frequency f = (1/(2*pi))*sqrt(k/m). Vibration isolation only works above about 1.4 times the natural frequency, so isolators must be soft enough. Damping ratio about 0.2-0.4 suits vehicle suspensions; below about 0.1 the system rings.",
+"source": "Rao, Mechanical Vibrations; Thomson, Theory of Vibration with Applications",
+"tags": ""
+},
+{
+"id": "impact",
+"topic": "mechanics",
+"title": "Drops and impact",
+"text": "Speed after falling height h: v = sqrt(2*g*h) (a 1 m drop is about 4.4 m/s). Average deceleration over a crush or stopping distance s: a = v^2/(2*s). Stopping distance, not material strength alone, decides the shock: doubling crush distance halves the average g-load. Peak loads are higher than average (often 1.5-2x for real foams and springs).",
+"source": "Harris' Shock and Vibration Handbook",
+"tags": "drop fall crash helmet protection"
+},
+{
+"id": "fluids-pump",
+"topic": "fluids",
+"title": "Pumps: suction limit, head and power",
+"text": "A surface (suction) pump cannot lift water more than about 10.3 m at sea level even in theory, because atmospheric pressure is what pushes the water up; in practice about 6-7 m after losses and vapour pressure. Deeper wells need a submersible or jet pump. Hydraulic power P = rho*g*Q*H (Q flow in m^3/s, H total head in m including pipe losses). Small DC pumps are about 20-50% efficient wire-to-water.",
+"source": "Karassik et al., Pump Handbook; Bureau of Indian Standards IS 9079 / IS 8034 for pumpsets",
+"tags": "pump pumps well borewell water irrigation farm"
+},
+{
+"id": "fluids-pipe",
+"topic": "fluids",
+"title": "Pipe flow and pressure",
+"text": "Pressure from a water column: p = rho*g*h, about 9.81 kPa (0.098 bar) per metre. Friction loss (Darcy-Weisbach): h_f = f*(L/D)*v^2/(2*g); turbulent friction factor for smooth plastic pipe about 0.015-0.03. Keep water velocity about 1-2 m/s in pipes. Halving pipe diameter at the same flow raises friction loss about 32 times.",
+"source": "White, Fluid Mechanics; Crane Technical Paper 410",
+"tags": "pipe pipes water irrigation tank plumbing"
+},
+{
+"id": "fluids-drag",
+"topic": "fluids",
+"title": "Air drag and lift",
+"text": "Drag force F = 0.5*rho*v^2*Cd*A, with air density rho about 1.2 kg/m^3 at sea level. Cd: flat plate facing the flow about 1.1-1.3, cyclist upright about 0.9 (CdA about 0.5 m^2), car about 0.25-0.35, sphere about 0.47. Lift F = 0.5*rho*v^2*CL*A, CL about 0.3-1.5 for ordinary wings. Drag power grows with speed cubed.",
+"source": "Hoerner, Fluid-Dynamic Drag; Anderson, Fundamentals of Aerodynamics",
+"tags": "drone aircraft car bicycle fly flying speed wind"
+},
+{
+"id": "flight-hover",
+"topic": "fluids",
+"title": "Hovering and flying: power needed",
+"text": "Ideal hover power from momentum theory: P = sqrt(T^3/(2*rho*A)), T thrust (weight in N), A total rotor disk area. Real rotors need about 1.4-2x that (figure of merit 0.5-0.75). Small multicopters manage about 5-10 g of thrust per watt at hover; a 1 kg drone needs roughly 100-200 W, which is why flight time on batteries is usually 15-30 minutes. Flapping and soft-bodied flight are far less efficient.",
+"source": "Leishman, Principles of Helicopter Aerodynamics",
+"tags": "drone drones quadcopter fly flying aircraft hover propeller rotor"
+},
+{
+"id": "heat",
+"topic": "thermal",
+"title": "Heat transfer basics",
+"text": "Conduction q = k*A*dT/L (k: copper about 400, aluminium about 200, steel about 50, glass about 1, plastics about 0.2, still air about 0.026 W/m-K). Natural convection to air h about 5-10 W/m^2-K; forced air (fan) about 20-100; water flow 500-10000. Radiation q = eps*sigma*A*(T1^4 - T2^4). Electronics: temperature rise = power x thermal resistance (C/W); keep most chips below about 85 C and lithium cells below about 45 C while charging. Heat flows only from hot to cold without work: cooling below ambient needs a heat pump (compressor or Peltier, with COP about 2-4 and 0.3-0.7 respectively).",
+"source": "Incropera & DeWitt, Fundamentals of Heat and Mass Transfer",
+"tags": "cooling cool heating heat cold hot fridge fan electronics temperature peltier"
+},
+{
+"id": "thermo-limits",
+"topic": "thermal",
+"title": "Energy conservation and efficiency limits",
+"text": "Energy cannot be created: a machine can't give out more energy than it takes in (no perpetual motion, no 'free energy' generators powering themselves). A heat engine's efficiency is capped by the Carnot limit 1 - T_cold/T_hot (temperatures in K). A wind turbine can capture at most 59.3% of the wind's power (Betz limit); real small turbines manage 20-40%. Solar panels convert about 18-23% of sunlight. Ideas that seem to break these usually have a hidden energy source; find it and use it deliberately.",
+"source": "Cengel & Boles, Thermodynamics: An Engineering Approach; Burton et al., Wind Energy Handbook",
+"tags": "perpetual motion free energy generator efficiency impossible magnet"
+},
+{
+"id": "solar",
+"topic": "energy",
+"title": "Solar power",
+"text": "Peak sunlight about 1000 W/m^2; a panel's rating is at that level and 25 C. Daily energy = rated W x peak sun hours x system efficiency (about 0.7-0.8 after heat, dust, wiring and controller losses). Peak sun hours: about 4-6 across most of India, lower in monsoon months and in northern Europe winter (1-2). Panels lose about 0.3-0.5% power per C above 25 C. Panel output is about 150-220 W/m^2 of panel area.",
+"source": "NREL PVWatts and National Solar Radiation Database (public domain); MNRE India solar resource data",
+"tags": "solar sun sunlight panel photovoltaic pv off-grid farm"
+},
+{
+"id": "wind",
+"topic": "energy",
+"title": "Wind power",
+"text": "Power in the wind P = 0.5*rho*A*v^3. Because of the cube, 4 m/s wind carries only about 38 W/m^2 of swept area and a small turbine captures perhaps a third of that; urban and balcony sites have turbulent, slow wind. Most small turbines are rated at 11-12 m/s, which rarely happens: estimate energy from the site's average speed, not the rating.",
+"source": "Burton et al., Wind Energy Handbook; Manwell, Wind Energy Explained",
+"tags": "turbine windmill balcony"
+},
+{
+"id": "human-power",
+"topic": "energy",
+"title": "Human power",
+"text": "A fit adult can sustain about 75-100 W pedalling for an hour, about 200-300 W for a few minutes; hand cranking about 20-50 W sustained. A person climbing stairs briefly reaches several hundred watts. Hand-cranked or pedal generators are good for charging phones and lights, not for heating or cooking.",
+"source": "Wilson, Bicycling Science (MIT Press)",
+"tags": "pedal bicycle hand crank exercise"
+},
+{
+"id": "batt-liion",
+"topic": "energy",
+"title": "Lithium-ion cells (18650, 21700, pouch)",
+"text": "Nominal 3.6-3.7 V, full 4.2 V, cut-off about 2.5-3.0 V. An 18650 holds about 2.5-3.5 Ah (about 9-12 Wh) and weighs about 45-48 g; cell-level specific energy about 200-270 Wh/kg, packs about 150-200 Wh/kg. Needs a protection circuit (BMS) for over-charge, over-discharge, over-current and temperature; never charge below 0 C. Damaged or swollen cells can catch fire. Shipping above 100 Wh per pack has extra rules (UN 38.3).",
+"source": "Cell datasheets (e.g. Panasonic NCR18650B, Samsung 35E); IEC 62133-2; UN Manual of Tests and Criteria 38.3",
+"tags": "battery batteries lithium rechargeable power bank phone"
+},
+{
+"id": "batt-lfp",
+"topic": "energy",
+"title": "LiFePO4 cells",
+"text": "Nominal 3.2 V per cell (4 cells make a 12.8 V pack), about 90-160 Wh/kg, 2000-6000 cycles, much more resistant to thermal runaway than other lithium chemistries. Good for solar storage, carts and anything that must be safe and long-lived.",
+"source": "Cell datasheets; Linden's Handbook of Batteries",
+"tags": "battery batteries lithium solar storage"
+},
+{
+"id": "batt-aa",
+"topic": "energy",
+"title": "AA cells: alkaline and NiMH",
+"text": "Alkaline AA: 1.5 V new, about 2000-2800 mAh at low drain but far less at high drain (under 1000 mAh at 1 A). NiMH AA: 1.2 V, about 1900-2500 mAh, handles high current well, rechargeable 500+ times. 2 x AA give about 3 V (not enough for 5 V logic without a boost converter); 4 x AA give about 4.8-6 V. Safe choice for children's products in a screwed compartment.",
+"source": "Energizer and Panasonic product datasheets; Linden's Handbook of Batteries",
+"tags": "battery batteries toy remote"
+},
+{
+"id": "batt-leadacid",
+"topic": "energy",
+"title": "Lead-acid batteries",
+"text": "12 V nominal, about 30-40 Wh/kg. Usable capacity is about 50% of the rating for a long life. Cheap and robust; heavy. Charging releases hydrogen: ventilate.",
+"source": "Linden's Handbook of Batteries",
+"tags": "battery batteries car inverter solar storage"
+},
+{
+"id": "battery-life",
+"topic": "energy",
+"title": "Estimating battery life",
+"text": "Runtime (h) = usable capacity (Wh) / average power (W). Usable is about 80% of rated for lithium, 50% for lead-acid. Include converter losses (boost/buck about 85-95%) and sleep current: an ESP32 in deep sleep draws about 10-150 uA but about 80-240 mA with Wi-Fi active, so duty cycle decides battery life.",
+"source": "Espressif ESP32 datasheet; general practice",
+"tags": "battery batteries runtime hours sleep"
+},
+{
+"id": "motors-dc",
+"topic": "electrical",
+"title": "DC motors, servos and steppers",
+"text": "Brushed DC motor: speed proportional to voltage, torque proportional to current; stall current is often 5-10x running current, so drivers and batteries must handle it. Small hobby motors are about 30-60% efficient, brushless (BLDC) about 80-90%. Hobby servos (SG90 about 0.18 N*m, MG996R about 1 N*m) draw up to about 1-2.5 A at stall. Steppers hold position without feedback but lose steps if overloaded. Always size motors for the worst case (start-up, slope, stall) with margin.",
+"source": "Hughes & Drury, Electric Motors and Drives; manufacturer datasheets (TowerPro, Maxon)",
+"tags": "motor motors robot robotic wheel servo arm actuator"
+},
+{
+"id": "electrical-basics",
+"topic": "electrical",
+"title": "Ohm's law, power and wire sizing",
+"text": "V = I*R; P = V*I = I^2*R. Wire current capacity for short runs: 0.5 mm^2 about 3 A, 1 mm^2 about 10 A, 2.5 mm^2 about 20 A (copper, depends on insulation and bundling). Voltage drop = I x 2 x length x resistance per metre (copper 1 mm^2 about 0.018 ohm/m). Fuse every battery close to its terminal. LEDs need a current-limiting resistor: R = (V_supply - V_led)/I.",
+"source": "IEC 60364-5-52; IS 694",
+"tags": ""
+},
+{
+"id": "electrical-mains",
+"topic": "safety",
+"title": "Working near mains electricity",
+"text": "Mains (230 V AC in India, 50 Hz; 120 V in North America) can kill: currents above about 30 mA across the chest can stop the heart. Safe route for makers: keep your build on safety extra-low voltage (below 50 V AC / 120 V DC, ideally a 5-24 V adapter or battery) and switch mains loads only through certified modules (smart plugs, certified relay modules in enclosures with proper clearances). Any permanent mains wiring needs a licensed electrician and an RCD/RCCB. Certified power supplies are cheap; designing your own isn't worth the risk.",
+"source": "IEC 60479-1 effects of current on human beings; IEC 61140; IS 732 Code of practice for electrical wiring installations",
+"tags": "mains wall socket plug ac 230v appliance relay electrician fan lamp light heater iron kettle"
+},
+{
+"id": "standards-products",
+"topic": "safety",
+"title": "Product safety standards to know",
+"text": "Toys: IS 9873 (BIS mandatory in India), EN 71 (Europe), ASTM F963 (USA); small parts that fit a choke test cylinder are banned for under-3s. Household appliances: IEC 60335 / IS 302. Audio, IT and chargers: IEC 62368-1. Lithium batteries: IEC 62133-2, UN 38.3 for shipping. Machinery guarding and risk assessment: ISO 12100. Radio (Wi-Fi, Bluetooth, LoRa): WPC licence-exempt bands in India; use pre-certified modules. Drones in India: Drone Rules 2021 and the Digital Sky platform. Following these early costs little; retrofitting them is expensive.",
+"source": "Bureau of Indian Standards; IEC; ISO; Ministry of Civil Aviation Drone Rules 2021",
+"tags": "toy toys certification certify legal law licence license BIS CE sell selling market drone radio"
+},
+{
+"id": "kids-safety",
+"topic": "safety",
+"title": "Designing for children",
+"text": "Use AA cells in a screw-secured compartment rather than loose lithium cells; button cells are especially dangerous if swallowed. No small detachable parts for under-3s; round edges; no pinch points in moving parts; limit sound (about 85 dB at the ear) and LED brightness; keep surfaces under about 48 C. Microphones and cameras should process locally and not record or send data without a parent's consent.",
+"source": "IS 9873; EN 71-1; ASTM F963; Reese's Law (button batteries)",
+"tags": "kid kids child children toy toys baby infant school talking plush"
+},
+{
+"id": "se-lifecycle",
+"topic": "design practice",
+"title": "How NASA and ISRO take an idea to hardware",
+"text": "Life cycle: concept studies (Phase A), preliminary design (Phase B, ending at a Preliminary Design Review), final design (Phase C, Critical Design Review), build, integrate and test (Phase D), operate. Requirements come first and each is paired with a verification method (test, analysis, inspection, demonstration). Technology Readiness Levels: TRL 1-3 idea and lab proof, 4-5 breadboard and relevant-environment tests, 6 prototype demonstrated in a relevant environment, 7-9 flight or field proven. Reviews are there to find problems while they are cheap.",
+"source": "NASA Systems Engineering Handbook, NASA/SP-2016-6105 Rev 2 (public domain); NASA TRL definitions (NPR 7123.1)",
+"tags": "nasa isro space satellite rocket review prototype trl"
+},
+{
+"id": "evt-dvt-pvt",
+"topic": "design practice",
+"title": "How consumer-hardware teams go from prototype to product",
+"text": "Proof of concept / works-like and looks-like prototypes, then EVT (engineering validation test: does the design meet specs), DVT (design validation: certification, reliability, drop and environmental testing on production-intent parts), PVT (production validation: the factory line builds it repeatably). Design for manufacture (DFM) and design for assembly (DFA) start at EVT. Changing a design costs roughly 10x more at each later stage.",
+"source": "Industry practice; Ulrich & Eppinger, Product Design and Development",
+"tags": "product startup manufacture production prototype"
+},
+{
+"id": "riskiest-first",
+"topic": "design practice",
+"title": "Retire the riskiest assumption first",
+"text": "Before building the whole thing, list the assumptions the idea rests on, rank them by how likely they are wrong and how much it would cost, and test the riskiest with the cheapest experiment (a calculation, a bench test, a cardboard mock-up, a borrowed part). A failed cheap test is a success: it saved the expensive build. This is the logic behind NASA's early technology demonstrators and lean hardware startups.",
+"source": "NASA Systems Engineering Handbook (risk management); Ries, The Lean Startup; Reinertsen, The Principles of Product Development Flow",
+"tags": ""
+},
+{
+"id": "fmea",
+"topic": "design practice",
+"title": "FMEA (failure modes and effects analysis)",
+"text": "For each part or function: how can it fail, what causes it, what is the effect, rate severity, occurrence and detection 1-10, RPN = S x O x D. Act on any high severity (9-10) regardless of RPN. Mitigate by design change first, then by detection or warnings.",
+"source": "AIAG & VDA FMEA Handbook; MIL-STD-1629A (public domain)",
+"tags": ""
+},
+{
+"id": "trade-study",
+"topic": "design practice",
+"title": "Trade studies",
+"text": "When there is a real choice, list criteria that matter (mass, cost, risk, performance, schedule, safety), weight them before scoring, score each option honestly, and check that the winner still wins when the weights change a little (sensitivity). If two options are close, the cheaper experiment to tell them apart is worth doing.",
+"source": "NASA Systems Engineering Handbook, decision analysis",
+"tags": ""
+},
+{
+"id": "electronics-boards",
+"topic": "electrical",
+"title": "Common maker microcontrollers",
+"text": "Arduino Uno/Nano (ATmega328P): 5 V logic, 16 MHz, 2 KB RAM, no Wi-Fi; about 20-50 mA. ESP32: 3.3 V logic (not 5 V tolerant), dual-core 240 MHz, Wi-Fi and Bluetooth, about 80-240 mA with radio on, ~10-150 uA in deep sleep; GPIO about 12-40 mA max per pin, so drive motors through a driver (L298N, TB6612, DRV8833) or MOSFET, never directly. Raspberry Pi: a full Linux computer, 3-7 W, for cameras and AI on the device.",
+"source": "Microchip ATmega328P datasheet; Espressif ESP32 datasheet; Raspberry Pi documentation",
+"tags": "arduino esp32 raspberry pi microcontroller brain wifi bluetooth smart iot app"
+},
+{
+"id": "sensors",
+"topic": "electrical",
+"title": "Common sensors and what they can really do",
+"text": "Ultrasonic HC-SR04: about 2 cm-4 m, poor on soft or angled surfaces. IR time-of-flight VL53L0X: up to about 1-2 m indoors. PIR: detects moving warm bodies, not still people. MPU6050 IMU: acceleration and rotation; drifts, so absolute angle needs fusion. Load cell + HX711: weight with about 0.1% accuracy after calibration. Soil moisture probes corrode (capacitive ones last longer). GPS: about 2-5 m outdoors, not indoors. Cameras with an ESP32-CAM can stream, but recognising things reliably needs a Pi or a cloud service.",
+"source": "Manufacturer datasheets (Bosch, ST, InvenSense, Avia Semiconductor)",
+"tags": "sensor sensors detect measure robot smart camera"
+},
+{
+"id": "manufacturing",
+"topic": "manufacturing",
+"title": "Ways to make parts and what they cost",
+"text": "Prototype: 3D printing (FDM about Rs 5-15 per gram, tolerances about +/-0.2-0.5 mm), laser cutting acrylic or plywood, hand tools on aluminium extrusion. Small batch: CNC machining, sheet metal bending, vacuum forming, urethane casting. Mass production: injection moulding (moulds about Rs 1-20 lakh, parts a few rupees each), die casting, stamping. Design for the process you will use at scale from the working-model stage on: draft angles, uniform wall thickness, standard fasteners.",
+"source": "Ulrich & Eppinger, Product Design and Development; Boothroyd, Product Design for Manufacture and Assembly",
+"tags": "manufacture production cost factory 3d print laser cnc mould"
+},
+{
+"id": "ip-ratings",
+"topic": "environment",
+"title": "Water and dust protection (IP ratings)",
+"text": "IP code: first digit dust (5 dust-protected, 6 dust-tight), second water (4 splashing, 5 jets, 6 powerful jets, 7 temporary immersion to 1 m, 8 continuous immersion). Outdoor electronics usually need IP65 or better, with cable glands and a drip loop; sealed boxes in the sun build up condensation, so use a breather vent.",
+"source": "IEC 60529",
+"tags": "outdoor waterproof rain water dust enclosure"
+},
+{
+"id": "corrosion",
+"topic": "environment",
+"title": "Corrosion",
+"text": "Steel rusts in moist air, fast near the sea; protect with galvanising, paint or powder coat. Dissimilar metals in contact with water (e.g. aluminium with copper or stainless) corrode the less noble one (galvanic corrosion): isolate them. Salt, fertiliser and urine environments are aggressive. UV degrades most plastics outdoors unless UV-stabilised.",
+"source": "Fontana, Corrosion Engineering",
+"tags": "outdoor rust sea salt metal"
+},
+{
+"id": "ergonomics",
+"topic": "human factors",
+"title": "Human factors",
+"text": "Comfortable hand push or pull force for repeated tasks about 50-200 N; a single maximum effort is higher but varies widely. Typical handle diameter 30-40 mm. Workbench height about 900-1000 mm for standing light work. Adult anthropometry varies hugely: design adjustable or for the 5th to 95th percentile of your actual users.",
+"source": "Pheasant & Haslegrave, Bodyspace; ISO 7250",
+"tags": "handle comfort user people person"
+}
+]

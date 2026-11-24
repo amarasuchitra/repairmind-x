@@ -29,3 +29,6 @@ testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 include = ["repairmind*"]
+
+[tool.setuptools.package-data]
+"repairmind.library" = ["core.json"]
