@@ -69,7 +69,7 @@ def test_web_brief_type_matches_the_server_schema():
     # the web's Brief interface lists the same top-level fields
     ts = (Path(__file__).parents[2] / "web" / "src" / "lab" / "brief.ts").read_text(encoding="utf-8")
     for field in Brief.model_fields:
-        assert f"{field}:" in ts, field
+        assert f"{field}:" in ts or f"{field}?:" in ts, field
 
 
 def test_level_shapes_the_teaching(lab, monkeypatch):  # noqa: F811

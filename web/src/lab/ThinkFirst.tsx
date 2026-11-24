@@ -118,6 +118,12 @@ export function ThinkFirst(p: {
       <details className="tf-known">
         <summary>{t("tf.known", { n: b.known.length })}</summary>
         <ul>{b.known.map((k) => <li key={k.fact}><span className={`tf-src ${k.source}`}>{t(`tf.src.${k.source}` as Key)}{k.ref ? ` ${k.ref}` : ""}</span> {auto(k.fact)}</li>)}</ul>
+        {(b.library_used?.length ?? 0) > 0 && (
+          <>
+            <p className="lab-muted">{t("lib.used")}</p>
+            <ul>{b.library_used!.map((x) => <li key={x}>{auto(x)}</li>)}</ul>
+          </>
+        )}
       </details>
 
       <div className="lab-row tf-go">

@@ -183,6 +183,8 @@ class Design(BaseModel):
     revisions: list[Revision]
     inputs_used: list[str] = Field(default_factory=list,
                                    description="One line per attachment (A1, A2, ...): what was taken from it. Empty if none.")
+    library_used: list[str] = Field(default_factory=list,
+                                    description="One line per engineering library entry used: '[L2] what was taken from it'. Empty if none.")
     learn: list[LearnStep] = Field(default_factory=list,
                                    description="3-6 steps that teach the physics and maths behind this design, simplest idea first")
 
@@ -257,3 +259,5 @@ class Brief(BaseModel):
     recommended_concept: str = Field(description="The name of the concept you would start with, exactly as in concepts")
     recommended_why: str
     questions: list[BriefQuestion] = Field(description="Up to 4 questions that would change the design most; none already answered; empty when nothing important is unclear")
+    library_used: list[str] = Field(default_factory=list,
+                                    description="One line per engineering library entry used: '[L2] what was taken from it'. Empty if none.")

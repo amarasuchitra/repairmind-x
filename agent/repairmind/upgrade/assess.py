@@ -20,7 +20,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from .. import checker, i18n, safety
+from .. import checker, i18n, library, safety
 from .schema import Assessment
 
 log = logging.getLogger("repairmind.upgrade")
@@ -276,7 +276,10 @@ async def assess(req: AssessRequest, attachments: list | None = None) -> Assessm
     if checker.provider() is None:
         raise AssessError(503, "No AI model is configured. Set ANTHROPIC_API_KEY (Claude) or GOOGLE_API_KEY (free Gemini) in agent/.env.")
     att_text, images = for_prompt(attachments or [])
-    system = ANALYST_SYSTEM + (CORRECTION_RULES if req.correction.strip() else "") + i18n.design_rules(req.language) + _memory_block()
+    lib = library.prompt_block(library.search(library.query_for(req.idea, req.product, req.correction,
+                                                                " ".join(f"{x.q} {x.a}" for x in req.answers)), k=6))
+    system = (ANALYST_SYSTEM + (CORRECTION_RULES if req.correction.strip() else "") + i18n.design_rules(req.language)
+              + _memory_block() + lib)
     res = await checker.parse(system, images, _request_text(req, att_text), Assessment, "design",
                               effort="high", timeout=240.0, max_tokens=12000)
     if res.refused:
