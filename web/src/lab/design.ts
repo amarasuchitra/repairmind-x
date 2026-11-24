@@ -171,4 +171,19 @@ export interface Design {
   revisions: Revision[];
   /** one line per attachment (A1, A2, ...): what the engineer took from it */
   inputs_used?: string[];
+  /** steps that teach the physics behind this design; the page runs each step's experiment itself */
+  learn?: LearnStep[];
+}
+
+/** One step of the learning path: an idea, tied to an equation of this design and a variable to experiment with. */
+export interface LearnStep {
+  concept: string;
+  intuition: string;
+  why_here: string;
+  equation_id: string;
+  walkthrough: string[];
+  try_variable: string;
+  try_factor: number;
+  question: string;
+  explain_after: string;
 }

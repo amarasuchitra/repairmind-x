@@ -7,6 +7,10 @@ import { SimView, runHeadless } from "./SimView.tsx";
 import { fmt } from "./units.ts";
 import { Attachments, MicButton, fetchAttachments, type AttachmentInfo } from "./inputs.tsx";
 import { LanguagePicker, useI18n } from "../i18n";
+import type { Brief, QA } from "./brief.ts";
+import { ThinkFirst } from "./ThinkFirst.tsx";
+import { Learn } from "./Learn.tsx";
+import { readLevel, storeLevel, type Level } from "./learn.ts";
 import type { Key } from "../i18n/en";
 
 const STORE = "rmx.lab.design";
@@ -99,6 +103,14 @@ export function Lab({ onBack }: { onBack: () => void }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  // which request failed last, so the error can offer the right retry
+  const [lastAsk, setLastAsk] = useState<"think" | "design" | "revise">("think");
+  // think first: the engineer's understanding of the idea, and the answers given so far
+  const [plan, setPlan] = useState<Brief | null>(null);
+  const [answers, setAnswers] = useState<QA[]>([]);
+  // who explanations are written for; remembered on this device
+  const [level, setLevelState] = useState<Level>(readLevel);
+  const setLevel = (l: Level) => { setLevelState(l); storeLevel(l); };
   const [simF, setSimF] = useState<Finding[] | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -130,13 +142,32 @@ export function Lab({ onBack }: { onBack: () => void }) {
     setError("");
   }
 
-  async function create() {
+  /** Think first: restate, rough numbers, riskiest assumption, concepts and questions, before any design. */
+  async function think(given: QA[] = [], correction = "") {
     setError("");
+    setLastAsk("think");
+    setBusy(t("tf.thinking"));
+    try {
+      const b = await api<Brief>("/api/lab/understand", { idea, context, attachment_ids: files.map((f) => f.id), answers: given, correction, language: lang, level });
+      setPlan(b);
+      setAnswers(given);
+    } catch (e) {
+      setError(say(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function create(given: QA[] = answers) {
+    setError("");
+    setLastAsk("design");
     setBusy(t("lab.designing"));
     try {
       // the engineer writes the design in the app's language; symbols, units and equations stay as they are
-      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id), language: lang });
+      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id), language: lang, brief: plan, answers: given, level });
       load(d);
+      setPlan(null);
+      setAnswers(given);
       setTab("Overview");
     } catch (e) {
       setError(say(e));
@@ -148,6 +179,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
   /** The self-correction loop: check, send the failures back, check the answer, until it holds. */
   async function rethink(auto: boolean) {
     setError("");
+    setLastAsk("revise");
     let current = design;
     // carry edited inputs into the design so the agent reasons about the numbers the engineer chose
     if (Object.keys(overrides).length) {
@@ -162,7 +194,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
         if (auto && failing === 0 && round > 0) break;
         setBusy(t("lab.round", { round: current.revisions.length + 1, fail: failing, warn: findings.length - failing }));
         current = await api<Design>("/api/lab/revise", {
-          design: current, findings: findings.map((f) => `[${f.severity}] ${f.where}: ${f.text}`), note: round === 0 ? note : "", language: lang,
+          design: current, findings: findings.map((f) => `[${f.severity}] ${f.where}: ${f.text}`), note: round === 0 ? note : "", language: lang, level,
         });
         load(current);
         if (auto) {
@@ -181,6 +213,8 @@ export function Lab({ onBack }: { onBack: () => void }) {
     }
   }
 
+  // a worked example on screen is never presented as the answer to the user's idea
+  const isExample = !design.revisions.length && EXAMPLES.some((d) => d.title === design.title);
   const reqById = new Map(design.requirements.map((r) => [r.id, r]));
   const riskById = new Map(analysis.risks.map((r) => [r.id, r]));
   const allFindings = [...analysis.findings, ...(simF ?? [])];
@@ -205,7 +239,8 @@ export function Lab({ onBack }: { onBack: () => void }) {
               placeholder={t("lab.ideaPh")} />
             <div className="lab-composer-row">
               <MicButton onInterim={setInterim} onText={(t) => setIdea((v) => (v ? `${v.trimEnd()} ${t}` : t).slice(0, 4000))} />
-              <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={create}>{t("lab.designIt")}</button>
+              <button className="lab-btn ghost" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={() => create([])} title={t("tf.skipWhy")}>{t("tf.skip")}</button>
+              <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={() => think()}>{t("tf.go")}</button>
             </div>
           </div>
           <details className="lab-fold" open={!!(context || files.length) || undefined}>
@@ -226,11 +261,28 @@ export function Lab({ onBack }: { onBack: () => void }) {
 
         <div className="lab-main">
           {busy && <div className="lab-busy" role="status"><span className="lab-spin" aria-hidden />{busy}</div>}
-          {error && <p className="lab-err" role="alert">{auto(error)}</p>}
+          {error && (
+            <div className="lab-fail" role="alert">
+              <b>{lastAsk === "think" ? t("tf.fail") : lastAsk === "design" ? t("lab.fail.design") : t("lab.fail.revise")}</b>
+              <p>{auto(error)}</p>
+              <div className="lab-row">
+                {lastAsk !== "revise" && <button className="lab-btn solid" disabled={!!busy || idea.trim().length < 8} onClick={() => (lastAsk === "think" ? think(answers) : create())}>{t("lab.fail.retry")}</button>}
+                <button className="lab-btn ghost" onClick={() => setError("")}>{t("lab.fail.dismiss")}</button>
+              </div>
+              {isExample && !plan && <p className="lab-muted">{t("lab.fail.exampleBelow")}</p>}
+            </div>
+          )}
+
+          {plan && (
+            <ThinkFirst key={plan.restated} brief={plan} earlier={answers} busy={!!busy}
+              onDesign={(a) => void create(a)} onRethink={(a, c) => void think(a, c)} onClose={() => setPlan(null)} />
+          )}
+
+          {!(plan && isExample) && <>
 
           <div className="lab-title">
             <div>
-              <span className="lab-kicker">{design.revisions.length ? t("lab.revision", { n: design.revisions.length }) : t("lab.firstPass")}</span>
+              <span className={`lab-kicker${isExample ? " example" : ""}`}>{isExample ? t("lab.exampleTag") : design.revisions.length ? t("lab.revision", { n: design.revisions.length }) : t("lab.firstPass")}</span>
               <h1>{design.title}</h1>
             </div>
             <Health findings={analysis.findings} simFindings={simF} checking={checking} />
@@ -253,6 +305,9 @@ export function Lab({ onBack }: { onBack: () => void }) {
           })()}
 
           <SimView design={design} analysis={analysis} />
+
+          <Learn key={design.title + design.revisions.length} design={design} overrides={overrides} level={level} setLevel={setLevel}
+            onTry={(sym, value) => setOverrides((o) => { const n = { ...o }; if (value === null) delete n[sym]; else n[sym] = value; return n; })} />
 
           <button className="lab-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
             <b>{details ? t("lab.details.hide") : t("lab.details.show")}</b>
@@ -449,6 +504,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
               ) : <p className="lab-muted">{t("lab.noReviews")}</p>
             )}
           </section>
+          </>}
           </>}
         </div>
       </div>

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from .. import checker, i18n
-from . import attachments, designer
-from .schema import Design
+from . import attachments, designer, understand
+from .schema import Brief, Design
 
 router = APIRouter(prefix="/api/lab")
+
+# who the explanations are written for: a curious beginner, a student, or a practising engineer
+Level = Literal["beginner", "student", "engineer"]
 
 
 class DesignRequest(BaseModel):
@@ -18,6 +23,20 @@ class DesignRequest(BaseModel):
     attachment_ids: list[str] = Field(default_factory=list, max_length=20)
     # Language the design is written in (e.g. "hi"); symbols, units and equations stay as they are.
     language: str = Field(default="en", max_length=16)
+    # from the think-first step: the understanding the user confirmed, and their answers
+    brief: Brief | None = None
+    answers: list[understand.QA] = Field(default_factory=list, max_length=24)
+    level: Level = "beginner"
+
+
+class UnderstandRequest(BaseModel):
+    idea: str = Field(min_length=8, max_length=4000)
+    context: str = Field(default="", max_length=4000)
+    attachment_ids: list[str] = Field(default_factory=list, max_length=20)
+    answers: list[understand.QA] = Field(default_factory=list, max_length=24)
+    correction: str = Field(default="", max_length=2000)
+    language: str = Field(default="en", max_length=16)
+    level: Level = "beginner"
 
 
 class ReviseRequest(BaseModel):
@@ -25,6 +44,7 @@ class ReviseRequest(BaseModel):
     findings: list[str] = Field(default_factory=list, max_length=80)
     note: str = Field(default="", max_length=2000)
     language: str = Field(default="en", max_length=16)
+    level: Level = "beginner"
 
 
 @router.get("/status")
@@ -50,7 +70,22 @@ async def design(req: DesignRequest) -> Design:
     items = [a for a in (attachments.load(i) for i in req.attachment_ids) if a]
     if len(items) < len(req.attachment_ids):
         raise HTTPException(410, "Some attachments have expired or were removed. Attach them again.")
-    return await _run(designer.generate(req.idea, req.context, items, req.language))
+    return await _run(designer.generate(req.idea, req.context, items, req.language, req.brief, req.answers, req.level))
+
+
+def _items(ids: list[str]) -> list:
+    items = [a for a in (attachments.load(i) for i in ids) if a]
+    if len(items) < len(ids):
+        raise HTTPException(410, "Some attachments have expired or were removed. Attach them again.")
+    return items
+
+
+@router.post("/understand", response_model=Brief)
+async def think_first(req: UnderstandRequest) -> Brief:
+    """Before designing: restate, separate facts from guesses, rough feasibility numbers, the riskiest assumption
+    and its cheapest test, a few concepts, and the questions that would change the design most."""
+    return await _run(understand.understand(req.idea, req.context, req.answers, _items(req.attachment_ids),
+                                            req.language, req.correction, req.level))
 
 
 async def _read_upload(f: UploadFile) -> bytes:
@@ -112,4 +147,4 @@ async def revise(req: ReviseRequest) -> Design:
     if len(req.design.revisions) >= 12:
         raise HTTPException(400, "This design has been revised 12 times. Start a new one from the latest version.")
     findings = [" ".join(f.split())[:600] for f in req.findings]
-    return await _run(designer.revise(req.design, findings, req.note, req.language))
+    return await _run(designer.revise(req.design, findings, req.note, req.language, req.level))

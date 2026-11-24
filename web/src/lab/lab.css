@@ -17,6 +17,12 @@
 .lab-kicker { font-size: 0.7rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--lab-dim); }
 .lab-muted { color: var(--lab-dim); font-size: 0.9rem; }
 .lab-err { color: var(--red); margin: 6px 0; }
+.lab-fail { border: 1px solid var(--red); background: rgba(255, 90, 90, 0.08); border-radius: 10px; padding: 12px 14px; margin: 8px 0 14px; }
+.lab-fail b { color: var(--red); }
+.lab-fail .lab-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.lab-fail .lab-row .lab-btn { flex: 0 0 auto; }
+.lab-fail p { margin: 6px 0 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.lab-kicker.example { color: var(--amber, #f0b429); }
 
 .lab-top { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--lab-line); flex-wrap: wrap; }
 .lab-brand { font-weight: 600; letter-spacing: 0.04em; }
@@ -197,3 +203,66 @@
 .lab-more span { color: var(--lab-dim); font-size: 0.85rem; }
 .lab-specs { margin-bottom: -6px; }
 .lab-probe-fold { margin-top: 12px; }
+
+/* think first */
+.tf { border: 1px solid var(--lab-line); background: var(--lab-panel); border-radius: 14px; padding: 16px 18px; margin: 4px 0 18px; display: grid; gap: 14px; }
+.tf-head { display: flex; justify-content: space-between; align-items: center; }
+.tf h3 { font-size: 1rem; margin: 0 0 8px; }
+.tf p { margin: 4px 0; line-height: 1.5; }
+.tf-restated { font-size: 1.15rem; line-height: 1.45; }
+.tf-link { background: none; border: 0; color: var(--cyan, #38d6e8); padding: 0; cursor: pointer; justify-self: start; font: inherit; }
+.tf-fix { display: grid; gap: 8px; }
+.tf-fix textarea, .tf-own { background: rgba(255,255,255,0.03); border: 1px solid var(--lab-line); color: inherit; border-radius: 8px; padding: 8px 10px; font: inherit; }
+.tf-verdict { border-left: 3px solid var(--green, #3ecf8e); padding: 8px 12px; background: rgba(62, 207, 142, 0.06); border-radius: 0 10px 10px 0; }
+.tf-verdict.build_with_changes, .tf-verdict.needs_research { border-color: var(--amber, #f5b544); background: rgba(245, 181, 68, 0.06); }
+.tf-verdict.beyond_known_physics { border-color: var(--red, #ff5d5d); background: rgba(255, 93, 93, 0.06); }
+.tf-nums { margin: 6px 0 0; padding-left: 18px; }
+.tf-nums code { white-space: normal; overflow-wrap: anywhere; font-size: 0.88rem; }
+.tf-q { margin-bottom: 10px; }
+.tf-opts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tf-own { min-width: 0; flex: 1 1 160px; padding: 6px 10px; }
+.tf-risk { border: 1px dashed var(--amber, #f5b544); border-radius: 10px; padding: 10px 14px; }
+.tf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.tf-concept { text-align: left; display: grid; gap: 4px; background: rgba(255,255,255,0.02); border: 1px solid var(--lab-line); border-radius: 10px; padding: 10px 12px; color: inherit; font: inherit; cursor: pointer; }
+.tf-concept.on { border-color: var(--cyan, #38d6e8); box-shadow: 0 0 0 1px var(--cyan, #38d6e8) inset; }
+.tf-concept em { font-style: normal; color: var(--cyan, #38d6e8); font-weight: 400; font-size: 0.85rem; }
+.tf-concept .pro { color: var(--green, #3ecf8e); }
+.tf-concept .con { color: var(--lab-dim); }
+.tf-known ul { padding-left: 0; list-style: none; display: grid; gap: 4px; }
+.tf-src { display: inline-block; font-size: 0.75rem; padding: 1px 7px; border-radius: 99px; border: 1px solid var(--lab-line); color: var(--lab-dim); margin-right: 6px; }
+.tf-src.you_said, .tf-src.photo, .tf-src.file { color: var(--green, #3ecf8e); border-color: rgba(62, 207, 142, 0.4); }
+.tf-src.assumed { color: var(--amber, #f5b544); border-color: rgba(245, 181, 68, 0.4); }
+.tf-go { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* learn how it works */
+.learn { border: 1px solid var(--lab-line); background: var(--lab-panel); border-radius: 14px; padding: 16px 18px; margin: 16px 0; display: grid; gap: 14px; }
+.learn-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.learn-head p { margin: 4px 0 0; }
+.learn-level { display: flex; flex-wrap: wrap; gap: 6px; }
+.learn-step h3 { margin: 4px 0 6px; font-size: 1.15rem; }
+.learn-step p { line-height: 1.55; margin: 6px 0; }
+.learn-count { font-size: 0.8rem; color: var(--lab-dim); letter-spacing: 0.04em; }
+.learn-predict { border-left: 3px solid var(--cyan, #38d6e8); padding: 6px 12px; margin-top: 10px; }
+.learn-predict .lab-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.learn-result { margin-top: 10px; border-radius: 10px; padding: 10px 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--lab-line); }
+.learn-result.right > b { color: var(--green, #3ecf8e); }
+.learn-result.wrong > b { color: var(--amber, #f5b544); }
+.learn-result .ok { color: var(--green, #3ecf8e); }
+.learn-result .bad { color: var(--red, #ff5d5d); }
+.learn-result .lab-row { display: flex; gap: 8px; margin-top: 6px; }
+.learn-result .lab-row .lab-btn, .learn-predict .lab-chip { flex: 0 0 auto; }
+.learn-work { padding-left: 18px; }
+.learn-work code { white-space: normal; overflow-wrap: anywhere; }
+.learn-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.learn-dots { display: flex; gap: 6px; }
+.learn-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--lab-line); }
+.learn-dots i.done { background: var(--lab-dim); }
+.learn-dots i.on { background: var(--cyan, #38d6e8); }
+.tf-path ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; counter-reset: st; }
+.tf-path li { border: 1px solid var(--lab-line); border-radius: 10px; padding: 8px 12px; }
+.tf-path li.research { border-style: dashed; }
+.tf-path li.invent { border-style: dotted; border-color: var(--violet, #8b7bff); }
+.tf-kind { display: inline-block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; padding: 1px 7px; border-radius: 99px; margin-right: 6px; border: 1px solid currentColor; }
+.tf-kind.build { color: var(--green, #3ecf8e); }
+.tf-kind.research { color: var(--amber, #f5b544); }
+.tf-kind.invent { color: var(--violet, #8b7bff); }

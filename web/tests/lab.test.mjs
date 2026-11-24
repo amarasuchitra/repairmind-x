@@ -90,3 +90,39 @@ test("the server's copy of the examples is up to date", async () => {
   const copy = JSON.parse(readFileSync(new URL("../../agent/tests/data/lab_examples.json", import.meta.url), "utf8"));
   assert.deepEqual(copy, JSON.parse(JSON.stringify(EXAMPLES)), "re-export: node -e 'import(\"./web/src/lab/examples.ts\").then(...)'");
 });
+
+// ---- learning layer: predict, then see ----------------------------------------------------------------------
+import { experiment, learnSteps } from "../src/lab/learn.ts";
+
+test("every worked example gets a runnable learning path built from its own equations", () => {
+  for (const d of EXAMPLES) {
+    const steps = learnSteps(d);
+    assert.ok(steps.length >= 1, `${d.title}: no learning steps`);
+    for (const s of steps) {
+      const out = experiment(d, {}, s);
+      assert.ok(out, `${d.title} ${s.equation_id}: experiment didn't run`);
+      assert.ok(Number.isFinite(out.before) && Number.isFinite(out.after));
+    }
+  }
+});
+
+test("the experiment's answer comes from the equations, and the scaling law is read off the numbers", () => {
+  const d = structuredClone(EXAMPLES[0]);
+  const eq = d.equations[0];
+  const [sym] = d.variables.map((v) => v.symbol).filter((s) => new RegExp(`\\b${s}\\b`).test(eq.expression));
+  const step = { concept: "c", intuition: "i", why_here: "w", equation_id: eq.id, walkthrough: [], try_variable: sym,
+    try_factor: 2, question: "", explain_after: "" };
+  const out = experiment(d, {}, step);
+  assert.ok(out);
+  assert.equal(out.varAfter, out.varBefore * 2);
+  assert.ok(Math.abs(out.ratio - out.after / out.before) < 1e-9);
+  if (out.law === "direct") assert.equal(out.direction, "up");
+});
+
+test("model-written steps that point at a missing equation or variable are dropped", () => {
+  const d = structuredClone(EXAMPLES[0]);
+  d.learn = [{ concept: "x", intuition: "", why_here: "", equation_id: "E99", walkthrough: [], try_variable: "nope",
+    try_factor: 2, question: "", explain_after: "" }];
+  const steps = learnSteps(d);
+  assert.ok(steps.every((s) => s.generated));
+});

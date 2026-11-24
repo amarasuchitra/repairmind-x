@@ -142,6 +142,18 @@ class ResearchNote(BaseModel):
     further_reading: list[str] = Field(description="Real textbooks, standards or handbooks by title and author. No URLs.")
 
 
+class LearnStep(BaseModel):
+    concept: str = Field(description="The idea this step teaches, in a few words, e.g. 'Torque: turning force at the wheel'")
+    intuition: str = Field(description="An everyday picture of the idea at the learner's level, 2-3 sentences")
+    why_here: str = Field(description="Why it decides something in THIS design, with its numbers")
+    equation_id: str = Field(description="The id of the equation in this design that this step explains (E1, E2...)")
+    walkthrough: list[str] = Field(description="2-5 short lines working the equation with this design's numbers and units, at the learner's level")
+    try_variable: str = Field(description="A variable symbol from this design that the equation depends on, for the learner to change")
+    try_factor: float = Field(description="What to multiply that variable by in the experiment, e.g. 2 to double it or 0.5 to halve it")
+    question: str = Field(description="A prediction question, e.g. 'If the rover were twice as heavy, what would happen to the torque each wheel needs?'")
+    explain_after: str = Field(description="Why the result comes out the way it does, to show after the learner has predicted and seen it")
+
+
 class Revision(BaseModel):
     round: int
     critique: str = Field(description="Root cause of each finding, and the alternatives considered")
@@ -171,3 +183,77 @@ class Design(BaseModel):
     revisions: list[Revision]
     inputs_used: list[str] = Field(default_factory=list,
                                    description="One line per attachment (A1, A2, ...): what was taken from it. Empty if none.")
+    learn: list[LearnStep] = Field(default_factory=list,
+                                   description="3-6 steps that teach the physics and maths behind this design, simplest idea first")
+
+
+# ---- think first: understand the idea before designing it -----------------------------------------------------
+
+
+class Known(BaseModel):
+    fact: str = Field(description="One fact the design will rest on, in plain words, with its number and unit if any")
+    source: Literal["you_said", "photo", "file", "typical", "assumed"] = Field(
+        description="you_said: stated by the user; photo/file: seen in an attachment; typical: true of almost every "
+                    "product or situation like this; assumed: a guess that should be confirmed")
+    ref: str = Field(description="Which attachment (A1, A2...) or which words it came from; empty if none")
+
+
+class BriefQuestion(BaseModel):
+    q: str = Field(description="A plain question whose answer would change the design the most")
+    why: str = Field(description="What changes depending on the answer, in a few words")
+    options: list[str] = Field(description="2-4 short likely answers the user can tap")
+
+
+class PathStage(BaseModel):
+    name: str = Field(description="e.g. 'Desk proof of the core effect', 'Working prototype', 'Research: lighter battery'")
+    kind: Literal["build", "research", "invent"] = Field(
+        description="build: doable now with parts you can buy; research: needs testing or study that exists as a field "
+                    "(name it); invent: needs something nobody has made yet")
+    what: str = Field(description="What happens in this stage and what it proves, in plain words")
+    needs: str = Field(description="Parts, skills, tools, people or institutions it needs (e.g. 'a university materials lab')")
+    time: str = Field(description="Rough time, e.g. 'two weekends', '6-12 months', 'years: active research'")
+
+
+class Feasibility(BaseModel):
+    verdict: Literal["build_now", "build_with_changes", "needs_research", "beyond_known_physics"] = Field(
+        description="build_now: buildable with today's parts; build_with_changes: buildable if something changes "
+                    "(size, power, cost, approach); needs_research: possible in principle but needs research or new "
+                    "parts first; beyond_known_physics: breaks a law of physics as asked (energy, momentum, "
+                    "thermodynamics); the path then reaches the goal behind the idea another way")
+    why: str = Field(description="The deciding reason in one or two plain sentences")
+    deciding_numbers: list[str] = Field(
+        description="1-4 back-of-the-envelope estimates that decide it, each worked out in one line with units, "
+                    "e.g. 'Energy to lift 1000 L by 10 m: 1000 kg x 9.81 m/s^2 x 10 m = 98 kJ = 27 Wh per day'")
+    closest_alternative: str = Field(description="If not buildable as asked: the nearest thing that is buildable today; else empty")
+    path: list[PathStage] = Field(
+        description="2-6 stages from what can be built today toward the full idea, including the research or invention "
+                    "it needs. Never empty: every idea gets a path")
+
+
+class RiskiestAssumption(BaseModel):
+    statement: str = Field(description="The one belief that, if wrong, sinks the idea")
+    why_it_matters: str
+    cheapest_test: str = Field(description="The cheapest, quickest experiment or calculation that could prove it wrong, step by step in plain words")
+    pass_if: str = Field(description="The measurable result that means the idea survives, with a number and unit")
+    test_cost_inr: int = Field(description="Rough cost of that test in Indian rupees")
+    test_time: str = Field(description="Rough time for a beginner, e.g. 'one evening'")
+
+
+class Concept(BaseModel):
+    name: str
+    how_it_works: str = Field(description="One or two plain sentences")
+    pros: list[str]
+    cons: list[str]
+
+
+class Brief(BaseModel):
+    restated: str = Field(description="The idea restated in one or two plain sentences, so the user can confirm it")
+    kind: Literal["new", "improve"] = Field(description="new: an invention; improve: making something that exists better")
+    real_goal: str = Field(description="The need behind the request: what success looks like for the user, measurably")
+    known: list[Known] = Field(description="3-10 facts the design will rest on, most important first")
+    feasibility: Feasibility
+    riskiest: RiskiestAssumption
+    concepts: list[Concept] = Field(description="2-3 genuinely different ways to do it")
+    recommended_concept: str = Field(description="The name of the concept you would start with, exactly as in concepts")
+    recommended_why: str
+    questions: list[BriefQuestion] = Field(description="Up to 4 questions that would change the design most; none already answered; empty when nothing important is unclear")

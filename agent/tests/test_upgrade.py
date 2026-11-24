@@ -95,15 +95,23 @@ def test_red_level_products_never_get_a_relay_or_a_plain_go(client, monkeypatch)
     assert j["plan"]["warnings"][0].startswith("Safety:")
 
 
-def test_all_impossible_means_nothing_to_build(client, monkeypatch):
+def test_no_dead_end_when_no_wish_is_possible_as_asked(client, monkeypatch):
     def a():
         x = answer()
         x.wishes[0].verdict = "not_possible"
         return x
     fake(monkeypatch, a)
     j = client.post("/api/upgrade/assess", json=body(idea="make it fly")).json()
-    assert j["overall"] == "not_recommended"
-    assert j["plan"]["parts"] == [] and j["plan"]["rules"] == []
+    # the plan builds the closest alternative instead of being wiped, and isn't presented as "go as asked"
+    assert j["overall"] == "go_with_changes"
+    assert j["plan"]["parts"]
+
+    def nothing():
+        x = a()
+        x.plan.parts, x.plan.rules = [], []
+        return x
+    fake(monkeypatch, nothing)
+    assert client.post("/api/upgrade/assess", json=body(idea="make it fly")).json()["overall"] == "not_recommended"
 
 
 def test_corrections_and_precedents_are_learned_and_reused(client, monkeypatch):
