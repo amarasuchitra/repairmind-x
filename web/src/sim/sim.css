@@ -72,3 +72,17 @@
 .sim-serial { max-height: 180px; overflow: auto; background: #030914; border: 1px solid var(--lab-line); border-radius: 8px; padding: 8px 10px; font-size: 0.76rem; color: #b9f3c9; white-space: pre-wrap; margin: 8px 0 0; }
 .sim-code .lab-row { margin-top: 8px; }
 .sim-code .lab-row label.lab-btn { cursor: pointer; flex: 0 0 auto; }
+
+/* the design lab's sandbox, editable */
+.sbx { margin-top: 10px; }
+.sbx > .lab-muted { margin: 6px 0; font-size: 0.84rem; }
+.sbx-row { display: flex; flex-wrap: wrap; gap: 10px 16px; margin: 8px 0; font-size: 0.86rem; }
+.sbx-row label { display: flex; flex-direction: column; gap: 3px; }
+.sbx input[type="number"], .sbx select { background: rgba(6, 17, 38, 0.8); color: var(--text); border: 1px solid var(--lab-line); border-radius: 8px; padding: 0.3rem 0.45rem; font: inherit; font-size: 0.84rem; width: 100%; min-width: 72px; max-width: 130px; }
+.sbx select { max-width: 230px; }
+.sbx-table td small { display: block; color: var(--lab-dim); font-size: 0.72rem; }
+.sbx-pair { display: flex; gap: 6px; }
+.sbx-pair label { display: flex; flex-direction: column; gap: 2px; font-size: 0.7rem; color: var(--lab-dim); }
+.sbx-broken td { color: #ffc4c4; }
+.sbx-table .lab-pill { margin-left: 6px; }
+.sbx-events { margin-top: 8px; }

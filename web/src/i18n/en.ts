@@ -717,6 +717,27 @@ export const en = {
   "sim.serial": "Serial monitor",
   "sim.serialEmpty": "(nothing printed yet: switch it on)",
 
+  // the design lab's sandbox, editable
+  "sbx.h": "Change it and see what happens",
+  "sbx.p": "Change weights, sizes, grip, motors and springs, and give each joint a real strength. The sandbox reruns with your changes; the engineer's design and its calculations stay as they were.",
+  "sbx.gravity": "Gravity",
+  "sbx.duration": "Run for (s)",
+  "sbx.body": "Part",
+  "sbx.mass": "Mass (kg)",
+  "sbx.size": "Size ×",
+  "sbx.friction": "Grip (friction)",
+  "sbx.fixed": "Held still",
+  "sbx.joint": "Joint",
+  "sbx.drive": "Motor or spring",
+  "sbx.speed": "Speed (rad/s)",
+  "sbx.torque": "Max torque (N·m)",
+  "sbx.k": "Stiffness (N/m)",
+  "sbx.damping": "Damping (N·s/m)",
+  "sbx.strength": "What it's made with",
+  "sbx.load": "Biggest load",
+  "sbx.broke": "broke",
+  "sbx.loadNote": "Loads are worked out from F = m·a on the part a joint holds, after taking off the ground's push. They show for joints that hold one moving part on their own.",
+
   // idea assistant (#build): understand, judge, plan
   "ia.ask": "What do you want to make?",
   "ia.askP": "A new invention or something you already own made smarter. Describe it in your own words; I'll work out what it takes, tell you honestly what's possible, and guide you to a real, working thing.",
