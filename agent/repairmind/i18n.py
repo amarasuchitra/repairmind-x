@@ -150,8 +150,9 @@ summary, objective, operating context, constraints, requirement text and rationa
 materials and notes, variable names and sources, equation names, explanations and assumptions, check labels,
 the trade study question, criteria, options and recommendation, failure modes, causes, effects and
 mitigations, simulation title and labels, research notes, open questions, next steps, inputs used, and review
-critiques, changes and lessons. Keep these exactly as the schema requires and never translate them: ids (R1,
-E1, ...), variable and equation symbols, expressions, units (SI symbols such as mm, N, MPa, N*m, m/s^2),
+critiques, changes and lessons, and the learning steps (concept, intuition, why_here, walkthrough, question,
+explain_after). Keep these exactly as the schema requires and never translate them: ids (R1,
+E1, ...), variable and equation symbols (including a learning step's equation_id and try_variable), expressions, units (SI symbols such as mm, N, MPa, N*m, m/s^2),
 numbers (Western digits, "." as the decimal point), enum values (kind, verification, shape, joint kind),
 body and joint ids, and colours. Name a standard or a book by its original title. In the trade study, the
 recommendation must name the winning option exactly as written in the options list."""

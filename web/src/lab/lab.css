@@ -233,3 +233,28 @@
 .tf-src.you_said, .tf-src.photo, .tf-src.file { color: var(--green, #3ecf8e); border-color: rgba(62, 207, 142, 0.4); }
 .tf-src.assumed { color: var(--amber, #f5b544); border-color: rgba(245, 181, 68, 0.4); }
 .tf-go { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* learn how it works */
+.learn { border: 1px solid var(--lab-line); background: var(--lab-panel); border-radius: 14px; padding: 16px 18px; margin: 16px 0; display: grid; gap: 14px; }
+.learn-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: flex-start; }
+.learn-head p { margin: 4px 0 0; }
+.learn-level { display: flex; flex-wrap: wrap; gap: 6px; }
+.learn-step h3 { margin: 4px 0 6px; font-size: 1.15rem; }
+.learn-step p { line-height: 1.55; margin: 6px 0; }
+.learn-count { font-size: 0.8rem; color: var(--lab-dim); letter-spacing: 0.04em; }
+.learn-predict { border-left: 3px solid var(--cyan, #38d6e8); padding: 6px 12px; margin-top: 10px; }
+.learn-predict .lab-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.learn-result { margin-top: 10px; border-radius: 10px; padding: 10px 14px; background: rgba(255,255,255,0.03); border: 1px solid var(--lab-line); }
+.learn-result.right > b { color: var(--green, #3ecf8e); }
+.learn-result.wrong > b { color: var(--amber, #f5b544); }
+.learn-result .ok { color: var(--green, #3ecf8e); }
+.learn-result .bad { color: var(--red, #ff5d5d); }
+.learn-result .lab-row { display: flex; gap: 8px; margin-top: 6px; }
+.learn-result .lab-row .lab-btn, .learn-predict .lab-chip { flex: 0 0 auto; }
+.learn-work { padding-left: 18px; }
+.learn-work code { white-space: normal; overflow-wrap: anywhere; }
+.learn-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.learn-dots { display: flex; gap: 6px; }
+.learn-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--lab-line); }
+.learn-dots i.done { background: var(--lab-dim); }
+.learn-dots i.on { background: var(--cyan, #38d6e8); }

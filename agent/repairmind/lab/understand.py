@@ -51,7 +51,7 @@ and feasibility.why, verdict not_feasible_now, and ask nothing."""
 
 
 async def understand(idea: str, context: str = "", answers: list[QA] | None = None, attachments: list | None = None,
-                     language: str = "en", correction: str = "") -> Brief:
+                     language: str = "en", correction: str = "", level: str = "beginner") -> Brief:
     from .attachments import for_prompt
 
     if checker.provider() is None:
@@ -67,9 +67,11 @@ async def understand(idea: str, context: str = "", answers: list[QA] | None = No
         parts.append(f"THEY SAY YOU MISUNDERSTOOD, AND CORRECT YOU:\n{correction.strip()}")
     if att_text:
         parts.append(att_text)
-    from .designer import ATTACHMENTS_RULES
+    from .designer import ATTACHMENTS_RULES, LEVELS
 
-    system = UNDERSTAND_SYSTEM + (ATTACHMENTS_RULES if att_text else "") + i18n.design_rules(language) + _lessons_block()
+    who = LEVELS.get(level, LEVELS["beginner"])
+    system = (UNDERSTAND_SYSTEM + f"\n\nWrite for {who}." + (ATTACHMENTS_RULES if att_text else "")
+              + i18n.design_rules(language) + _lessons_block())
     res = await checker.parse(system, images, "\n\n".join(parts), Brief, "design", effort="high", timeout=180.0,
                               max_tokens=8000)
     if res.refused:

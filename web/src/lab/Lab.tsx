@@ -9,6 +9,8 @@ import { Attachments, MicButton, fetchAttachments, type AttachmentInfo } from ".
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Brief, QA } from "./brief.ts";
 import { ThinkFirst } from "./ThinkFirst.tsx";
+import { Learn } from "./Learn.tsx";
+import { readLevel, storeLevel, type Level } from "./learn.ts";
 import type { Key } from "../i18n/en";
 
 const STORE = "rmx.lab.design";
@@ -106,6 +108,9 @@ export function Lab({ onBack }: { onBack: () => void }) {
   // think first: the engineer's understanding of the idea, and the answers given so far
   const [plan, setPlan] = useState<Brief | null>(null);
   const [answers, setAnswers] = useState<QA[]>([]);
+  // who explanations are written for; remembered on this device
+  const [level, setLevelState] = useState<Level>(readLevel);
+  const setLevel = (l: Level) => { setLevelState(l); storeLevel(l); };
   const [simF, setSimF] = useState<Finding[] | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -143,7 +148,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
     setLastAsk("think");
     setBusy(t("tf.thinking"));
     try {
-      const b = await api<Brief>("/api/lab/understand", { idea, context, attachment_ids: files.map((f) => f.id), answers: given, correction, language: lang });
+      const b = await api<Brief>("/api/lab/understand", { idea, context, attachment_ids: files.map((f) => f.id), answers: given, correction, language: lang, level });
       setPlan(b);
       setAnswers(given);
     } catch (e) {
@@ -159,7 +164,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
     setBusy(t("lab.designing"));
     try {
       // the engineer writes the design in the app's language; symbols, units and equations stay as they are
-      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id), language: lang, brief: plan, answers: given });
+      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id), language: lang, brief: plan, answers: given, level });
       load(d);
       setPlan(null);
       setAnswers(given);
@@ -189,7 +194,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
         if (auto && failing === 0 && round > 0) break;
         setBusy(t("lab.round", { round: current.revisions.length + 1, fail: failing, warn: findings.length - failing }));
         current = await api<Design>("/api/lab/revise", {
-          design: current, findings: findings.map((f) => `[${f.severity}] ${f.where}: ${f.text}`), note: round === 0 ? note : "", language: lang,
+          design: current, findings: findings.map((f) => `[${f.severity}] ${f.where}: ${f.text}`), note: round === 0 ? note : "", language: lang, level,
         });
         load(current);
         if (auto) {
@@ -300,6 +305,9 @@ export function Lab({ onBack }: { onBack: () => void }) {
           })()}
 
           <SimView design={design} analysis={analysis} />
+
+          <Learn key={design.title + design.revisions.length} design={design} overrides={overrides} level={level} setLevel={setLevel}
+            onTry={(sym, value) => setOverrides((o) => { const n = { ...o }; if (value === null) delete n[sym]; else n[sym] = value; return n; })} />
 
           <button className="lab-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
             <b>{details ? t("lab.details.hide") : t("lab.details.show")}</b>

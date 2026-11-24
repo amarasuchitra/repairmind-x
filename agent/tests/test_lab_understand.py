@@ -70,3 +70,21 @@ def test_web_brief_type_matches_the_server_schema():
     ts = (Path(__file__).parents[2] / "web" / "src" / "lab" / "brief.ts").read_text(encoding="utf-8")
     for field in Brief.model_fields:
         assert f"{field}:" in ts, field
+
+
+def test_level_shapes_the_teaching(lab, monkeypatch):  # noqa: F811
+    calls = fake_model(monkeypatch, Design.model_validate(EXAMPLES[0]))
+    lab.post("/api/lab/design", json={"idea": "solar pump for my farm well", "level": "student"})
+    assert "TEACHING" in calls[0]["system"] and "student" in calls[0]["system"]
+    assert lab.post("/api/lab/design", json={"idea": "solar pump for my farm well", "level": "wizard"}).status_code == 422
+    calls = fake_model(monkeypatch, brief())
+    lab.post("/api/lab/understand", json={"idea": "solar pump for my farm well", "level": "engineer"})
+    assert "practising engineer" in calls[0]["system"]
+
+
+def test_learn_steps_round_trip():
+    d = Design.model_validate({**EXAMPLES[0], "learn": [{
+        "concept": "Torque", "intuition": "a push far from the hinge", "why_here": "wheels", "equation_id": "E1",
+        "walkthrough": ["T = F r"], "try_variable": "m", "try_factor": 2, "question": "?", "explain_after": "because"}]})
+    assert d.learn[0].try_factor == 2
+    assert Design.model_validate(EXAMPLES[0]).learn == []

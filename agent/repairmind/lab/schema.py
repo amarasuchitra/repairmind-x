@@ -142,6 +142,18 @@ class ResearchNote(BaseModel):
     further_reading: list[str] = Field(description="Real textbooks, standards or handbooks by title and author. No URLs.")
 
 
+class LearnStep(BaseModel):
+    concept: str = Field(description="The idea this step teaches, in a few words, e.g. 'Torque: turning force at the wheel'")
+    intuition: str = Field(description="An everyday picture of the idea at the learner's level, 2-3 sentences")
+    why_here: str = Field(description="Why it decides something in THIS design, with its numbers")
+    equation_id: str = Field(description="The id of the equation in this design that this step explains (E1, E2...)")
+    walkthrough: list[str] = Field(description="2-5 short lines working the equation with this design's numbers and units, at the learner's level")
+    try_variable: str = Field(description="A variable symbol from this design that the equation depends on, for the learner to change")
+    try_factor: float = Field(description="What to multiply that variable by in the experiment, e.g. 2 to double it or 0.5 to halve it")
+    question: str = Field(description="A prediction question, e.g. 'If the rover were twice as heavy, what would happen to the torque each wheel needs?'")
+    explain_after: str = Field(description="Why the result comes out the way it does, to show after the learner has predicted and seen it")
+
+
 class Revision(BaseModel):
     round: int
     critique: str = Field(description="Root cause of each finding, and the alternatives considered")
@@ -171,6 +183,8 @@ class Design(BaseModel):
     revisions: list[Revision]
     inputs_used: list[str] = Field(default_factory=list,
                                    description="One line per attachment (A1, A2, ...): what was taken from it. Empty if none.")
+    learn: list[LearnStep] = Field(default_factory=list,
+                                   description="3-6 steps that teach the physics and maths behind this design, simplest idea first")
 
 
 # ---- think first: understand the idea before designing it -----------------------------------------------------
