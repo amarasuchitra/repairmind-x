@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { Call } from "./Call";
 import { Inspect } from "./Inspect";
 import { Home } from "./home/Home";
+import { Landing } from "./Landing";
 import { Login, readProfile, writeProfile, type Profile } from "./Login";
 import { NetworkBackground } from "./fx/NetworkBackground";
 import { Intro, shouldPlayIntro } from "./fx/Intro";
@@ -11,8 +12,6 @@ import { useI18n } from "./i18n";
 const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
 // The design lab (physics engine, 3D sandbox) only loads when someone opens #lab.
 const Lab = lazy(() => import("./lab/Lab.tsx").then((m) => ({ default: m.Lab })));
-// The scrolling 3D walkthrough of a repair call only loads when someone opens #tour ("See how it works").
-const Landing = lazy(() => import("./Landing").then((m) => ({ default: m.Landing })));
 // Redesign a broken part (design brief + failure library) only loads when someone opens #redesign.
 const Redesign = lazy(() => import("./redesign/Redesign.tsx").then((m) => ({ default: m.Redesign })));
 // The hardware project builder (drag parts, get wiring, code and costs) only loads when someone opens #build.
@@ -45,10 +44,10 @@ function writeLastRoom(room: string | null) {
   }
 }
 
-type Page = "call" | "inspect" | "demo" | "lab" | "redesign" | "build" | "tour";
+type Page = "call" | "inspect" | "demo" | "lab" | "redesign" | "build" | "assistant";
 const pageFromHash = (): Page => {
   const h = window.location.hash;
-  return h === "#inspect" ? "inspect" : h === "#tour" ? "tour" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h === "#build" ? "build" : h.startsWith("#demo") ? "demo" : "call";
+  return h === "#inspect" ? "inspect" : h === "#assistant" ? "assistant" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h === "#build" ? "build" : h.startsWith("#demo") ? "demo" : "call";
 };
 
 export default function App() {
@@ -69,7 +68,7 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  function go(next: "call" | "inspect" | "lab" | "redesign" | "build" | "tour") {
+  function go(next: "call" | "inspect" | "lab" | "redesign" | "build" | "assistant") {
     window.location.hash = next === "call" ? "" : next;
     setPage(next);
   }
@@ -140,9 +139,9 @@ export default function App() {
     );
   } else if (page === "inspect") {
     content = <Inspect onBack={() => go("call")} />;
-  } else if (page === "tour") {
+  } else if (page !== "assistant") {
+    // the start page: the scrolling 3D walkthrough, with the calm assistant one tap away
     content = (
-      <Suspense fallback={null}>
         <Landing
           accepted={accepted}
           setAccepted={setAccepted}
@@ -155,10 +154,9 @@ export default function App() {
           onInspect={() => go("inspect")}
           onLab={() => go("lab")}
           onRedesign={() => go("redesign")}
-          onHome={() => go("call")}
+          onAssistant={() => go("assistant")}
           entering={!intro}
         />
-      </Suspense>
     );
   } else {
     content = (
@@ -175,7 +173,7 @@ export default function App() {
         onLab={() => go("lab")}
         onRedesign={() => go("redesign")}
         onBuild={() => go("build")}
-        onTour={() => go("tour")}
+        onTour={() => go("call")}
       />
     );
   }
@@ -183,8 +181,8 @@ export default function App() {
   return (
     <>
       {/* the walkthrough draws its own 3D scene; the lab and redesign pages have their own backdrop */}
-      {(conn || signingIn || (page !== "tour" && page !== "lab" && page !== "redesign" && page !== "build")) && (
-        <NetworkBackground intensity={conn || page === "demo" ? 0.55 : page === "call" ? 0.7 : 1} />
+      {(conn || signingIn || (page !== "call" && page !== "lab" && page !== "redesign" && page !== "build")) && (
+        <NetworkBackground intensity={conn || page === "demo" ? 0.55 : page === "assistant" ? 0.7 : 1} />
       )}
       {content}
       {intro && !conn && <Intro onDone={() => setIntro(false)} />}
