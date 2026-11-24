@@ -171,3 +171,60 @@ class Design(BaseModel):
     revisions: list[Revision]
     inputs_used: list[str] = Field(default_factory=list,
                                    description="One line per attachment (A1, A2, ...): what was taken from it. Empty if none.")
+
+
+# ---- think first: understand the idea before designing it -----------------------------------------------------
+
+
+class Known(BaseModel):
+    fact: str = Field(description="One fact the design will rest on, in plain words, with its number and unit if any")
+    source: Literal["you_said", "photo", "file", "typical", "assumed"] = Field(
+        description="you_said: stated by the user; photo/file: seen in an attachment; typical: true of almost every "
+                    "product or situation like this; assumed: a guess that should be confirmed")
+    ref: str = Field(description="Which attachment (A1, A2...) or which words it came from; empty if none")
+
+
+class BriefQuestion(BaseModel):
+    q: str = Field(description="A plain question whose answer would change the design the most")
+    why: str = Field(description="What changes depending on the answer, in a few words")
+    options: list[str] = Field(description="2-4 short likely answers the user can tap")
+
+
+class Feasibility(BaseModel):
+    verdict: Literal["feasible", "feasible_with_changes", "not_feasible_now", "not_physically_possible"] = Field(
+        description="not_feasible_now: possible in principle but not with today's parts, money or skills; "
+                    "not_physically_possible: breaks a law of physics (energy, momentum, thermodynamics)")
+    why: str = Field(description="The deciding reason in one or two plain sentences")
+    deciding_numbers: list[str] = Field(
+        description="1-4 back-of-the-envelope estimates that decide it, each worked out in one line with units, "
+                    "e.g. 'Energy to lift 1000 L by 10 m: 1000 kg x 9.81 m/s^2 x 10 m = 98 kJ = 27 Wh per day'")
+    closest_alternative: str = Field(description="If not feasible as asked: the nearest thing that is; else empty")
+
+
+class RiskiestAssumption(BaseModel):
+    statement: str = Field(description="The one belief that, if wrong, sinks the idea")
+    why_it_matters: str
+    cheapest_test: str = Field(description="The cheapest, quickest experiment or calculation that could prove it wrong, step by step in plain words")
+    pass_if: str = Field(description="The measurable result that means the idea survives, with a number and unit")
+    test_cost_inr: int = Field(description="Rough cost of that test in Indian rupees")
+    test_time: str = Field(description="Rough time for a beginner, e.g. 'one evening'")
+
+
+class Concept(BaseModel):
+    name: str
+    how_it_works: str = Field(description="One or two plain sentences")
+    pros: list[str]
+    cons: list[str]
+
+
+class Brief(BaseModel):
+    restated: str = Field(description="The idea restated in one or two plain sentences, so the user can confirm it")
+    kind: Literal["new", "improve"] = Field(description="new: an invention; improve: making something that exists better")
+    real_goal: str = Field(description="The need behind the request: what success looks like for the user, measurably")
+    known: list[Known] = Field(description="3-10 facts the design will rest on, most important first")
+    feasibility: Feasibility
+    riskiest: RiskiestAssumption
+    concepts: list[Concept] = Field(description="2-3 genuinely different ways to do it")
+    recommended_concept: str = Field(description="The name of the concept you would start with, exactly as in concepts")
+    recommended_why: str
+    questions: list[BriefQuestion] = Field(description="Up to 4 questions that would change the design most; none already answered; empty when nothing important is unclear")

@@ -168,12 +168,17 @@ async def _call(system: str, text: str, images: list[str] | None = None) -> Desi
     return res.parsed
 
 
-async def generate(idea: str, context: str = "", attachments: list | None = None, language: str = "en") -> Design:
+async def generate(idea: str, context: str = "", attachments: list | None = None, language: str = "en",
+                   brief=None, answers: list | None = None) -> Design:
     from .attachments import for_prompt
+    from .understand import brief_block
 
     text = f"IDEA:\n{idea.strip()}"
     if context.strip():
         text += f"\n\nCONTEXT FROM THE ENGINEER:\n{context.strip()}"
+    agreed = brief_block(brief, answers)
+    if agreed:
+        text += "\n\n" + agreed
     att_text, images = for_prompt(attachments or [])
     if att_text:
         text += "\n\n" + att_text

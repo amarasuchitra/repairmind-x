@@ -7,6 +7,8 @@ import { SimView, runHeadless } from "./SimView.tsx";
 import { fmt } from "./units.ts";
 import { Attachments, MicButton, fetchAttachments, type AttachmentInfo } from "./inputs.tsx";
 import { LanguagePicker, useI18n } from "../i18n";
+import type { Brief, QA } from "./brief.ts";
+import { ThinkFirst } from "./ThinkFirst.tsx";
 import type { Key } from "../i18n/en";
 
 const STORE = "rmx.lab.design";
@@ -100,7 +102,10 @@ export function Lab({ onBack }: { onBack: () => void }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   // which request failed last, so the error can offer the right retry
-  const [lastAsk, setLastAsk] = useState<"design" | "revise">("design");
+  const [lastAsk, setLastAsk] = useState<"think" | "design" | "revise">("think");
+  // think first: the engineer's understanding of the idea, and the answers given so far
+  const [plan, setPlan] = useState<Brief | null>(null);
+  const [answers, setAnswers] = useState<QA[]>([]);
   const [simF, setSimF] = useState<Finding[] | null>(null);
   const [checking, setChecking] = useState(false);
 
@@ -132,14 +137,32 @@ export function Lab({ onBack }: { onBack: () => void }) {
     setError("");
   }
 
-  async function create() {
+  /** Think first: restate, rough numbers, riskiest assumption, concepts and questions, before any design. */
+  async function think(given: QA[] = [], correction = "") {
+    setError("");
+    setLastAsk("think");
+    setBusy(t("tf.thinking"));
+    try {
+      const b = await api<Brief>("/api/lab/understand", { idea, context, attachment_ids: files.map((f) => f.id), answers: given, correction, language: lang });
+      setPlan(b);
+      setAnswers(given);
+    } catch (e) {
+      setError(say(e));
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function create(given: QA[] = answers) {
     setError("");
     setLastAsk("design");
     setBusy(t("lab.designing"));
     try {
       // the engineer writes the design in the app's language; symbols, units and equations stay as they are
-      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id), language: lang });
+      const d = await api<Design>("/api/lab/design", { idea, context, attachment_ids: files.map((f) => f.id), language: lang, brief: plan, answers: given });
       load(d);
+      setPlan(null);
+      setAnswers(given);
       setTab("Overview");
     } catch (e) {
       setError(say(e));
@@ -211,7 +234,8 @@ export function Lab({ onBack }: { onBack: () => void }) {
               placeholder={t("lab.ideaPh")} />
             <div className="lab-composer-row">
               <MicButton onInterim={setInterim} onText={(t) => setIdea((v) => (v ? `${v.trimEnd()} ${t}` : t).slice(0, 4000))} />
-              <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={create}>{t("lab.designIt")}</button>
+              <button className="lab-btn ghost" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={() => create([])} title={t("tf.skipWhy")}>{t("tf.skip")}</button>
+              <button className="lab-btn solid" disabled={idea.trim().length < 8 || !!busy || !status?.ready} onClick={() => think()}>{t("tf.go")}</button>
             </div>
           </div>
           <details className="lab-fold" open={!!(context || files.length) || undefined}>
@@ -234,15 +258,22 @@ export function Lab({ onBack }: { onBack: () => void }) {
           {busy && <div className="lab-busy" role="status"><span className="lab-spin" aria-hidden />{busy}</div>}
           {error && (
             <div className="lab-fail" role="alert">
-              <b>{lastAsk === "design" ? t("lab.fail.design") : t("lab.fail.revise")}</b>
+              <b>{lastAsk === "think" ? t("tf.fail") : lastAsk === "design" ? t("lab.fail.design") : t("lab.fail.revise")}</b>
               <p>{auto(error)}</p>
               <div className="lab-row">
-                {lastAsk === "design" && <button className="lab-btn solid" disabled={!!busy || idea.trim().length < 8} onClick={create}>{t("lab.fail.retry")}</button>}
+                {lastAsk !== "revise" && <button className="lab-btn solid" disabled={!!busy || idea.trim().length < 8} onClick={() => (lastAsk === "think" ? think(answers) : create())}>{t("lab.fail.retry")}</button>}
                 <button className="lab-btn ghost" onClick={() => setError("")}>{t("lab.fail.dismiss")}</button>
               </div>
-              {isExample && <p className="lab-muted">{t("lab.fail.exampleBelow")}</p>}
+              {isExample && !plan && <p className="lab-muted">{t("lab.fail.exampleBelow")}</p>}
             </div>
           )}
+
+          {plan && (
+            <ThinkFirst key={plan.restated} brief={plan} earlier={answers} busy={!!busy}
+              onDesign={(a) => void create(a)} onRethink={(a, c) => void think(a, c)} onClose={() => setPlan(null)} />
+          )}
+
+          {!(plan && isExample) && <>
 
           <div className="lab-title">
             <div>
@@ -465,6 +496,7 @@ export function Lab({ onBack }: { onBack: () => void }) {
               ) : <p className="lab-muted">{t("lab.noReviews")}</p>
             )}
           </section>
+          </>}
           </>}
         </div>
       </div>
