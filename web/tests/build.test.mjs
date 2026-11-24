@@ -145,3 +145,46 @@ test("project files round-trip and junk is refused", () => {
   assert.equal(parseProject("{\"v\":2}"), null);
   assert.equal(parseProject("not json"), null);
 });
+
+// --- the idea assistant's offline analysis -------------------------------------------------------------
+import { offlineAssess, toProject } from "../src/build/assess.ts";
+
+const idea = (o) => ({ idea: "", product: "", forKids: false, answers: [], attachment_ids: [], ...o });
+
+test("offline: an existing toy that should talk is understood, judged and planned", () => {
+  const a = offlineAssess(idea({ product: "a plush owl that glows", idea: "make it talk and listen to my kid" }));
+  assert.equal(a.product.kind, "existing");
+  assert.equal(a.product.category, "soft toy");
+  assert.ok(a.product.for_kids);
+  assert.ok(a.wishes.length >= 1 && a.wishes.every((w) => w.verdict !== "not_possible"));
+  assert.notEqual(a.overall, "not_recommended");
+  assert.ok(a.plan.stages.length === 3);
+  const p = toProject(a, idea({ product: "a plush owl that glows", idea: "make it talk" }));
+  assert.equal(p.mode, "upgrade");
+  assert.ok(analyze(p).ready, levels(analyze(p)).join(" | "));
+});
+
+test("offline: impossible wishes say why and offer something buildable", () => {
+  const a = offlineAssess(idea({ product: "a teddy bear", idea: "make it fly" }));
+  assert.equal(a.wishes[0].verdict, "not_possible");
+  assert.ok(a.wishes[0].alternative.length > 10);
+  assert.equal(a.overall, "not_recommended");
+  assert.equal(a.plan.parts.length, 0);
+});
+
+test("offline: mains heating appliances are never planned for internal changes", () => {
+  const a = offlineAssess(idea({ product: "my microwave", idea: "make it beep louder" }));
+  assert.ok(a.wishes.every((w) => w.verdict === "not_possible"));
+  assert.match(a.wishes[0].alternative, /separate/);
+});
+
+test("offline: a new invention gets a plan, and answered questions aren't asked again", () => {
+  const a = offlineAssess(idea({ idea: "a glove that lights up when I point and beeps when someone is close" }));
+  assert.equal(a.product.kind, "new");
+  assert.ok(a.plan.parts.some((p) => p.id === "distance"));
+  const q = a.questions[0].q;
+  const b = offlineAssess(idea({ idea: "a glove that lights up when I point", answers: [{ q, a: a.questions[0].options[0] }] }));
+  assert.ok(!b.questions.some((x) => x.q === q));
+  const usb = offlineAssess(idea({ idea: "a night light for the hallway that turns on when someone walks past", answers: [{ q: "How should it be powered?", a: "USB / plugged in" }] }));
+  assert.ok(usb.plan.parts.some((p) => p.id === "usb") && !usb.plan.parts.some((p) => p.id === "aa3"));
+});

@@ -41,7 +41,7 @@ export function guessIntent(text: string): Intent {
   const x = text.toLowerCase();
   if (/\b(redesign|re-design|replacement part|new part|stronger part|3d[- ]?print|print (a|me|one))\b/.test(x)) return "redesign";
   const broken = /\b(broken|fix|repair|not working|stopped|won't|doesn't)\b/.test(x);
-  if (!broken && /\b(toy|gadget|sensors?|arduino|esp32|electronics?|circuit|robot|leds?|smart|wiring|microcontroller|make (it|my \w+) (talk|speak|glow|light up|listen|move|beep))\b/.test(x)) return "build";
+  if (!broken && /\b(toy|gadget|invent\w*|idea|sensors?|arduino|esp32|electronics?|circuit|robot|leds?|smart|wiring|microcontroller|lights? up|make (it|my \w+) (talk|speak|glow|light up|listen|move|beep))\b/.test(x)) return "build";
   if (/\b(design|build|invent|create|prototype|idea for|make (a|an|me))\b/.test(x)) return "design";
   return "fix";
 }

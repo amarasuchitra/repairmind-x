@@ -2,14 +2,17 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent
 import "../lab/lab.css";
 import "../redesign/redesign.css";
 import "./build.css";
-import { MicButton } from "../lab/inputs.tsx";
+import { MicButton, uploadFiles, type AttachmentInfo } from "../lab/inputs.tsx";
+import { LAB_BRIEF_KEY } from "../redesign/brief";
+import { catalogForServer, offlineAssess, toProject, type Assessment, type IdeaInput } from "./assess.ts";
+import { AssessmentView, IdeaStart } from "./Assistant.tsx";
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Key } from "../i18n/en";
 import { BY_ID, CATEGORIES, ALL, isBoard, isPower, type Part } from "./parts.ts";
 import { analyze, applyFix, freeSpot, pinLabel, short, type Report } from "./engine.ts";
 import { firmware } from "./firmware.ts";
 import { ACTIONS, TRIGGERS, emptyProject, parseProject, uid, type Project, type Rule } from "./project.ts";
-import { TEMPLATES, autoRules, fromTemplate, suggest } from "./templates.ts";
+import { autoRules, suggest } from "./templates.ts";
 import { WiringDiagram } from "./Wiring.tsx";
 
 const STORE = "rmx.build.project";
@@ -60,14 +63,31 @@ function pruneRules(p: Project): Project {
 
 type Tab = "wiring" | "parts" | "code" | "steps" | "details";
 
+const IDEA_STORE = "rmx.build.idea";
+interface IdeaState { input: IdeaInput; assessment: Assessment | null; offline: boolean; files: AttachmentInfo[] }
+const EMPTY_IDEA: IdeaState = { input: { idea: "", product: "", forKids: false, answers: [], attachment_ids: [] }, assessment: null, offline: false, files: [] };
+function readIdea(): IdeaState {
+  try { const raw = localStorage.getItem(IDEA_STORE); return raw ? { ...EMPTY_IDEA, ...JSON.parse(raw) } : EMPTY_IDEA; } catch { return EMPTY_IDEA; }
+}
+function storeIdea(s: IdeaState) {
+  try { localStorage.setItem(IDEA_STORE, JSON.stringify(s)); } catch { /* kept for this visit */ }
+}
+
+type View = "idea" | "plan" | "build";
+
 /**
- * The hardware project builder: describe a goal or pick a template, drag parts onto a canvas (over a photo of
- * the thing being upgraded, if there is one), and get a checked build: wiring, parts list in rupees, starter
- * code and build steps. The checks and outputs come from engine.ts and firmware.ts.
+ * From an idea to a real thing. Step 1: the person describes an invention, or something they own and how it
+ * should be better, with photos or files. Step 2: the analyst (an AI model on the server, or built-in product
+ * knowledge offline) says what it understood, asks a few plain questions, judges each wish and lays out a path
+ * from a desk prototype to a finished product. Step 3: "Build it" opens the plan on the parts canvas, where the
+ * checker (engine.ts) verifies it and produces the wiring, parts list, code and build steps.
  */
 export function Builder({ onBack }: { onBack: () => void }) {
-  const { t, auto } = useI18n();
+  const { t, auto, lang } = useI18n();
   const [project, setProjectState] = useState<Project | null>(readStored);
+  const [idea, setIdeaState] = useState<IdeaState>(readIdea);
+  const [view, setView] = useState<View>(() => (readStored() ? "build" : readIdea().assessment ? "plan" : "idea"));
+  const [busy, setBusy] = useState(false);
   const [goal, setGoal] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState("");
@@ -78,6 +98,35 @@ export function Builder({ onBack }: { onBack: () => void }) {
     setProjectState(p);
     if (!store(p)) setError(t("bd.storageFull"));
   };
+  const setIdea = (s: IdeaState) => { setIdeaState(s); storeIdea(s); };
+
+  /** Ask the analyst. Falls back to built-in knowledge when no server or no AI model is available. */
+  async function think(input: IdeaInput, extra: { correction?: string } = {}) {
+    setBusy(true);
+    setError("");
+    const withFiles = { ...input, attachment_ids: idea.files.map((f) => f.id) };
+    try {
+      const res = await fetch("/api/upgrade/assess", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idea: withFiles.idea, product: withFiles.product, for_kids: withFiles.forKids, answers: withFiles.answers,
+          attachment_ids: withFiles.attachment_ids, language: lang, ...catalogForServer(),
+          ...(extra.correction ? { correction: extra.correction, previous: idea.offline ? null : idea.assessment } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok && body) { setIdea({ ...idea, input: withFiles, assessment: body as Assessment, offline: false }); setView("plan"); return; }
+      const detail = body && typeof body.detail === "string" ? body.detail : "";
+      if (res.status !== 503 && detail) { setError(detail); return; }
+      throw new Error("offline");
+    } catch {
+      const merged = extra.correction ? { ...withFiles, idea: `${withFiles.idea}. ${extra.correction}` } : withFiles;
+      setIdea({ ...idea, input: withFiles, assessment: offlineAssess(merged), offline: true });
+      setView("plan");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function runGoal(text: string, base?: Project) {
     const words = text.trim();
@@ -89,10 +138,22 @@ export function Builder({ onBack }: { onBack: () => void }) {
     setGoal("");
   }
 
-  useEffect(() => { const g = takeGoal(); if (g) runGoal(g, project ?? undefined); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // an idea typed on the start page: think it through straight away
+  useEffect(() => {
+    const g = takeGoal();
+    if (g) { const input = { ...EMPTY_IDEA.input, idea: g }; setIdea({ ...EMPTY_IDEA, input }); void think(input); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function takeFiles(files: File[]) {
     setError("");
+    if (view !== "build") {
+      // on the idea and plan steps, dropped files are evidence for the analyst
+      try {
+        const got = await uploadFiles(files.slice(0, 20 - idea.files.length));
+        setIdea({ ...idea, files: [...idea.files, ...got] });
+      } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+      return;
+    }
     for (const f of files) {
       if (f.type.startsWith("image/")) {
         try {
@@ -113,27 +174,56 @@ export function Builder({ onBack }: { onBack: () => void }) {
     onDrop: (e: DragEvent) => { if (e.dataTransfer.files.length) { e.preventDefault(); setOver(false); void takeFiles(Array.from(e.dataTransfer.files)); } },
   };
 
+  function build() {
+    if (!idea.assessment) return;
+    const p = toProject(idea.assessment, idea.input);
+    setProject(p);
+    setNote("");
+    setView("build");
+  }
+
+  function toLab() {
+    const a = idea.assessment;
+    if (!a) return;
+    try {
+      sessionStorage.setItem(LAB_BRIEF_KEY, JSON.stringify({
+        idea: `${a.restated}\n\n${a.plan.summary}`.slice(0, 4000),
+        context: [a.plan.other_parts.map((x) => `${x.name}: ${x.why}`).join("\n"), a.wishes.map((w) => `${w.wish}: ${w.verdict}, ${w.why}`).join("\n")].filter(Boolean).join("\n\n").slice(0, 4000),
+        attachment_ids: idea.files.map((f) => f.id),
+      }));
+    } catch { /* the lab opens empty */ }
+    window.location.hash = "lab";
+  }
+
   return (
     <main className={`lab bd${over ? " bd-over" : ""}`} {...pageDrop}>
       <header className="lab-top">
-        <button className="lab-btn ghost" onClick={onBack}>← {t("common.back")}</button>
+        <button className="lab-btn ghost" onClick={view === "build" && idea.assessment ? () => setView("plan") : view === "plan" ? () => setView("idea") : onBack}>
+          ← {view === "build" && idea.assessment ? t("ia.backToPlan") : t("common.back")}
+        </button>
         <div className="lab-brand"><span className="lab-mark" aria-hidden>◆</span> RepairMind X <i>/</i> <b>{t("bd.title")}</b></div>
         <LanguagePicker className="lab-lang" />
         <div className="bd-top-actions">
-          <button className="lab-btn" onClick={() => fileIn.current?.click()}>{t("bd.openFile")}</button>
-          {project && <button className="lab-btn" onClick={() => download(`${(project.name || "project").replace(/[^\w-]+/g, "_")}.json`, JSON.stringify(project, null, 1), "application/json")}>{t("bd.saveFile")}</button>}
-          {project && <button className="lab-btn" onClick={() => { setProject(null); setNote(""); }}>{t("bd.new")}</button>}
+          {view === "build" && <button className="lab-btn" onClick={() => fileIn.current?.click()}>{t("bd.openFile")}</button>}
+          {view === "build" && project && <button className="lab-btn" onClick={() => download(`${(project.name || "project").replace(/[^\w-]+/g, "_")}.json`, JSON.stringify(project, null, 1), "application/json")}>{t("bd.saveFile")}</button>}
+          {view !== "idea" && <button className="lab-btn" onClick={() => { setProject(null); setIdea(EMPTY_IDEA); setNote(""); setView("idea"); }}>{t("bd.new")}</button>}
         </div>
         <input ref={fileIn} type="file" accept=".json,application/json,image/*" hidden onChange={(e) => { void takeFiles(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
       </header>
-      {error && <p className="lab-err" role="alert">{error}</p>}
+      {error && <p className="lab-err" role="alert">{auto(error)}</p>}
 
-      {!project ? (
-        <Start goal={goal} setGoal={setGoal} note={note}
-          onGoal={() => runGoal(goal)}
-          onMode={(m) => { setNote(""); setProject(emptyProject(m)); }}
-          onTemplate={(id) => { setNote(""); setProject(fromTemplate(TEMPLATES.find((x) => x.id === id)!)); }} />
-      ) : (
+      {view === "idea" && (
+        <IdeaStart input={idea.input} setInput={(input) => setIdea({ ...idea, input })} files={idea.files} setFiles={(files) => setIdea({ ...idea, files })}
+          busy={busy} onThink={() => void think({ ...idea.input, answers: [] })}
+          onCanvas={() => { setProject(project ?? emptyProject("new")); setView("build"); }} />
+      )}
+      {view === "plan" && idea.assessment && (
+        <AssessmentView a={idea.assessment} input={idea.input} offline={idea.offline} busy={busy}
+          onAnswers={(answers) => void think({ ...idea.input, answers: [...idea.input.answers.filter((x) => !answers.some((y) => y.q === x.q)), ...answers] })}
+          onCorrect={(text) => void think(idea.input, { correction: text })}
+          onBuild={build} onLab={toLab} onStartOver={() => { setIdea(EMPTY_IDEA); setView("idea"); }} />
+      )}
+      {view === "build" && project && (
         <Workspace project={project} setProject={setProject} note={note} setNote={setNote}
           goal={goal} setGoal={setGoal} onGoal={() => runGoal(goal, project)} takeFiles={takeFiles} />
       )}
@@ -155,34 +245,6 @@ function Composer({ goal, setGoal, onGoal, placeholder, button }: { goal: string
       <MicButton label={t("home.talk")} onInterim={setInterim} onText={(w) => setGoal((goal ? `${goal.trimEnd()} ${w}` : w).slice(0, 400))} />
       <button type="submit" className="lab-btn solid" disabled={!shown.trim()}>{button}</button>
     </form>
-  );
-}
-
-function Start(p: { goal: string; setGoal: (s: string) => void; note: string; onGoal: () => void; onMode: (m: Project["mode"]) => void; onTemplate: (id: string) => void }) {
-  const { t, auto } = useI18n();
-  return (
-    <section className="bd-start">
-      <h1>{t("bd.ask")}</h1>
-      <p className="lab-lede">{t("bd.askP")}</p>
-      <Composer goal={p.goal} setGoal={p.setGoal} onGoal={p.onGoal} placeholder={t("bd.goalPh")} button={t("bd.go")} />
-      {p.note && <p className="bd-note" role="status">{p.note}</p>}
-      <div className="bd-modes">
-        <button onClick={() => p.onMode("upgrade")}><b>{t("bd.upgrade")}</b><span>{t("bd.upgradeD")}</span></button>
-        <button onClick={() => p.onMode("new")}><b>{t("bd.scratch")}</b><span>{t("bd.scratchD")}</span></button>
-      </div>
-      <h2 className="lab-kicker">{t("bd.templates")}</h2>
-      <div className="bd-tpls">
-        {TEMPLATES.map((x) => (
-          <button key={x.id} className="bd-tpl" onClick={() => p.onTemplate(x.id)}>
-            <span className="bd-tpl-cat">{auto(x.category)}</span>
-            <b>{auto(x.name)}</b>
-            <span>{auto(x.blurb)}</span>
-            <span className="bd-tpl-icons" aria-hidden>{x.parts.filter((id) => !isPower(BY_ID[id]) && !isBoard(BY_ID[id])).slice(0, 5).map((id) => BY_ID[id].icon).join(" ")}</span>
-          </button>
-        ))}
-      </div>
-      <p className="lab-muted bd-drop-hint">{t("bd.dropHint")}</p>
-    </section>
   );
 }
 
