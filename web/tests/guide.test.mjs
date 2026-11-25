@@ -5,7 +5,7 @@ import { analyze } from "../src/build/engine.ts";
 import {
   argMap, benchRun, benchSetup, bodyText, catalogText, editProject, forRequest, freshBody, freshMemory, parseMemory,
   remember, reportText, shapeBody, stateText,
-} from "../src/guide/tools.ts";
+} from "../src/workspace/tools.ts";
 
 const call = (tool, args = {}) => ({ tool, why: "", args: Object.entries(args).map(([key, value]) => ({ key, value: String(value) })) });
 const build = (...ids) => ids.reduce((p, id) => editProject(p, call("add_part", { id })).project, null);

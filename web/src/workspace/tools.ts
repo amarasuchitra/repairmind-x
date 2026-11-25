@@ -9,24 +9,27 @@ import { ACTIONS, TRIGGERS, emptyProject, uid, type Action, type Project, type T
 import { autoRules, suggest } from "../build/templates.ts";
 import type { Assessment } from "../build/assess.ts";
 import { Bench, defaultEnv, defaultMods, type Env, type Mods } from "../sim/bench.ts";
+import { readingsText, wiresText } from "./precision.ts";
 import { MATERIALS, PRESETS, buildShell, engineering, fit, scaleToFit, type Box3, type ShellSpec } from "../sim/shell.ts";
 
 export type Tool =
   | "understand_idea" | "answer_questions" | "correct_understanding" | "start_build" | "suggest_parts" | "add_part"
   | "remove_part" | "apply_fix" | "add_rule" | "rename" | "check" | "show" | "test_on_bench" | "shape_body"
-  | "design_mechanism" | "rethink_design" | "open_full_lab" | "show_step" | "step_done";
+  | "design_mechanism" | "rethink_design" | "open_full_lab" | "show_step" | "step_done"
+  | "open_panel" | "start_repair_call" | "search_library" | "ask_for_photo" | "check_build_photo" | "show_buy_list"
+  | "export_build_pack";
 
 export interface KV { key: string; value: string }
 export interface ToolCall { tool: Tool; args: KV[]; why: string }
 export interface Checkpoint { step: number; question: string; options: string[] }
-export type Stage = "idea" | "understand" | "plan" | "design" | "simulate" | "body" | "build" | "done";
+export type Stage = "chat" | "fix" | "idea" | "understand" | "plan" | "design" | "simulate" | "body" | "build" | "done";
 export interface GuideTurn {
   say: string; actions: ToolCall[]; checkpoint: Checkpoint; chips: string[]; stage: Stage; remember: string[]; then_continue: boolean;
 }
 
 /** What can sit beside the conversation. "none" keeps the screen to just the guide. */
-export type View = "none" | "plan" | "parts" | "wiring" | "try" | "body" | "code" | "steps" | "design";
-export const VIEWS: View[] = ["none", "plan", "parts", "wiring", "try", "body", "code", "steps", "design"];
+export type View = "none" | "plan" | "parts" | "wiring" | "try" | "body" | "code" | "steps" | "tests" | "buy" | "design";
+export const VIEWS: View[] = ["none", "plan", "parts", "wiring", "try", "body", "code", "steps", "tests", "buy", "design"];
 
 // --- arguments ---------------------------------------------------------------------------------------------------
 
@@ -306,9 +309,11 @@ export interface Memory {
   step: number;
   checkpoint: Checkpoint | null;
   chips: string[];
+  /** wires (by number) the person ticked off as placed on their real build */
+  wires: number[];
 }
 
-export const freshMemory = (): Memory => ({ v: 1, messages: [], stage: "idea", notes: [], view: "none", done: [], step: 0, checkpoint: null, chips: [] });
+export const freshMemory = (): Memory => ({ v: 1, messages: [], stage: "chat", notes: [], view: "none", done: [], step: 0, checkpoint: null, chips: [], wires: [] });
 
 export function parseMemory(raw: string | null): Memory {
   try {
@@ -319,6 +324,7 @@ export function parseMemory(raw: string | null): Memory {
       messages: m.messages.filter((x: Said) => x && typeof x.text === "string" && ["user", "guide", "tool"].includes(x.role)).slice(-120),
       notes: Array.isArray(m.notes) ? m.notes.filter((x: unknown) => typeof x === "string").slice(-30) : [],
       done: Array.isArray(m.done) ? m.done.filter((x: unknown) => typeof x === "number") : [],
+      wires: Array.isArray(m.wires) ? m.wires.filter((x: unknown) => typeof x === "number") : [],
       view: VIEWS.includes(m.view) ? m.view : "none",
     };
   } catch {
@@ -348,7 +354,10 @@ export function stateText(x: {
     x.project && x.report ? `PROJECT "${x.project.name || "unnamed"}" (${x.project.mode}):\n${reportText(x.project, x.report)}` : "No project laid out yet.",
     steps.length ? `BUILD STEPS (done: ${m.done.length ? m.done.join(", ") : "none"}; current: ${m.step || "not started"}):\n` +
       steps.map((s, i) => `  ${i + 1}. ${s.title}${m.done.includes(i + 1) ? " ✓" : ""}`).join("\n") : "",
+    x.report && x.report.conns.length ? `WIRING LIST (numbered; name wires by number):\n${wiresText(x.report)}` : "",
+    x.report && x.report.conns.length ? `TESTS (multimeter readings a correct build gives):\n${readingsText(x.report)}` : "",
     m.step && steps[m.step - 1] ? `CURRENT STEP ${m.step} DETAIL: ${steps[m.step - 1].detail.join(" ")}${steps[m.step - 1].safety?.length ? ` SAFETY: ${steps[m.step - 1].safety!.join(" ")}` : ""}` : "",
+    x.report && x.report.conns.length ? `Wires the person ticked as placed: ${m.wires.length ? m.wires.join(", ") : "none yet"}.` : "",
     m.checkpoint ? `Waiting on checkpoint: ${m.checkpoint.question}` : "",
     x.bench ? `LAST BENCH RUN:\n${x.bench}` : "",
     x.body ? `BODY:\n${x.body}` : "",

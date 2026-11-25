@@ -1,196 +1,79 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { Call } from "./Call";
-import { Inspect } from "./Inspect";
-import { Home } from "./home/Home";
 import { Landing } from "./Landing";
-import { Login, readProfile, writeProfile, type Profile } from "./Login";
-import { NetworkBackground } from "./fx/NetworkBackground";
+import { readProfile, writeProfile, type Profile } from "./Login";
 import { Intro, shouldPlayIntro } from "./fx/Intro";
-import { useI18n } from "./i18n";
+import { appFromHash, isWorkspaceHash, type AppId } from "./workspace/apps.ts";
 
-// The design preview (a fake call with sample data) only loads when someone opens #demo.
-const Demo = lazy(() => import("./Demo").then((m) => ({ default: m.Demo })));
-// The design lab (physics engine, 3D sandbox) only loads when someone opens #lab.
-const Lab = lazy(() => import("./lab/Lab.tsx").then((m) => ({ default: m.Lab })));
-// Redesign a broken part (design brief + failure library) only loads when someone opens #redesign.
-const Redesign = lazy(() => import("./redesign/Redesign.tsx").then((m) => ({ default: m.Redesign })));
-// The hardware project builder (drag parts, get wiring, code and costs) only loads when someone opens #build.
-const Builder = lazy(() => import("./build/Builder.tsx").then((m) => ({ default: m.Builder })));
-// The build guide (one conversation that drives the builder, bench, body and design lab) loads when someone opens #make.
-const Studio = lazy(() => import("./guide/Studio.tsx").then((m) => ({ default: m.Studio })));
+// The assistant (and every tool it opens as a panel) loads when someone leaves the start page.
+const Workspace = lazy(() => import("./workspace/Workspace.tsx").then((m) => ({ default: m.Workspace })));
 
-interface Connection {
-  serverUrl: string;
-  token: string;
-  room: string;
-}
-
-const LAST_ROOM_KEY = "rmx.lastRoom";
-
-function readLastRoom(): string | null {
-  try {
-    return localStorage.getItem(LAST_ROOM_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeLastRoom(room: string | null) {
-  try {
-    if (room) {
-      localStorage.setItem(LAST_ROOM_KEY, room);
-      localStorage.setItem("rmx.lastCallRoom", room); // kept after the call ends, for "Redesign the part"
-    } else localStorage.removeItem(LAST_ROOM_KEY);
-  } catch {
-    /* storage unavailable: resume just won't be offered */
-  }
-}
-
-type Page = "call" | "inspect" | "demo" | "lab" | "redesign" | "build" | "make" | "assistant";
-const pageFromHash = (): Page => {
-  const h = window.location.hash;
-  return h === "#inspect" ? "inspect" : h === "#assistant" ? "assistant" : h === "#lab" ? "lab" : h === "#redesign" ? "redesign" : h === "#build" ? "build" : h === "#make" ? "make" : h.startsWith("#demo") ? "demo" : "call";
-};
-
+/**
+ * Three screens: the intro, the scrolling start page, and the assistant. Everything else (the live repair call,
+ * the design lab, the parts canvas, redesign, inspection, references) opens inside the assistant as a panel.
+ * Old addresses (#lab, #build, #redesign, #inspect, #demo...) open the assistant with that tool beside it.
+ */
 export default function App() {
   const [accepted, setAccepted] = useState(false);
-  const [conn, setConn] = useState<Connection | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [intro, setIntro] = useState(() => pageFromHash() === "call" && shouldPlayIntro());
-  const lastRoom = readLastRoom();
+  const [intro, setIntro] = useState(() => !isWorkspaceHash(window.location.hash) && shouldPlayIntro());
   const [profile, setProfile] = useState<Profile | null>(readProfile);
-  // set while the quick sign-in is showing: the call it should start afterwards (a room to resume, or a new one)
-  const [signingIn, setSigningIn] = useState<{ room?: string } | null>(null);
-  const [page, setPage] = useState<Page>(pageFromHash);
-  const { t, choice, lang } = useI18n();
+  const [inside, setInside] = useState(() => isWorkspaceHash(window.location.hash));
+  const [app, setAppState] = useState<{ id: AppId | null; n: number }>(() => ({ id: appFromHash(window.location.hash), n: 0 }));
+  // a counter, so asking for the tool that is already chosen opens it again
+  const setApp = (id: AppId | null) => setAppState((x) => ({ id, n: x.n + 1 }));
+  const [callNow, setCallNow] = useState<{ room?: string } | null>(null);
+  const lastRoom = (() => { try { return localStorage.getItem("rmx.lastRoom"); } catch { return null; } })();
+
   useEffect(() => {
-    const onHash = () => setPage(pageFromHash());
+    const onHash = () => {
+      const h = window.location.hash;
+      setInside(isWorkspaceHash(h));
+      const a = appFromHash(h);
+      if (a) {
+        setApp(a);
+        // keep the address on the assistant, so asking for the same tool again opens it again
+        if (!h.startsWith("#demo")) history.replaceState(null, "", "#assistant");
+      }
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
-  function go(next: "call" | "inspect" | "lab" | "redesign" | "build" | "make" | "assistant") {
-    window.location.hash = next === "call" ? "" : next;
-    setPage(next);
+  function enter(next: AppId | null, call: { room?: string } | null = null) {
+    setApp(next);
+    setCallNow(call);
+    setInside(true);
+    window.location.hash = "assistant";
   }
 
-  async function start(resumeRoom?: string) {
-    setError(null);
-    setLoading(true);
-    try {
-      const res = await fetch("/api/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // the mechanic speaks the chosen language; "auto" means it answers in whatever language you speak
-        body: JSON.stringify({ accepted_notice: accepted, room: resumeRoom ?? null, language: choice, ui_language: lang }),
-      });
-      if (!res.ok) {
-        const detail = (await res.json().catch(() => ({}))).detail;
-        throw new Error(
-          detail ?? (res.status >= 500 ? t("common.serverDown") : t("common.error", { n: res.status })),
-        );
-      }
-      const body = await res.json();
-      writeLastRoom(body.room);
-      setConn({ serverUrl: body.server_url, token: body.participant_token, room: body.room });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // the flow is intro, start page, quick sign-in (once per device), then the live call
-  const requestStart = (room?: string) => {
-    if (profile) void start(room);
-    else setSigningIn({ room });
-  };
-
-  let content;
-  if (conn) {
-    content = (
-      <Call
-        {...conn}
-        onEnd={(finished) => {
-          if (finished) writeLastRoom(null);
-          setConn(null);
-        }}
-      />
-    );
-  } else if (page === "redesign") {
-    content = <Suspense fallback={null}><Redesign onBack={() => go("call")} /></Suspense>;
-  } else if (page === "make") {
-    content = <Suspense fallback={null}><Studio onBack={() => go("call")} /></Suspense>;
-  } else if (page === "build") {
-    content = <Suspense fallback={null}><Builder onBack={() => go("call")} /></Suspense>;
-  } else if (page === "lab") {
-    content = <Suspense fallback={null}><Lab onBack={() => go("call")} /></Suspense>;
-  } else if (page === "demo") {
-    content = <Suspense fallback={null}><Demo /></Suspense>;
-  } else if (signingIn) {
-    content = (
-      <Login
-        onBack={() => setSigningIn(null)}
-        onDone={(p) => {
-          writeProfile(p);
-          setProfile(p);
-          const room = signingIn.room;
-          setSigningIn(null);
-          void start(room);
-        }}
-      />
-    );
-  } else if (page === "inspect") {
-    content = <Inspect onBack={() => go("call")} />;
-  } else if (page !== "assistant") {
-    // the start page: the scrolling 3D walkthrough, with the calm assistant one tap away
-    content = (
-        <Landing
-          accepted={accepted}
-          setAccepted={setAccepted}
-          loading={loading}
-          error={error}
-          lastRoom={lastRoom}
-          onStart={requestStart}
-          profile={profile}
-          onSignOut={() => { writeProfile(null); setProfile(null); }}
-          onInspect={() => go("inspect")}
-          onLab={() => go("lab")}
-          onMake={() => go("make")}
-          onRedesign={() => go("redesign")}
-          onAssistant={() => go("assistant")}
-          entering={!intro}
-        />
-    );
-  } else {
-    content = (
-      <Home
-        accepted={accepted}
-        setAccepted={setAccepted}
-        loading={loading}
-        error={error}
-        lastRoom={lastRoom}
-        onStart={requestStart}
-        profile={profile}
-        onSignOut={() => { writeProfile(null); setProfile(null); }}
-        onInspect={() => go("inspect")}
-        onLab={() => go("lab")}
-        onRedesign={() => go("redesign")}
-        onBuild={() => go("make")}
-        onTour={() => go("call")}
-      />
+  if (inside) {
+    return (
+      <Suspense fallback={null}>
+        <Workspace initialApp={app.id} appNonce={app.n} callNow={callNow} profile={profile}
+          onTour={() => { setInside(false); setCallNow(null); window.location.hash = ""; }} />
+      </Suspense>
     );
   }
 
   return (
     <>
-      {/* the walkthrough draws its own 3D scene; the lab and redesign pages have their own backdrop */}
-      {(conn || signingIn || (page !== "call" && page !== "lab" && page !== "redesign" && page !== "build" && page !== "make")) && (
-        <NetworkBackground intensity={conn || page === "demo" ? 0.55 : page === "assistant" ? 0.7 : 1} />
-      )}
-      {content}
-      {intro && !conn && <Intro onDone={() => setIntro(false)} />}
+      <Landing
+        accepted={accepted}
+        setAccepted={setAccepted}
+        loading={false}
+        error={null}
+        lastRoom={lastRoom}
+        // the start page took the safety notice: the call starts inside the assistant straight away
+        onStart={(room) => enter("repair_call", accepted ? { room } : null)}
+        profile={profile}
+        onSignOut={() => { writeProfile(null); setProfile(null); }}
+        onInspect={() => enter("inspection")}
+        onLab={() => enter("design_lab")}
+        onMake={() => enter(null)}
+        onRedesign={() => enter("redesign")}
+        onAssistant={() => enter(null)}
+        entering={!intro}
+      />
+      {intro && <Intro onDone={() => setIntro(false)} />}
     </>
   );
 }

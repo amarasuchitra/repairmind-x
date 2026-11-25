@@ -28,9 +28,17 @@ Tool = Literal[
     "open_full_lab",        # open the full design lab page with this design
     "show_step",            # n: show build step n
     "step_done",            # n: mark build step n done
+    # the whole app lives in one workspace: these open its other tools as panels beside the conversation
+    "open_panel",           # panel: repair_call, design_lab, builder, redesign, inspection, library
+    "start_repair_call",    # the live video call with the mechanic (camera + voice), for fixing a broken thing
+    "search_library",       # q: look things up in the engineering library (cited references)
+    "ask_for_photo",        # what: ask the person to take a photo with the camera (opens the camera)
+    "check_build_photo",    # check the person's latest photo of their real build against the wiring list
+    "show_buy_list",        # the parts list with quantities, prices and where to buy
+    "export_build_pack",    # download everything needed to build it: wiring table, code, parts, steps, tests
 ]
 
-Stage = Literal["idea", "understand", "plan", "design", "simulate", "body", "build", "done"]
+Stage = Literal["chat", "fix", "idea", "understand", "plan", "design", "simulate", "body", "build", "done"]
 
 
 class KV(BaseModel):
@@ -59,7 +67,7 @@ class GuideTurn(BaseModel):
     checkpoint: Checkpoint = Field(default_factory=Checkpoint)
     # up to four short replies the person can tap
     chips: list[str] = Field(default_factory=list)
-    stage: Stage = "idea"
+    stage: Stage = "chat"
     # facts worth keeping for the rest of the project: tools they own, skills, constraints, decisions
     remember: list[str] = Field(default_factory=list)
     # true when the guide wants to see the tools' results before the person speaks again

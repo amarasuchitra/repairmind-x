@@ -201,7 +201,7 @@ export function Attachments({ items, onChange, canHearMedia, compact }: {
 
 // --- voice -----------------------------------------------------------------------------------------
 
-interface Recognition {
+export interface Recognition {
   continuous: boolean;
   interimResults: boolean;
   lang: string;
@@ -212,7 +212,7 @@ interface Recognition {
   onend: (() => void) | null;
 }
 
-function recognitionCtor(): (new () => Recognition) | null {
+export function recognitionCtor(): (new () => Recognition) | null {
   const w = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }

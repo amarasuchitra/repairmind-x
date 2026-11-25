@@ -1,0 +1,161 @@
+/* The one assistant screen: chats and tools on the left, the conversation in the middle, a panel on the right. */
+.ws {
+  --ws-side: 264px;
+  --ws-line: #1c2a44;
+  --ws-dim: #8796b0;
+  --ws-ink: #e7edf7;
+  --ws-bg: #060b15;
+  --ws-raise: #0c1527;
+  --ws-accent: #46e2ff;
+  height: 100dvh; display: grid; grid-template-columns: var(--ws-side) minmax(0, 1fr); background: var(--ws-bg); color: var(--ws-ink);
+  overflow: hidden; position: relative;
+}
+.ws.ws-panel-open { grid-template-columns: var(--ws-side) minmax(340px, 1fr) minmax(0, 1.15fr); }
+.ws.ws-wide.ws-panel-open { grid-template-columns: var(--ws-side) minmax(320px, 400px) minmax(0, 1fr); }
+.ws-grow { flex: 1 1 auto; }
+.ws-pad { padding: 16px; }
+
+/* left: brand, new chat, tools, chats */
+.ws-side { display: flex; flex-direction: column; gap: 14px; min-height: 0; padding: 14px 12px calc(12px + env(safe-area-inset-bottom, 0px)); border-right: 1px solid var(--ws-line); background: #070d1a; }
+.ws-side-top { display: flex; align-items: center; justify-content: space-between; min-height: 36px; }
+.ws-brand { color: inherit; text-decoration: none; display: inline-flex; transform: scale(0.82); transform-origin: left center; }
+.ws-new { display: flex; align-items: center; gap: 8px; background: rgba(70, 226, 255, 0.08); color: var(--ws-ink); border: 1px solid rgba(70, 226, 255, 0.3); border-radius: 10px; padding: 9px 12px; font-weight: 600; }
+.ws-new:hover { background: rgba(70, 226, 255, 0.14); }
+.ws-label { display: block; font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ws-dim); padding: 0 8px 4px; }
+.ws-tools, .ws-chats { display: flex; flex-direction: column; gap: 2px; }
+.ws-tools button { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; background: transparent; color: var(--ws-ink); border-radius: 8px; padding: 6px 8px; }
+.ws-tools button b { font-weight: 500; font-size: 0.92rem; }
+.ws-tools button small { color: var(--ws-dim); font-size: 0.76rem; }
+.ws-tools button:hover, .ws-chat:hover { background: rgba(255, 255, 255, 0.04); }
+.ws-tools button.on { background: rgba(70, 226, 255, 0.1); box-shadow: inset 2px 0 0 var(--ws-accent); }
+.ws-chats { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.ws-chat { display: flex; align-items: center; border-radius: 8px; }
+.ws-chat button:first-child { flex: 1 1 auto; min-width: 0; text-align: left; background: transparent; color: var(--ws-ink); padding: 7px 8px; border-radius: 8px; font-size: 0.9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-chat.on { background: rgba(255, 255, 255, 0.07); }
+.ws-x { background: transparent; color: var(--ws-dim); padding: 2px 8px; opacity: 0; }
+.ws-chat:hover .ws-x, .ws-chat.on .ws-x, .ws-x:focus-visible { opacity: 1; }
+.ws-side-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border-top: 1px solid var(--ws-line); padding-top: 10px; }
+
+/* middle: the conversation (reuses the lab look, without its page padding) */
+.ws-main.lab { min-height: 0; height: 100dvh; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.ws-top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--ws-line); min-height: 52px; }
+.ws-title { flex: 1 1 auto; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ws-talk { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: 100%; max-width: 780px; margin: 0 auto; padding: 0 16px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.ws-talk .gd-log { padding-top: 18px; }
+.ws-hello { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: auto 0; padding: 24px 0; }
+.ws-hello h1 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0; }
+.ws-hello p { color: var(--ws-dim); max-width: 52ch; margin: 0; line-height: 1.55; }
+.ws-starters { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
+
+.ws-compose { border: 1px solid #24365a; background: var(--ws-raise); border-radius: 18px; padding: 10px 10px 8px 14px; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+.ws-compose:focus-within { border-color: rgba(70, 226, 255, 0.55); }
+.ws-compose textarea { width: 100%; resize: none; background: transparent; border: 0; color: var(--ws-ink); font: inherit; font-size: 1rem; line-height: 1.5; max-height: 200px; field-sizing: content; min-height: 1.5em; outline: none; padding: 2px 0; }
+.ws-compose-row { display: flex; align-items: center; gap: 6px; }
+.ws-compose .lab-mic { padding: 6px 10px; }
+.ws-icon { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 10px; background: transparent; color: var(--ws-ink); font-size: 1.2rem; line-height: 1; }
+.ws-icon:hover { background: rgba(255, 255, 255, 0.07); }
+.ws-send { width: 34px; height: 34px; padding: 0; border-radius: 10px; background: var(--ws-accent); color: #04101c; font-weight: 800; font-size: 1.1rem; }
+.ws-plus { position: relative; }
+.ws-plus summary { list-style: none; cursor: pointer; }
+.ws-plus summary::-webkit-details-marker { display: none; }
+.ws-plus-menu.gd-menu { top: auto; bottom: calc(100% + 8px); left: 0; right: auto; min-width: 210px; }
+
+/* hands-free voice mode */
+.ws-voice { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 0 4px; }
+.ws-voice-orb { background: transparent; padding: 0; border-radius: 50%; }
+.ws-voice-state { margin: 0; color: var(--ws-dim); min-height: 1.5em; text-align: center; max-width: 60ch; }
+.ws-voice-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+/* right: the panel where tools and views open */
+.ws-panel { min-height: 0; height: 100dvh; display: flex; flex-direction: column; border-left: 1px solid var(--ws-line); background: #050a14; }
+.ws-panel-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 16px; border-bottom: 1px solid var(--ws-line); min-height: 52px; }
+.ws-panel-body { flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; transform: translateZ(0); }
+.ws-panel-body > .lab, .ws-panel-body .lab { min-height: 100%; }
+.ws-panel-body > :not(.lab):not(.ws-call):not(.ws-pad) { padding: 16px; }
+/* full-screen pages render inside the panel: fixed children stay inside it because the body has a transform */
+.ws-call { position: absolute; inset: 0; }
+.ws-call .call, .ws-call > * { height: 100%; }
+
+.ws-notice { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.ws-notice li { padding: 10px 12px; border: 1px solid var(--ws-line); border-radius: 10px; line-height: 1.5; }
+.ws-notice li b { display: block; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ws-dim); }
+.ws-notice li.alert { border-color: rgba(255, 93, 93, 0.6); background: rgba(255, 93, 93, 0.08); }
+.ws-consent { display: flex; gap: 10px; align-items: center; margin: 8px 0 12px; }
+
+/* wire by wire */
+.ws-wires h2, .ws-tests h2, .ws-buy h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.ws-wirelist { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 4px; }
+.ws-wirelist li { border: 1px solid var(--ws-line); border-radius: 10px; padding: 8px 10px; }
+.ws-wirelist label { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.ws-wirelist input { width: 18px; height: 18px; accent-color: var(--ws-accent); flex: 0 0 auto; }
+.ws-wn { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 2ch; text-align: right; color: var(--ws-dim); }
+.ws-wt { min-width: 0; overflow-wrap: anywhere; }
+.ws-wt b { font-weight: 600; }
+.ws-swatch { width: 22px; height: 8px; border-radius: 4px; flex: 0 0 auto; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25); }
+.c-red { background: #e5383b; } .c-black { background: #111; } .c-orange { background: #f48c06; } .c-yellow { background: #ffd60a; }
+.c-green { background: #2dc653; } .c-blue { background: #3a86ff; } .c-white { background: #f4f4f4; } .c-purple { background: #9d4edd; }
+.c-grey { background: #8d99ae; } .c-brown { background: #8b5a2b; }
+.ws-wirelist li.v-ok { border-color: rgba(62, 207, 142, 0.6); }
+.ws-wirelist li.v-wrong { border-color: rgba(255, 93, 93, 0.8); background: rgba(255, 93, 93, 0.08); }
+.ws-wirelist li.v-unclear { border-color: rgba(245, 181, 68, 0.6); }
+.ws-verdict { display: block; margin: 4px 0 0 58px; font-size: 0.85rem; color: var(--ws-dim); }
+.v-wrong .ws-verdict { color: #ff8c8c; }
+.ws-check { border-radius: 12px; padding: 10px 12px; margin: 10px 0; border: 1px solid; }
+.ws-check.ok { border-color: rgba(62, 207, 142, 0.7); background: rgba(62, 207, 142, 0.08); }
+.ws-check.bad { border-color: rgba(255, 93, 93, 0.7); background: rgba(255, 93, 93, 0.08); }
+.ws-check ul { margin: 6px 0 0; padding-left: 1.2em; }
+.ws-diagram { margin-top: 16px; }
+.ws-diagram summary { cursor: pointer; color: var(--ws-dim); }
+
+.ws-tests ol { list-style: none; padding: 0; margin: 12px 0; display: flex; flex-direction: column; gap: 8px; }
+.ws-tests li { display: flex; flex-direction: column; gap: 3px; border: 1px solid var(--ws-line); border-radius: 10px; padding: 10px 12px; }
+.ws-tests small { color: var(--ws-dim); }
+.ws-when { align-self: flex-start; font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.ws-when.off { background: rgba(139, 123, 255, 0.15); color: #b5aaff; }
+.ws-when.on { background: rgba(245, 181, 68, 0.15); color: #f5c76a; }
+
+.ws-table { overflow-x: auto; border: 1px solid var(--ws-line); border-radius: 10px; margin: 10px 0 14px; }
+.ws-table table { width: 100%; border-collapse: collapse; }
+.ws-table td { padding: 8px 10px; border-bottom: 1px solid var(--ws-line); vertical-align: top; }
+.ws-table td:last-child { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ws-total td { font-weight: 700; border-bottom: 0; }
+.ws-shops { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.8rem; margin-top: 2px; }
+.ws-shops a { color: var(--ws-accent); }
+
+.ws-lib-q { display: flex; gap: 8px; margin: 8px 0; }
+.ws-lib-q input { flex: 1 1 auto; min-width: 0; background: var(--ws-raise); color: var(--ws-ink); border: 1px solid var(--ws-line); border-radius: 10px; padding: 10px 12px; font: inherit; }
+.ws-hits { padding-left: 1.2em; display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.ws-hits small { display: block; color: var(--ws-dim); }
+.ws-hits p { margin: 4px 0 0; line-height: 1.5; }
+
+/* the camera sheet */
+.ws-camera { position: fixed; inset: 0; z-index: 60; background: rgba(2, 5, 10, 0.82); display: grid; place-items: center; padding: 16px; }
+.ws-camera-box { width: min(760px, 100%); background: #08101f; border: 1px solid var(--ws-line); border-radius: 16px; overflow: hidden; }
+.ws-camera video { display: block; width: 100%; max-height: 70dvh; background: #000; object-fit: contain; }
+
+.ws-only-narrow { display: none; }
+.ws-scrim { display: none; }
+
+@media (max-width: 1100px) {
+  .ws.ws-panel-open, .ws.ws-wide.ws-panel-open { grid-template-columns: var(--ws-side) minmax(0, 1fr); }
+  .ws-panel { position: fixed; inset: 0 0 0 auto; width: min(100%, 720px); z-index: 40; box-shadow: -20px 0 50px rgba(0, 0, 0, 0.5); padding-top: env(safe-area-inset-top, 0px); }
+  .ws-wide .ws-panel { width: 100%; }
+  .ws-only-wide { display: none; }
+}
+@media (max-width: 760px) {
+  .ws, .ws.ws-panel-open, .ws.ws-wide.ws-panel-open { grid-template-columns: minmax(0, 1fr); }
+  .ws-side { position: fixed; inset: 0 auto 0 0; width: min(86vw, 300px); z-index: 50; transform: translateX(-102%); transition: transform 0.2s ease; padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
+  .ws-side-open .ws-side { transform: none; }
+  .ws-side-open .ws-scrim { display: block; position: fixed; inset: 0; z-index: 45; background: rgba(0, 0, 0, 0.5); }
+  .ws-only-narrow { display: inline-grid; }
+  .ws-panel { width: 100%; }
+  .ws-top { padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .ws-side { transition: none; } }
+
+/* tools opened as panels keep their own controls, without repeating the app's name */
+.ws-panel-body .lab-brand { display: none; }
+.ws-panel-body .lab-top { padding-top: 8px; }
+.ws-check .lab-kicker { display: block; margin-bottom: 2px; }
+.ws-chip { background: transparent; color: var(--ws-dim); border: 1px solid var(--ws-line); border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; }
+.ws-chip.on { color: var(--ws-accent); border-color: rgba(70, 226, 255, 0.5); }

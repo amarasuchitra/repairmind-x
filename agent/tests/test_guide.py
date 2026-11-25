@@ -101,3 +101,56 @@ def test_expired_attachments_are_reported(client, monkeypatch):
     fake(monkeypatch, reply())
     r = client.post("/api/guide/turn", json={"messages": msgs("look"), "attachment_ids": ["nope"]})
     assert r.status_code == 410
+
+
+# --- one assistant for everything, and checking a photo of the real build -----------------------------------------
+
+def test_the_assistant_covers_repairs_and_every_tool(client, monkeypatch):
+    calls = fake(monkeypatch, reply(say="That sounds like the fan's capacitor. Want me to look through your camera?",
+                                    actions=[{"tool": "start_repair_call", "args": [], "why": ""}],
+                                    stage="fix", then_continue=False))
+    r = client.post("/api/guide/turn", json={"messages": msgs("my ceiling fan hums but won't spin")})
+    assert r.status_code == 200, r.text
+    assert r.json()["actions"][0]["tool"] == "start_repair_call"
+    assert r.json()["stage"] == "fix"
+    s = calls[0]["system"]
+    for tool in ("open_panel", "start_repair_call", "search_library", "ask_for_photo", "check_build_photo",
+                 "show_buy_list", "export_build_pack"):
+        assert tool in s
+
+
+def _photo(monkeypatch, image=True):
+    from repairmind.lab import attachments
+
+    class A:
+        image_b64 = "aGVsbG8=" if image else ""
+
+    monkeypatch.setattr(attachments, "load", lambda i: A() if i == "a1" else None)
+
+
+def test_a_photo_check_is_made_stricter_in_code(client, monkeypatch):
+    from repairmind.guide.photo_check import PhotoCheck
+
+    _photo(monkeypatch)
+    calls = fake(monkeypatch, PhotoCheck.model_validate({
+        "photo": "good", "power_on": True, "summary": "",
+        "wires": [{"n": 1, "verdict": "ok"}, {"n": 2, "verdict": "wrong", "note": "goes to D3, not D2"},
+                  {"n": 9, "verdict": "ok"}]}))
+    r = client.post("/api/guide/check-build", json={
+        "attachment_id": "a1", "wires": [{"n": 1, "text": "5V to red rail"}, {"n": 2, "text": "LED + to D2"},
+                                         {"n": 3, "text": "GND to blue rail"}]})
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert b["power_on"] is False  # a wrong wire overrides the model's yes
+    assert [w["n"] for w in b["wires"]] == [1, 2, 3]  # unknown wire 9 dropped, missing wire 3 added
+    assert b["wires"][2]["verdict"] == "unclear"
+    assert "Wire 2: WRONG goes to D3" in b["text"] and "NOT YET" in b["text"]
+    assert calls[0]["purpose"] == "vision" and "1. 5V to red rail" in calls[0]["text"]
+
+
+def test_a_photo_check_needs_a_photo(client, monkeypatch):
+    fake(monkeypatch, None)
+    _photo(monkeypatch, image=False)
+    w = [{"n": 1, "text": "x"}]
+    assert client.post("/api/guide/check-build", json={"attachment_id": "gone", "wires": w}).status_code == 410
+    assert client.post("/api/guide/check-build", json={"attachment_id": "a1", "wires": w}).status_code == 422
