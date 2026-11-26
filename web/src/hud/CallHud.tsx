@@ -85,6 +85,8 @@ export function CallHud(p: CallHudProps) {
   const elapsed = useElapsed();
   // the full diagnostics, safety list, procedure and manual upload stay one tap away
   const [details, setDetails] = useState(false);
+  // one line under the picture: the newest thing said (the full captions would cover the view)
+  const last = p.captions.length ? p.captions[p.captions.length - 1] : null;
   return (
     <div className="call-grid hud">
       <header className="call-top">
@@ -99,53 +101,54 @@ export function CallHud(p: CallHudProps) {
         </div>
       </header>
 
-      <section className="camera" ref={p.hostRef}>
-        {p.camera}
-        <div className="hud-frame" aria-hidden>
-          <span className="br tl" /><span className="br tr" /><span className="br bl" /><span className="br br-" />
-          <span className="scan" />
-        </div>
-        {p.overlay}
-        {p.ask}
-        {p.actions && !p.actions.circling && (
-          <div className="hud-actions">
-            <button className="act" onClick={p.actions.onCircle} title={t("call.circle.hint")}>
-              <Lasso size={20} /><span>{t("call.circle")}</span>
-            </button>
-            <button className="act" onClick={p.actions.onNext}>
-              <NextStep size={20} /><span>{t("call.next")}</span>
-            </button>
-            <button className={`act${p.actions.ptt ? " on" : ""}`} aria-pressed={p.actions.ptt} onClick={p.actions.onTogglePtt}
-                    title={p.actions.ptt ? t("call.ptt.on") : t("call.ptt.off")}>
-              <Hand size={20} /><span>{t("call.ptt")}</span>
-            </button>
-            {p.actions.wake && (
-              <button className={`act${p.actions.wake.state !== "off" ? " on" : ""}`} aria-pressed={p.actions.wake.state === "on"}
-                      disabled={p.actions.wake.state === "installing"} onClick={p.actions.wake.onToggle}
-                      title={p.actions.wake.state === "on" ? t("call.wake.on") : t("call.wake.off")}>
-                <Wake size={20} /><span>{t("call.wake")}</span>
-              </button>
+      {/* The live view carries only the picture and what points at the real part. Everything else sits
+          in the dock under it, so nothing covers what the camera sees. */}
+      <div className="stage">
+        <section className="camera" ref={p.hostRef}>
+          {p.camera}
+          {p.overlay}
+          {p.ask}
+          {v?.hazard ? (
+            <div className="risk-strip risk-red hazard-banner" role="alert">{t("call.stop", { what: auto(v.hazard) })}</div>
+          ) : risk !== "green" ? (
+            <div className={`risk-strip risk-${risk}`} role="status">{risk === "red" ? t("call.proOnly") : t("call.precautionsReq")}</div>
+          ) : null}
+        </section>
+        <div className="dock">
+          <div className="dock-line" aria-live="polite">
+            {p.toast ? (
+              <p className="dock-toast" role="status">{p.toast}</p>
+            ) : last ? (
+              <p className={last.who === "You" ? "me" : "ai"}>
+                <b>{last.who === "You" ? t("call.you") : t("call.mechanic")}</b> {last.text}
+              </p>
+            ) : (
+              <p className="dim">{v?.device ? auto(v.device) : t("call.scanning")}</p>
             )}
           </div>
-        )}
-        {p.toast && <div className="hud-toast" role="status">{p.toast}</div>}
-        <div className="hud-readout" aria-label="Session status">
-          <div><b>{t("call.device")}</b> {v?.device ? auto(v.device) : t("call.scanning")}</div>
+          {p.actions && !p.actions.circling && (
+            <div className="dock-tools">
+              <button aria-label={t("call.circle")} className="tool" onClick={p.actions.onCircle} title={t("call.circle.hint")}>
+                <Lasso size={18} /><span>{t("call.circle")}</span>
+              </button>
+              <button aria-label={t("call.next")} className="tool" onClick={p.actions.onNext}>
+                <NextStep size={18} /><span>{t("call.next")}</span>
+              </button>
+              <button aria-label={t("call.ptt")} className={`tool${p.actions.ptt ? " on" : ""}`} aria-pressed={p.actions.ptt} onClick={p.actions.onTogglePtt}
+                      title={p.actions.ptt ? t("call.ptt.on") : t("call.ptt.off")}>
+                <Hand size={18} /><span>{t("call.ptt")}</span>
+              </button>
+              {p.actions.wake && (
+                <button aria-label={t("call.wake")} className={`tool${p.actions.wake.state !== "off" ? " on" : ""}`} aria-pressed={p.actions.wake.state === "on"}
+                        disabled={p.actions.wake.state === "installing"} onClick={p.actions.wake.onToggle}
+                        title={p.actions.wake.state === "on" ? t("call.wake.on") : t("call.wake.off")}>
+                  <Wake size={18} /><span>{t("call.wake")}</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        {risk !== "green" && (
-          <div className={`risk-banner risk-${risk}`} role="status">
-            {risk === "red" ? t("call.proOnly") : t("call.precautionsReq")}
-          </div>
-        )}
-        {v?.hazard && <div className="risk-banner risk-red hazard-banner" role="alert">{t("call.stop", { what: auto(v.hazard) })}</div>}
-        <div className="captions" aria-live="polite">
-          {p.captions.map((c, i) => (
-            <p key={i} className={c.who === "You" ? "me" : "ai"}>
-              <b>{c.who === "You" ? t("call.you") : t("call.mechanic")}</b> {c.text}
-            </p>
-          ))}
-        </div>
-      </section>
+      </div>
 
       {p.frozen && (
         <section className="frozen" aria-label={t("call.pointing")}>
