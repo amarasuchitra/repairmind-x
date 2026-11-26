@@ -14,6 +14,7 @@ export interface RepairSummary {
   precautions: { text: string; done: boolean }[];
   steps: { n: number; text: string; status: string; checked: string; source: string }[];
   next_time: string[];
+  parts?: { part: string; number: string; links: { shop: string; url: string }[] }[];
   notes: { at: string; text: string }[];
 }
 
@@ -85,6 +86,20 @@ export function CallSummary({ room, data, onResume, onDone }: Props) {
             <section className="hud-card sum-next">
               <h2 className="hud-h">{t("sum.next")}</h2>
               <ul>{s.next_time.map((x, i) => <li key={i}>{auto(x)}</li>)}</ul>
+            </section>
+          )}
+          {s.parts && s.parts.length > 0 && (
+            <section className="hud-card parts">
+              <h2 className="hud-h">{t("sum.parts")}</h2>
+              {s.parts.map((p, i) => (
+                <div key={i} className="part">
+                  <b>{auto(p.part)}</b>{p.number && <span className="dim small"> {p.number}</span>}
+                  <div className="part-links">
+                    {p.links.map((l) => <a key={l.shop} href={l.url} target="_blank" rel="noopener noreferrer">{l.shop}</a>)}
+                  </div>
+                </div>
+              ))}
+              <p className="dim small">{t("call.parts.note")}</p>
             </section>
           )}
           {s.steps.length > 0 && (

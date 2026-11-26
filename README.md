@@ -166,6 +166,18 @@ These ideas were inspired by [Atticus](https://github.com/SaarthurR/atticus-mac)
 
 **Model routing.** Quick explanations, such as circle-to-ask answers and finding parts for a diagram, try a fast model first: `gemini-3.5-flash-lite` (free) or Claude Haiku. They fall back to the full model. The safety second opinion and camera step checks always use the full model.
 
+**Learned shortcuts.** A fix is remembered only when all of these are true at the end of the call:
+- the exact model was confirmed
+- a diagnosis was set
+- every step was done and verified, on camera or by you
+- the call didn't end in a hazard stop or a handover
+
+It is stored in `sessions/known_fixes.json`, which keeps up to 500 fixes and writes each file safely. When the same model comes back, the mechanic is told and can call `check_known_fixes`. That returns past fixes ranked by how well the symptoms match and how often each fix worked. They are leads only: the diagnosis gate, `propose_step`, the second opinion and the camera checks all still apply. The saving is in skipping the guide search and the guesswork.
+
+**"Hey RepairMind" (hands-free).** Turn it on, and the mic stays closed to the mechanic until you say "Hey RepairMind". It then opens while you keep talking, for up to 30 seconds. The wake word is heard by the browser's **on-device** speech recognition (`processLocally`), so that audio never leaves the phone. The button only appears where the browser supports this. It may first download the browser's speech pack for the language. It never falls back to cloud recognition. Your actual questions still go to the live voice model, as before.
+
+**Part finder.** When a part needs replacing, the mechanic calls `find_part`. Searches for the exact part number appear on screen as links to iFixit, Amazon, eBay and Google Shopping while the call carries on, and they are listed in the summary. There are no live prices without a paid shopping API, so the mechanic never states a price. To use local shops, set `RMX_PART_SHOPS` (for example `Name|https://shop.example/search?q={q}`). Only https addresses are accepted.
+
 Asks run one at a time, at most one every two seconds. They are ignored during a hazard stop. Preview them without a call at `#demo` (tools), `#demo-diagram`, `#demo-circle` and `#demo-summary`.
 
 | Circle to ask | Push-to-talk | Labelled diagram |

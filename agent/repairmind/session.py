@@ -107,6 +107,7 @@ class RepairSession:
     steps: list[Step] = field(default_factory=list)
     expert_product_id: str = ""
     failed_part: dict = field(default_factory=dict)  # for the redesign brief; see record_failed_part
+    parts: list[dict] = field(default_factory=list)  # part searches shown to the user; see parts.py
     reviews: dict = field(default_factory=dict)  # normalised step text -> {"status", "reason"}
     review_required: bool = True
     hazard_stop: str = ""

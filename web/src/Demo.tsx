@@ -33,6 +33,7 @@ const SUMMARY: RepairSummary = {
     { n: 3, text: "Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon.", status: "active", checked: "", source: "" },
     { n: 4, text: "Refit the platter, turn it by hand to seat the belt, then check the speed with the strobe dots.", status: "pending", checked: "", source: "" },
   ],
+  parts: [{ part: "drive belt", number: "TT20-BLT", links: ["iFixit", "Amazon", "eBay", "Google Shopping"].map((shop) => ({ shop, url: "#demo-summary" })) }],
   next_time: ["Pick up at step 3: Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon."],
   notes: NOTES,
 };
@@ -95,6 +96,7 @@ export function Demo() {
   const [circling, setCircling] = useState(variant === "circle");
   const [ptt, setPtt] = useState(false);
   const [talking, setTalking] = useState(false);
+  const [wake, setWake] = useState(false);
   const [toast, setToast] = useState("");
   const [diagramOpen, setDiagramOpen] = useState(variant === "diagram");
   // the AR marker follows the motor pulley as the handheld camera moves
@@ -141,7 +143,10 @@ export function Demo() {
         talking,
         onTogglePtt: () => setPtt((v) => !v),
         onTalk: setTalking,
+        wake: { state: wake ? "on" : "off", onToggle: () => { setWake((w) => !w); setPtt(true); } },
       }}
+      parts={[{ part: "drive belt", number: "TT20-BLT", query: "Example TT20-BLT drive belt",
+                links: ["iFixit", "Amazon", "eBay", "Google Shopping"].map((shop) => ({ shop, url: "#demo" })) }]}
       ask={circling && (
         <CircleAsk host={host} mirrored={false} onCancel={() => setCircling(false)}
                    onAsk={() => { setCircling(false); setToast("Sent. The mechanic is looking."); }} />

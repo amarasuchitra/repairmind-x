@@ -55,6 +55,14 @@ export const TOPIC_3D = "rmx.3d";
 export const TOPIC_ASK = "rmx.ask"; // client -> agent: {kind: "circle", box, question, image} | {kind: "next"}
 export const TOPIC_DIAGRAM = "rmx.diagram";
 export const TOPIC_NOTES = "rmx.notes"; // agent -> app: {notes: [{at, text}]}
+export const TOPIC_PARTS = "rmx.parts"; // agent -> app: {parts: PartSearch[]}
+
+export interface PartSearch {
+  part: string;
+  number: string;
+  query: string;
+  links: { shop: string; url: string }[];
+}
 
 /** Teach mode: numbered parts on a still of the camera. Boxes are centre + size, fractions of the image. */
 export interface Diagram {

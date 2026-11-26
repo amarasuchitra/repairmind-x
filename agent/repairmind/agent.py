@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import ar, ask, i18n, summary, reviewer, safety, sources, speech_guard, vision
+from . import ar, ask, i18n, known_fixes, parts, summary, reviewer, safety, sources, speech_guard, vision
 from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
@@ -55,6 +55,7 @@ TOPIC_AR_EVENTS = "rmx.ar"
 TOPIC_ASK = "rmx.ask"  # app -> agent: circle to ask, "what next?"
 TOPIC_DIAGRAM = "rmx.diagram"  # agent -> app: labelled diagram on a still
 TOPIC_NOTES = "rmx.notes"  # agent -> app: the call notes so far
+TOPIC_PARTS = "rmx.parts"  # agent -> app: shopping searches for parts
 
 
 class Mechanic(Agent):
@@ -128,8 +129,48 @@ class Mechanic(Agent):
             how_identified: "label", "user said", or "visual guess".
         """
         result = self.state.identify_device(device, brand, model, model_confirmed, how_identified)
-        note = self._match_expert() if result.allowed else ""
+        note = (self._match_expert() + self._known_note()) if result.allowed else ""
         return await self._done(result) + note
+
+    def _known_note(self) -> str:
+        if not self.state.model_confirmed:
+            return ""
+        fixes = known_fixes.lookup(known_fixes.store_path(SESSIONS_DIR), self.state.brand, self.state.model)
+        if not fixes:
+            return ""
+        return (f" There {'is' if len(fixes) == 1 else 'are'} {len(fixes)} remembered fix"
+                f"{'' if len(fixes) == 1 else 'es'} for this exact model. Once you know the symptoms, call "
+                "check_known_fixes.")
+
+    @function_tool
+    async def check_known_fixes(self, context: RunContext) -> str:
+        """Fixes that worked before on this exact model (learned shortcuts). Call it after hearing the symptoms.
+        They are leads: still confirm the diagnosis and propose every step through the gates."""
+        if not self.state.model_confirmed:
+            return "The model isn't confirmed. Ask for the rating label first; remembered fixes are per exact model."
+        fixes = known_fixes.lookup(known_fixes.store_path(SESSIONS_DIR), self.state.brand, self.state.model,
+                                   " ".join(self.state.symptoms + self.state.history_answers))
+        if fixes:
+            self.state._record("known_fix", diagnosis=fixes[0].get("diagnosis", ""), worked=fixes[0].get("worked", 1))
+            await self.changed()
+        return known_fixes.for_model(fixes)
+
+    @function_tool
+    async def find_part(self, context: RunContext, part: str, part_number: str = "") -> str:
+        """Show shopping searches for a replacement part on the user's screen. The call carries on meanwhile.
+
+        Args:
+            part: Plain part name, e.g. "drive belt" or "drain pump".
+            part_number: The manufacturer part number if you read it on the part or in the manual.
+        """
+        found = parts.find(self.state.brand, self.state.model, part, part_number)
+        if not found["query"]:
+            return "Say which part to search for."
+        self.state.parts = [p for p in self.state.parts if p.get("query") != found["query"]][-4:] + [found]
+        self.state._record("part_search", part=found["part"], query=found["query"])
+        await self.publish(TOPIC_PARTS, {"parts": self.state.parts})
+        await self.changed()
+        return parts.for_model(found, self.state.model_confirmed)
 
     @function_tool
     async def record_symptom(self, context: RunContext, symptom: str) -> str:
@@ -464,7 +505,7 @@ class Mechanic(Agent):
             return "Label not readable: " + (reading.advice_if_unreadable or "ask for a closer, sharper shot.")
         result = self.state.identify_device(self.state.device or "device", reading.brand or self.state.brand,
                                             reading.model, True, "label (close-up read)")
-        note = self._match_expert() if result.allowed else ""
+        note = (self._match_expert() + self._known_note()) if result.allowed else ""
         out = await self._done(result) + note
         return f"Label reads: {reading.brand} {reading.model}. Read it back to the user to confirm. " + out
 
@@ -590,6 +631,11 @@ async def entrypoint(ctx: JobContext) -> None:
 
     async def _final_summary(*_args) -> None:
         await mechanic.summary.flush()  # the summary is ready the moment the call ends
+        try:
+            if await asyncio.to_thread(known_fixes.record, known_fixes.store_path(SESSIONS_DIR), state):
+                log.info("remembered this fix for %s %s", state.brand, state.model)
+        except Exception:
+            log.exception("couldn't remember the fix")
 
     ctx.add_shutdown_callback(_final_summary)
 
@@ -676,6 +722,8 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(video_input=True),
     )
     await mechanic.publish(TOPIC_STATE, state.ui_state())
+    if state.parts:
+        await mechanic.publish(TOPIC_PARTS, {"parts": state.parts})
     if resumed:
         session.generate_reply(instructions=(
             "The call dropped and the user is back. Briefly say where you were, using this state: "

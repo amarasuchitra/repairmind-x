@@ -1098,3 +1098,12 @@ html[data-script="other"] body, html[data-script="other"] body * {
 .summary-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 .summary-actions .btn { display: inline-flex; align-items: center; text-decoration: none; }
 .summary-auto { text-align: right; margin-top: 10px; }
+
+/* ---- Part finder ---- */
+.hud-card.parts .hud-h { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
+.part { margin: 8px 0; }
+.part-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.part-links a { padding: 0.35rem 0.7rem; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--hud);
+  text-decoration: none; font-size: 0.82rem; background: rgba(80, 220, 255, 0.06); }
+.part-links a:hover { border-color: var(--hud); }
+.hud-actions .act:disabled { opacity: 0.6; cursor: progress; }

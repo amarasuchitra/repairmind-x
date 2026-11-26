@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { Alert, Diagram, Marker, SessionView, StepView } from "../types";
+import type { Alert, Diagram, Marker, PartSearch, SessionView, StepView } from "../types";
 import { VoiceOrb, type OrbState } from "./VoiceOrb";
-import { Flip, Hand, Lasso, Logo, Mic, MicOff, NextStep, PhoneOff } from "../ui/Icons";
+import { Cart, Flip, Hand, Lasso, Logo, Mic, MicOff, NextStep, PhoneOff, Wake } from "../ui/Icons";
 import { AnatomyFigure, hasAnatomy } from "../anatomy/Anatomy";
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Key } from "../i18n/en";
@@ -36,6 +36,8 @@ export interface CallHudProps {
   ask?: ReactNode;
   diagram?: Diagram | null;
   onCloseDiagram?: () => void;
+  /** Shopping searches for parts the mechanic looked up. */
+  parts?: PartSearch[];
   /** The call notes so far (session copilot), newest last. */
   notes?: { at: string; text: string }[];
   /** A short confirmation, e.g. "Sent. The mechanic is looking." */
@@ -52,6 +54,8 @@ export interface HudActions {
   talking: boolean;
   onTogglePtt: () => void;
   onTalk: (down: boolean) => void;
+  /** Hands-free wake word. Left out when this device can't listen on-device. */
+  wake?: { state: "off" | "on" | "installing"; onToggle: () => void };
 }
 
 const STATE_LINE: Record<OrbState, Key> = {
@@ -115,6 +119,13 @@ export function CallHud(p: CallHudProps) {
                     title={p.actions.ptt ? t("call.ptt.on") : t("call.ptt.off")}>
               <Hand size={20} /><span>{t("call.ptt")}</span>
             </button>
+            {p.actions.wake && (
+              <button className={`act${p.actions.wake.state !== "off" ? " on" : ""}`} aria-pressed={p.actions.wake.state === "on"}
+                      disabled={p.actions.wake.state === "installing"} onClick={p.actions.wake.onToggle}
+                      title={p.actions.wake.state === "on" ? t("call.wake.on") : t("call.wake.off")}>
+                <Wake size={20} /><span>{t("call.wake")}</span>
+              </button>
+            )}
           </div>
         )}
         {p.toast && <div className="hud-toast" role="status">{p.toast}</div>}
@@ -164,6 +175,7 @@ export function CallHud(p: CallHudProps) {
           </div>
         </div>
         <NowCard view={v} />
+        {p.parts && p.parts.length > 0 && <PartsCard parts={p.parts} />}
         {p.side}
         <button className="hud-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
           {details ? t("call.details.hide") : t("call.details.show")}
@@ -247,6 +259,24 @@ export function DiagramView({ d, onClose }: { d: Diagram; onClose?: () => void }
         {onClose && <button className="ghost" onClick={onClose}>{t("call.backLive")}</button>}
       </div>
     </section>
+  );
+}
+
+function PartsCard({ parts }: { parts: PartSearch[] }) {
+  const { t, auto } = useI18n();
+  return (
+    <div className="hud-card parts">
+      <h2 className="hud-h"><Cart size={14} /> {t("call.parts")}</h2>
+      {parts.slice(-3).reverse().map((p) => (
+        <div key={p.query} className="part">
+          <b>{auto(p.part)}</b>{p.number && <span className="dim small"> {p.number}</span>}
+          <div className="part-links">
+            {p.links.map((l) => <a key={l.shop} href={l.url} target="_blank" rel="noopener noreferrer">{l.shop}</a>)}
+          </div>
+        </div>
+      ))}
+      <p className="dim small">{t("call.parts.note")}</p>
+    </div>
   );
 }
 

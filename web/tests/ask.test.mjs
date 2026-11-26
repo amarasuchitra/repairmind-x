@@ -38,3 +38,14 @@ test("crop adds a margin and keeps a minimum size, inside the frame", () => {
   const tiny = cropRect({ x: 0.99, y: 0.5, w: 0.01, h: 0.01 }, 1000, 1000);
   assert.ok(tiny.sx + tiny.sw <= 1000 && tiny.sw >= 60);
 });
+
+import { matchesWake } from "../src/ask/wakeWord.ts";
+
+test("wake phrase survives the usual mishearings, and nothing else wakes it", () => {
+  for (const t of ["Hey RepairMind", "hey repair mind, what next?", "OK, repair mine", "so... hi Repair-Mind!"]) {
+    assert.equal(matchesWake(t), true, t);
+  }
+  for (const t of ["repair my mind", "hey there", "I need to repair mindfully", "they repairmind"]) {
+    assert.equal(matchesWake(t), false, t);
+  }
+});
