@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { Call } from "./Call";
+import { CallSummary } from "./CallSummary";
 import { Inspect } from "./Inspect";
 import { Home } from "./home/Home";
 import { Landing } from "./Landing";
@@ -55,6 +56,7 @@ const pageFromHash = (): Page => {
 export default function App() {
   const [accepted, setAccepted] = useState(false);
   const [conn, setConn] = useState<Connection | null>(null);
+  const [summaryRoom, setSummaryRoom] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [intro, setIntro] = useState(() => pageFromHash() === "call" && shouldPlayIntro());
@@ -114,8 +116,18 @@ export default function App() {
         {...conn}
         onEnd={(finished) => {
           if (finished) writeLastRoom(null);
+          setSummaryRoom(conn.room);
           setConn(null);
         }}
+      />
+    );
+  } else if (summaryRoom) {
+    const room = summaryRoom;
+    content = (
+      <CallSummary
+        room={room}
+        onResume={() => { setSummaryRoom(null); requestStart(room); }}
+        onDone={() => setSummaryRoom(null)}
       />
     );
   } else if (page === "redesign") {

@@ -150,6 +150,43 @@ Open `/#demo` to preview the call screen with sample data and a simulated voice,
 |---|---|---|---|
 | ![Start page](docs/screenshots/v4-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop call with anatomy view](docs/screenshots/v4-call-desktop.png) |
 
+## Hands-on tools during the call
+
+The live picture stays clear. Only what points at the real part is drawn on it: the AR box, its label and motion arrows, plus a thin safety strip along the top edge when precautions are needed or there is danger. The newest line of speech and the tools (Circle, What next?, Push-to-talk, Hey RepairMind) sit in a dock under the picture. On small phones, the picture gives way first so the dock is never hidden.
+
+
+These ideas were inspired by [Atticus](https://github.com/SaarthurR/atticus-mac), a voice and screen assistant for macOS. No code was copied: Atticus is a Swift app, and these are written for the web call.
+
+- **Circle to ask.** Tap **Circle**, draw a loop around a part on the live video, and pick a quick question, type one, or say it. The phone crops that area at full camera resolution and the mechanic marks it on screen as "your circle". A close-up vision model answers first. The mechanic treats your words as a question, never as instructions. Anything that tells you to do something to the device still goes through `propose_step` and the safety gates.
+- **What next?** One tap asks the mechanic for the single next thing to do from the current repair state. That is a missing precaution first, then the next allowed step, or the next diagnostic question.
+- **Push-to-talk.** Turn it on and the mic stays closed until you hold the talk button, or the Space bar on a keyboard, so workshop noise doesn't interrupt. The setting is remembered on that device.
+- **Labelled diagrams (teach mode).** When you ask "what's in here?" or "explain this", the mechanic calls `draw_diagram`. Up to six parts are found in one vision call and numbered on a still, with the names listed underneath so they never cover the parts. Parts it can't find clearly are left out and named, never guessed.
+
+**Call notes and repair summary (session copilot).** The agent keeps a plain timeline of the call. It records what was identified, tested, diagnosed, checked and done, plus anything you asked about. The notes come from what the session recorded, never from the model's memory, so they can't claim a step was checked when it wasn't. The summary is rewritten in the background a moment after each change, and once more as the call ends. That way it is ready straight away and survives a dropped call.
+- **During the call:** the notes appear under **Show details**.
+- **After the call:** you get the summary, with the outcome, the diagnosis, the steps, the safety checks, what to do next time and the notes. You can download it as Markdown or continue the repair.
+- **API:** `GET /api/sessions/{room}/summary` returns JSON, and `?format=md` returns Markdown.
+
+**Model routing.** Quick explanations, such as circle-to-ask answers and finding parts for a diagram, try a fast model first: `gemini-3.5-flash-lite` (free) or Claude Haiku. They fall back to the full model. The safety second opinion and camera step checks always use the full model.
+
+**Learned shortcuts.** A fix is remembered only when all of these are true at the end of the call:
+- the exact model was confirmed
+- a diagnosis was set
+- every step was done and verified, on camera or by you
+- the call didn't end in a hazard stop or a handover
+
+It is stored in `sessions/known_fixes.json`, which keeps up to 500 fixes and writes each file safely. When the same model comes back, the mechanic is told and can call `check_known_fixes`. That returns past fixes ranked by how well the symptoms match and how often each fix worked. They are leads only: the diagnosis gate, `propose_step`, the second opinion and the camera checks all still apply. The saving is in skipping the guide search and the guesswork.
+
+**"Hey RepairMind" (hands-free).** Turn it on, and the mic stays closed to the mechanic until you say "Hey RepairMind". It then opens while you keep talking, for up to 30 seconds. The wake word is heard by the browser's **on-device** speech recognition (`processLocally`), so that audio never leaves the phone. The button only appears where the browser supports this. It may first download the browser's speech pack for the language. It never falls back to cloud recognition. Your actual questions still go to the live voice model, as before.
+
+**Part finder.** When a part needs replacing, the mechanic calls `find_part`. Searches for the exact part number appear on screen as links to iFixit, Amazon, eBay and Google Shopping while the call carries on, and they are listed in the summary. There are no live prices without a paid shopping API, so the mechanic never states a price. To use local shops, set `RMX_PART_SHOPS` (for example `Name|https://shop.example/search?q={q}`). Only https addresses are accepted.
+
+Asks run one at a time, at most one every two seconds. They are ignored during a hazard stop. Preview them without a call at `#demo` (tools), `#demo-diagram`, `#demo-circle` and `#demo-summary`.
+
+| Circle to ask | Push-to-talk | Labelled diagram |
+| --- | --- | --- |
+| ![Circle to ask](docs/screenshots/tools-phone-circle-ask.png) | ![Push-to-talk](docs/screenshots/tools-phone-ptt.png) | ![Diagram](docs/screenshots/tools-phone-diagram.png) |
+
 ## Design lab (`#lab`)
 
 Beyond repair: bring an idea, get an engineering breakdown that is checked, simulated and reviewed.

@@ -62,3 +62,18 @@ export const Grid = ({ size, className }: P) => (
 export const Arrow = ({ size, className }: P) => (
   <svg {...base(size, className)}><path d="M5 12h14M13 6l6 6-6 6" /></svg>
 );
+export const Lasso = ({ size, className }: P) => (
+  <svg {...base(size, className)}><ellipse cx="12" cy="9.5" rx="8" ry="5.5" strokeDasharray="3 2.4" /><path d="M8.5 14.3c-1 1.8-.4 3.7 1.4 4.2 1.6.4 2.6-.9 2.1-2.2" /><circle cx="12" cy="9.5" r="1.3" /></svg>
+);
+export const NextStep = ({ size, className }: P) => (
+  <svg {...base(size, className)}><circle cx="12" cy="12" r="9" /><path d="M10 8l4 4-4 4" /></svg>
+);
+export const Hand = ({ size, className }: P) => (
+  <svg {...base(size, className)}><path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V12M11 11V5a1.5 1.5 0 0 1 3 0v6M14 11V6.5a1.5 1.5 0 0 1 3 0V14c0 4-2.5 7-6 7-2.7 0-4.2-1.6-5.6-4l-1.6-2.9a1.5 1.5 0 0 1 2.5-1.6L8 14" /></svg>
+);
+export const Wake = ({ size, className }: P) => (
+  <svg {...base(size, className)}><path d="M12 4v16M8 8v8M16 8v8M4 11v2M20 11v2" /></svg>
+);
+export const Cart = ({ size, className }: P) => (
+  <svg {...base(size, className)}><path d="M3 4h2l2.2 10.2a2 2 0 0 0 2 1.6h7.6a2 2 0 0 0 2-1.5L20.5 8H6.2" /><circle cx="10" cy="20" r="1.3" /><circle cx="17" cy="20" r="1.3" /></svg>
+);

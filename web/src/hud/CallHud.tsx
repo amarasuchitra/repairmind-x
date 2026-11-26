@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { Alert, Marker, SessionView, StepView } from "../types";
+import type { Alert, Diagram, Marker, PartSearch, SessionView, StepView } from "../types";
 import { VoiceOrb, type OrbState } from "./VoiceOrb";
-import { Flip, Logo, Mic, MicOff, PhoneOff } from "../ui/Icons";
+import { Cart, Flip, Hand, Lasso, Logo, Mic, MicOff, NextStep, PhoneOff, Wake } from "../ui/Icons";
 import { AnatomyFigure, hasAnatomy } from "../anatomy/Anatomy";
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Key } from "../i18n/en";
@@ -30,8 +30,32 @@ export interface CallHudProps {
   alert: Alert | null;
   onDismissAlert: () => void;
   hostRef?: (el: HTMLElement | null) => void;
+  /** Hands-on tools: circle to ask, "What next?" and push-to-talk. Left out, the call screen hides them. */
+  actions?: HudActions;
+  /** The circle-to-ask drawing layer, shown over the live video while circling. */
+  ask?: ReactNode;
+  diagram?: Diagram | null;
+  onCloseDiagram?: () => void;
+  /** Shopping searches for parts the mechanic looked up. */
+  parts?: PartSearch[];
+  /** The call notes so far (session copilot), newest last. */
+  notes?: { at: string; text: string }[];
+  /** A short confirmation, e.g. "Sent. The mechanic is looking." */
+  toast?: string;
   /** Optional per-frame audio source for the orb (used by the design preview). */
   voice?: () => number[];
+}
+
+export interface HudActions {
+  circling: boolean;
+  onCircle: () => void;
+  onNext: () => void;
+  ptt: boolean; // push-to-talk mode: the mic is open only while the hold button (or Space) is held
+  talking: boolean;
+  onTogglePtt: () => void;
+  onTalk: (down: boolean) => void;
+  /** Hands-free wake word. Left out when this device can't listen on-device. */
+  wake?: { state: "off" | "on" | "installing"; onToggle: () => void };
 }
 
 const STATE_LINE: Record<OrbState, Key> = {
@@ -61,6 +85,8 @@ export function CallHud(p: CallHudProps) {
   const elapsed = useElapsed();
   // the full diagnostics, safety list, procedure and manual upload stay one tap away
   const [details, setDetails] = useState(false);
+  // one line under the picture: the newest thing said (the full captions would cover the view)
+  const last = p.captions.length ? p.captions[p.captions.length - 1] : null;
   return (
     <div className="call-grid hud">
       <header className="call-top">
@@ -75,30 +101,54 @@ export function CallHud(p: CallHudProps) {
         </div>
       </header>
 
-      <section className="camera" ref={p.hostRef}>
-        {p.camera}
-        <div className="hud-frame" aria-hidden>
-          <span className="br tl" /><span className="br tr" /><span className="br bl" /><span className="br br-" />
-          <span className="scan" />
-        </div>
-        {p.overlay}
-        <div className="hud-readout" aria-label="Session status">
-          <div><b>{t("call.device")}</b> {v?.device ? auto(v.device) : t("call.scanning")}</div>
-        </div>
-        {risk !== "green" && (
-          <div className={`risk-banner risk-${risk}`} role="status">
-            {risk === "red" ? t("call.proOnly") : t("call.precautionsReq")}
+      {/* The live view carries only the picture and what points at the real part. Everything else sits
+          in the dock under it, so nothing covers what the camera sees. */}
+      <div className="stage">
+        <section className="camera" ref={p.hostRef}>
+          {p.camera}
+          {p.overlay}
+          {p.ask}
+          {v?.hazard ? (
+            <div className="risk-strip risk-red hazard-banner" role="alert">{t("call.stop", { what: auto(v.hazard) })}</div>
+          ) : risk !== "green" ? (
+            <div className={`risk-strip risk-${risk}`} role="status">{risk === "red" ? t("call.proOnly") : t("call.precautionsReq")}</div>
+          ) : null}
+        </section>
+        <div className="dock">
+          <div className="dock-line" aria-live="polite">
+            {p.toast ? (
+              <p className="dock-toast" role="status">{p.toast}</p>
+            ) : last ? (
+              <p className={last.who === "You" ? "me" : "ai"}>
+                <b>{last.who === "You" ? t("call.you") : t("call.mechanic")}</b> {last.text}
+              </p>
+            ) : (
+              <p className="dim">{v?.device ? auto(v.device) : t("call.scanning")}</p>
+            )}
           </div>
-        )}
-        {v?.hazard && <div className="risk-banner risk-red hazard-banner" role="alert">{t("call.stop", { what: auto(v.hazard) })}</div>}
-        <div className="captions" aria-live="polite">
-          {p.captions.map((c, i) => (
-            <p key={i} className={c.who === "You" ? "me" : "ai"}>
-              <b>{c.who === "You" ? t("call.you") : t("call.mechanic")}</b> {c.text}
-            </p>
-          ))}
+          {p.actions && !p.actions.circling && (
+            <div className="dock-tools">
+              <button aria-label={t("call.circle")} className="tool" onClick={p.actions.onCircle} title={t("call.circle.hint")}>
+                <Lasso size={18} /><span>{t("call.circle")}</span>
+              </button>
+              <button aria-label={t("call.next")} className="tool" onClick={p.actions.onNext}>
+                <NextStep size={18} /><span>{t("call.next")}</span>
+              </button>
+              <button aria-label={t("call.ptt")} className={`tool${p.actions.ptt ? " on" : ""}`} aria-pressed={p.actions.ptt} onClick={p.actions.onTogglePtt}
+                      title={p.actions.ptt ? t("call.ptt.on") : t("call.ptt.off")}>
+                <Hand size={18} /><span>{t("call.ptt")}</span>
+              </button>
+              {p.actions.wake && (
+                <button aria-label={t("call.wake")} className={`tool${p.actions.wake.state !== "off" ? " on" : ""}`} aria-pressed={p.actions.wake.state === "on"}
+                        disabled={p.actions.wake.state === "installing"} onClick={p.actions.wake.onToggle}
+                        title={p.actions.wake.state === "on" ? t("call.wake.on") : t("call.wake.off")}>
+                  <Wake size={18} /><span>{t("call.wake")}</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
-      </section>
+      </div>
 
       {p.frozen && (
         <section className="frozen" aria-label={t("call.pointing")}>
@@ -116,6 +166,8 @@ export function CallHud(p: CallHudProps) {
         </section>
       )}
 
+      {p.diagram && <DiagramView d={p.diagram} onClose={p.onCloseDiagram} />}
+
       <aside className="panel">
         <div className={`presence presence-${p.orbState}`}>
           <VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={160} detail="full" />
@@ -126,6 +178,7 @@ export function CallHud(p: CallHudProps) {
           </div>
         </div>
         <NowCard view={v} />
+        {p.parts && p.parts.length > 0 && <PartsCard parts={p.parts} />}
         {p.side}
         <button className="hud-more" aria-expanded={details} onClick={() => setDetails((d) => !d)}>
           {details ? t("call.details.hide") : t("call.details.show")}
@@ -134,15 +187,34 @@ export function CallHud(p: CallHudProps) {
         {details && (
           <>
             <RepairPanel view={v} />
+            {p.notes && (
+              <div className="hud-card">
+                <h2 className="hud-h">{t("call.notes")}</h2>
+                {p.notes.length ? (
+                  <ul className="notes">{p.notes.slice(-12).map((n, i) => <li key={i}><time>{n.at}</time>{auto(n.text)}</li>)}</ul>
+                ) : (
+                  <p className="dim small">{t("call.notes.empty")}</p>
+                )}
+              </div>
+            )}
             {p.tools}
           </>
         )}
       </aside>
 
       <footer className="controls">
-        <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
-          {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? t("call.mute") : t("call.unmute")}</span>
-        </button>
+        {p.actions?.ptt ? (
+          <button className={`ctl ptt${p.actions.talking ? " talking" : ""}`} aria-pressed={p.actions.talking}
+                  onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); p.actions!.onTalk(true); }}
+                  onPointerUp={() => p.actions!.onTalk(false)} onPointerCancel={() => p.actions!.onTalk(false)}
+                  onContextMenu={(e) => e.preventDefault()}>
+            <Mic size={18} /><span>{p.actions.talking ? t("call.ptt.talking") : t("call.ptt.hold")}</span>
+          </button>
+        ) : (
+          <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
+            {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? t("call.mute") : t("call.unmute")}</span>
+          </button>
+        )}
         <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={92} /></div>
         <button className="ctl" onClick={p.onSwitchCamera}><Flip size={18} /><span>{t("call.flip")}</span></button>
         <button className="ctl danger" onClick={p.onEnd}><PhoneOff size={18} /><span>{t("call.end")}</span></button>
@@ -157,6 +229,56 @@ export function CallHud(p: CallHudProps) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Teach mode: a still of the camera with numbered parts, and the names in a numbered list under it,
+ *  so labels never cover the parts or each other, even on a small phone screen. */
+export function DiagramView({ d, onClose }: { d: Diagram; onClose?: () => void }) {
+  const { t, auto } = useI18n();
+  return (
+    <section className="frozen diagram" aria-label={t("call.diagram")}>
+      <div className="frozen-img">
+        <img src={d.image} alt={t("call.still")} />
+        <svg className="diagram-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          {d.items.map((i) => {
+            const x0 = (i.x - i.w / 2) * 100, y0 = (i.y - i.h / 2) * 100;
+            return <path key={i.n} className="mk-box" d={brackets(x0, y0, x0 + i.w * 100, y0 + i.h * 100, Math.min(i.w, i.h) * 30 + 1.5)} />;
+          })}
+        </svg>
+        {d.items.map((i) => (
+          <b key={i.n} className="dg-num" aria-hidden
+             style={{ left: `${Math.max(0, i.x - i.w / 2) * 100}%`, top: `${Math.max(0, i.y - i.h / 2) * 100}%` }}>{i.n}</b>
+        ))}
+      </div>
+      <div className="frozen-bar diagram-bar">
+        <div>
+          <b>{auto(d.title)}</b>
+          <ol className="dg-legend">
+            {d.items.map((i) => <li key={i.n}><b>{i.n}</b>{auto(i.label)}</li>)}
+          </ol>
+        </div>
+        {onClose && <button className="ghost" onClick={onClose}>{t("call.backLive")}</button>}
+      </div>
+    </section>
+  );
+}
+
+function PartsCard({ parts }: { parts: PartSearch[] }) {
+  const { t, auto } = useI18n();
+  return (
+    <div className="hud-card parts">
+      <h2 className="hud-h"><Cart size={14} /> {t("call.parts")}</h2>
+      {parts.slice(-3).reverse().map((p) => (
+        <div key={p.query} className="part">
+          <b>{auto(p.part)}</b>{p.number && <span className="dim small"> {p.number}</span>}
+          <div className="part-links">
+            {p.links.map((l) => <a key={l.shop} href={l.url} target="_blank" rel="noopener noreferrer">{l.shop}</a>)}
+          </div>
+        </div>
+      ))}
+      <p className="dim small">{t("call.parts.note")}</p>
     </div>
   );
 }

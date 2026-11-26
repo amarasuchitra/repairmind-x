@@ -44,7 +44,7 @@ def test_vision_unavailable_without_key(monkeypatch):
 def _fake(monkeypatch, outputs):
     calls = iter(outputs)
 
-    async def fake_parse(frames, prompt, schema):
+    async def fake_parse(frames, prompt, schema, *_):
         return next(calls)
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test")

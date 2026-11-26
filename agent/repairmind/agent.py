@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import ar, i18n, reviewer, safety, sources, speech_guard, vision
+from . import ar, ask, i18n, known_fixes, parts, summary, reviewer, safety, sources, speech_guard, vision
 from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
@@ -52,6 +52,10 @@ TOPIC_MARKER = "rmx.marker"
 TOPIC_ALERT = "rmx.alert"
 TOPIC_3D = "rmx.3d"
 TOPIC_AR_EVENTS = "rmx.ar"
+TOPIC_ASK = "rmx.ask"  # app -> agent: circle to ask, "what next?"
+TOPIC_DIAGRAM = "rmx.diagram"  # agent -> app: labelled diagram on a still
+TOPIC_NOTES = "rmx.notes"  # agent -> app: the call notes so far
+TOPIC_PARTS = "rmx.parts"  # agent -> app: shopping searches for parts
 
 
 class Mechanic(Agent):
@@ -64,6 +68,8 @@ class Mechanic(Agent):
         self.session_path = SESSIONS_DIR / f"{state.session_id}.json"
         self._marker_seq = 0
         self.ar_target: ar.ARTarget | None = None
+        self.ask_throttle = ask.Throttle()
+        self.summary = summary.SummaryWriter(state, SESSIONS_DIR)
 
     def _manual(self) -> ManualIndex | None:
         path = manual_path(SESSIONS_DIR, self.state.session_id)
@@ -96,9 +102,15 @@ class Mechanic(Agent):
             note += " It has no reviewed procedures yet, so continue in general mode."
         return note
 
-    async def _done(self, result: GateResult) -> str:
+    async def changed(self) -> None:
+        """Save, show the new state and notes, and refresh the written summary in the background."""
         self.state.save(SESSIONS_DIR)
         await self.publish(TOPIC_STATE, self.state.ui_state())
+        await self.publish(TOPIC_NOTES, {"notes": summary.notes(self.state, limit=40)})
+        self.summary.touch()
+
+    async def _done(self, result: GateResult) -> str:
+        await self.changed()
         if not result.allowed and result.code.startswith(("red_", "hazard")):
             await self.publish(TOPIC_ALERT, {"kind": result.code, "message": result.say})
         return result.for_model()
@@ -117,8 +129,48 @@ class Mechanic(Agent):
             how_identified: "label", "user said", or "visual guess".
         """
         result = self.state.identify_device(device, brand, model, model_confirmed, how_identified)
-        note = self._match_expert() if result.allowed else ""
+        note = (self._match_expert() + self._known_note()) if result.allowed else ""
         return await self._done(result) + note
+
+    def _known_note(self) -> str:
+        if not self.state.model_confirmed:
+            return ""
+        fixes = known_fixes.lookup(known_fixes.store_path(SESSIONS_DIR), self.state.brand, self.state.model)
+        if not fixes:
+            return ""
+        return (f" There {'is' if len(fixes) == 1 else 'are'} {len(fixes)} remembered fix"
+                f"{'' if len(fixes) == 1 else 'es'} for this exact model. Once you know the symptoms, call "
+                "check_known_fixes.")
+
+    @function_tool
+    async def check_known_fixes(self, context: RunContext) -> str:
+        """Fixes that worked before on this exact model (learned shortcuts). Call it after hearing the symptoms.
+        They are leads: still confirm the diagnosis and propose every step through the gates."""
+        if not self.state.model_confirmed:
+            return "The model isn't confirmed. Ask for the rating label first; remembered fixes are per exact model."
+        fixes = known_fixes.lookup(known_fixes.store_path(SESSIONS_DIR), self.state.brand, self.state.model,
+                                   " ".join(self.state.symptoms + self.state.history_answers))
+        if fixes:
+            self.state._record("known_fix", diagnosis=fixes[0].get("diagnosis", ""), worked=fixes[0].get("worked", 1))
+            await self.changed()
+        return known_fixes.for_model(fixes)
+
+    @function_tool
+    async def find_part(self, context: RunContext, part: str, part_number: str = "") -> str:
+        """Show shopping searches for a replacement part on the user's screen. The call carries on meanwhile.
+
+        Args:
+            part: Plain part name, e.g. "drive belt" or "drain pump".
+            part_number: The manufacturer part number if you read it on the part or in the manual.
+        """
+        found = parts.find(self.state.brand, self.state.model, part, part_number)
+        if not found["query"]:
+            return "Say which part to search for."
+        self.state.parts = [p for p in self.state.parts if p.get("query") != found["query"]][-4:] + [found]
+        self.state._record("part_search", part=found["part"], query=found["query"])
+        await self.publish(TOPIC_PARTS, {"parts": self.state.parts})
+        await self.changed()
+        return parts.for_model(found, self.state.model_confirmed)
 
     @function_tool
     async def record_symptom(self, context: RunContext, symptom: str) -> str:
@@ -387,6 +439,58 @@ class Mechanic(Agent):
         })
 
     @function_tool
+    async def draw_diagram(self, context: RunContext, title: str, parts: list[str], labels: list[str]) -> str:
+        """Teach mode: label several parts on a still of the camera, numbered, so you can explain how
+        something works or what the parts are. Use it when the user asks "what's in here?" or "explain this".
+
+        Args:
+            title: Short heading, e.g. "Inside the pump".
+            parts: Up to 6 precise descriptions to find, e.g. "the white impeller in the centre".
+            labels: Short on-screen labels, same order, e.g. "impeller".
+        """
+        n = min(len(parts), len(labels), ask.MAX_DIAGRAM_PARTS)
+        if n == 0:
+            return "Give at least one part and its label."
+        parts, labels = [p[:200] for p in parts[:n]], [lb[:40] for lb in labels[:n]]
+        frame = self.frames.jpeg_b64(max_side=1280) if self.frames else None
+        if frame is None:
+            return "No camera frame yet."
+        locs = await vision.locate_many(frame, parts)
+        if locs is None:
+            return "Diagrams are unavailable right now. Explain in words, part by part."
+        boxes = [ask.Box(lc.x_center, lc.y_center, lc.width, lc.height) if lc.found else None for lc in locs]
+        items = ask.diagram_items(labels, boxes)
+        if items:
+            await self.publish(TOPIC_DIAGRAM, {"title": title[:60], "image": "data:image/jpeg;base64," + frame,
+                                               "items": items})
+        return ask.diagram_result(labels, boxes)
+
+    async def answer_circle(self, req: ask.AskRequest, session: AgentSession) -> None:
+        """The user circled something on the live video: mark it, look closely, and let the mechanic answer."""
+        assert req.box is not None
+        b = req.box
+        frame = self.frames.jpeg_b64(max_side=960) if self.frames else None
+        self._marker_seq += 1
+        marker = {"x": b.x, "y": b.y, "w": b.w, "h": b.h, "label": "your circle", "precise": bool(frame),
+                  "id": self._marker_seq, "action": "", "step_id": ""}
+        if frame:
+            marker["image"] = "data:image/jpeg;base64," + frame
+        self.ar_target = None  # the user's own circle isn't re-found by description
+        await self.publish(TOPIC_MARKER, marker)
+        close = req.image_b64
+        if not close:
+            full = self.frames.jpeg_b64(max_side=2048) if self.frames else None
+            close = ask.crop_b64(full, b) if full else ""
+        ans = await vision.ask(close, ask.vision_question(req.question, self.state.device), quick=True) if close else None
+        self.state._record("circle_ask", question=req.question, answer=ans.answer if ans else "")
+        await self.changed()
+        session.generate_reply(instructions=ask.circle_instructions(
+            req.question, ans.answer if ans else None, bool(ans and ans.confident)))
+
+    def what_next(self, session: AgentSession) -> None:
+        session.generate_reply(instructions=ask.next_instructions(self.state.ui_state()))
+
+    @function_tool
     async def read_label(self, context: RunContext) -> str:
         """Read the brand and exact model from the rating label in the current full-resolution frame.
         Ask the user to hold the camera close and steady on the label first."""
@@ -401,7 +505,7 @@ class Mechanic(Agent):
             return "Label not readable: " + (reading.advice_if_unreadable or "ask for a closer, sharper shot.")
         result = self.state.identify_device(self.state.device or "device", reading.brand or self.state.brand,
                                             reading.model, True, "label (close-up read)")
-        note = self._match_expert() if result.allowed else ""
+        note = (self._match_expert() + self._known_note()) if result.allowed else ""
         out = await self._done(result) + note
         return f"Label reads: {reading.brand} {reading.model}. Read it back to the user to confirm. " + out
 
@@ -525,6 +629,16 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     mechanic = Mechanic(ctx, state, frames, language, ui_language)
 
+    async def _final_summary(*_args) -> None:
+        await mechanic.summary.flush()  # the summary is ready the moment the call ends
+        try:
+            if await asyncio.to_thread(known_fixes.record, known_fixes.store_path(SESSIONS_DIR), state):
+                log.info("remembered this fix for %s %s", state.brand, state.model)
+        except Exception:
+            log.exception("couldn't remember the fix")
+
+    ctx.add_shutdown_callback(_final_summary)
+
     # Live AR: the app tells us when it loses the part it was tracking, so we can find it again.
     def _on_ar(reader, participant_identity: str) -> None:
         async def handle() -> None:
@@ -538,6 +652,28 @@ async def entrypoint(ctx: JobContext) -> None:
         asyncio.create_task(handle())
 
     ctx.room.register_text_stream_handler(TOPIC_AR_EVENTS, _on_ar)
+
+    # Circle to ask and "What next?" from the call screen. One at a time, so taps can't flood the model.
+    def _on_ask(reader, participant_identity: str) -> None:
+        async def handle() -> None:
+            if not mechanic.ask_throttle.try_start():
+                return
+            try:
+                req = ask.parse_ask(await reader.read_all())
+                if req is None or state.hazard_stop:
+                    return  # during a hazard stop nothing distracts from it
+                if req.kind == "next":
+                    mechanic.what_next(session)
+                else:
+                    await mechanic.answer_circle(req, session)
+            except Exception:
+                log.exception("ask failed")
+            finally:
+                mechanic.ask_throttle.done()
+
+        asyncio.create_task(handle())
+
+    ctx.room.register_text_stream_handler(TOPIC_ASK, _on_ask)
 
     # Safety net that doesn't depend on the model noticing: scan every final user transcript.
     @session.on("user_input_transcribed")
@@ -586,6 +722,8 @@ async def entrypoint(ctx: JobContext) -> None:
         room_options=room_io.RoomOptions(video_input=True),
     )
     await mechanic.publish(TOPIC_STATE, state.ui_state())
+    if state.parts:
+        await mechanic.publish(TOPIC_PARTS, {"parts": state.parts})
     if resumed:
         session.generate_reply(instructions=(
             "The call dropped and the user is back. Briefly say where you were, using this state: "

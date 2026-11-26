@@ -3,13 +3,53 @@ import { CameraView } from "./fx/showroom/CameraView";
 import { CallHud, MarkerOverlay } from "./hud/CallHud";
 import type { OrbState } from "./hud/VoiceOrb";
 import { makeDemoVoice } from "./fx/demoVoice";
-import type { SessionView } from "./types";
+import type { Diagram, SessionView } from "./types";
+import { CircleAsk } from "./ask/CircleAsk";
+import { CallSummary, type RepairSummary } from "./CallSummary";
 
 /**
  * Design preview at #demo: the real call screen with sample data and a simulated voice, so the
  * interface can be reviewed without a server, camera or LiveKit. #demo-alert shows a hazard stop,
- * #demo-amber shows a job that needs precautions.
+ * #demo-amber shows a job that needs precautions, #demo-diagram a labelled diagram (teach mode),
+ * #demo-summary the summary shown after a call.
  */
+const NOTES = [
+  { at: "00:12", text: "Device: Example belt-drive turntable EX-TT20 (model confirmed)" },
+  { at: "00:40", text: "Symptom: platter doesn't turn, motor hums" },
+  { at: "01:55", text: "Test: Spun the platter by hand: turns freely, no belt on the pulley" },
+  { at: "02:30", text: "Diagnosis: Worn drive belt" },
+  { at: "03:05", text: "Safety check done: The device is unplugged from the wall (show the loose plug on camera)" },
+  { at: "04:10", text: "You asked about a circled part: What is this? Answer: The brass motor pulley that drives the belt" },
+  { at: "05:20", text: "Step done (checked on camera): Take the mat off, then lift the platter straight up" },
+];
+const SUMMARY: RepairSummary = {
+  session_id: "demo", started: "2026-11-26 17:05", minutes: 9.5, device: "Example belt-drive turntable EX-TT20",
+  outcome: "in_progress", outcome_text: "In progress: 2 of 4 steps done",
+  symptoms: ["Platter doesn't turn, motor hums"], diagnosis: "Worn drive belt", confidence: 0.88,
+  precautions: [{ text: "Unplugged from the wall", done: true }, { text: "Stylus guard on, arm clipped in its rest", done: true }],
+  steps: [
+    { n: 1, text: "Switch the turntable off and unplug it from the wall.", status: "done", checked: "checked on camera", source: "" },
+    { n: 2, text: "Take the mat off, then lift the platter straight up and set it down face first on a towel.", status: "done", checked: "checked on camera", source: "" },
+    { n: 3, text: "Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon.", status: "active", checked: "", source: "" },
+    { n: 4, text: "Refit the platter, turn it by hand to seat the belt, then check the speed with the strobe dots.", status: "pending", checked: "", source: "" },
+  ],
+  parts: [{ part: "drive belt", number: "TT20-BLT", links: ["iFixit", "Amazon", "eBay", "Google Shopping"].map((shop) => ({ shop, url: "#demo-summary" })) }],
+  next_time: ["Pick up at step 3: Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon."],
+  notes: NOTES,
+};
+
+const DIAGRAM: Diagram = {
+  title: "Inside the turntable",
+  image: "demo/turntable-still.jpg",
+  items: [
+    { n: 1, label: "motor pulley", x: 0.323, y: 0.381, w: 0.04, h: 0.06 },
+    { n: 2, label: "sub-platter", x: 0.405, y: 0.465, w: 0.105, h: 0.13 },
+    { n: 3, label: "speed controls", x: 0.295, y: 0.6, w: 0.08, h: 0.06 },
+    { n: 4, label: "tonearm", x: 0.576, y: 0.435, w: 0.06, h: 0.28 },
+    { n: 5, label: "platter (lifted off)", x: 0.79, y: 0.7, w: 0.3, h: 0.38 },
+  ],
+};
+
 const VIEW: SessionView = {
   session_id: "demo",
   device: "Example belt-drive turntable (EX-TT20)",
@@ -52,6 +92,13 @@ export function Demo() {
   }, [phase, fixed]);
   const orbState = fixed ?? CYCLE[phase].state;
   const [alertOpen, setAlertOpen] = useState(variant === "alert");
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const [circling, setCircling] = useState(variant === "circle");
+  const [ptt, setPtt] = useState(false);
+  const [talking, setTalking] = useState(false);
+  const [wake, setWake] = useState(false);
+  const [toast, setToast] = useState("");
+  const [diagramOpen, setDiagramOpen] = useState(variant === "diagram");
   // the AR marker follows the motor pulley as the handheld camera moves
   const [pin, setPin] = useState({ x: 0.3, y: 0.36 });
   const onPin = useCallback((x: number, y: number) => {
@@ -65,8 +112,12 @@ export function Demo() {
         ? { ...VIEW, risk_level: "red", hazard: "Smoke near the motor housing" }
         : VIEW;
 
+  if (variant === "summary") {
+    return <CallSummary room="demo" data={SUMMARY} onResume={() => undefined} onDone={() => { window.location.hash = "#demo"; }} />;
+  }
   return (
     <CallHud
+      notes={NOTES}
       status={{ speaking: "Speaking", listening: "Listening", thinking: "Thinking", connecting: "Connecting", idle: "Online" }[orbState]}
       orbState={orbState}
       bands={[]}
@@ -83,6 +134,26 @@ export function Demo() {
           <span className="ar-label demo-ar-label" style={{ left: `${pin.x * 100}%`, top: `${(pin.y - 0.11) * 100}%` }}>MOTOR PULLEY</span>
         </div>
       }
+      hostRef={setHost}
+      actions={{
+        circling,
+        onCircle: () => setCircling(true),
+        onNext: () => setToast("Asked the mechanic what's next."),
+        ptt,
+        talking,
+        onTogglePtt: () => setPtt((v) => !v),
+        onTalk: setTalking,
+        wake: { state: wake ? "on" : "off", onToggle: () => { setWake((w) => !w); setPtt(true); } },
+      }}
+      parts={[{ part: "drive belt", number: "TT20-BLT", query: "Example TT20-BLT drive belt",
+                links: ["iFixit", "Amazon", "eBay", "Google Shopping"].map((shop) => ({ shop, url: "#demo" })) }]}
+      ask={circling && (
+        <CircleAsk host={host} mirrored={false} onCancel={() => setCircling(false)}
+                   onAsk={() => { setCircling(false); setToast("Sent. The mechanic is looking."); }} />
+      )}
+      toast={toast}
+      diagram={diagramOpen ? DIAGRAM : null}
+      onCloseDiagram={() => setDiagramOpen(false)}
       frozen={null}
       onCloseFrozen={() => undefined}
       micOn
