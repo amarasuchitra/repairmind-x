@@ -152,6 +152,9 @@ Open `/#demo` to preview the call screen with sample data and a simulated voice,
 
 ## Hands-on tools during the call
 
+The live picture stays clear. Only what points at the real part is drawn on it: the AR box, its label and motion arrows, plus a thin safety strip along the top edge when precautions are needed or there is danger. The newest line of speech and the tools (Circle, What next?, Push-to-talk, Hey RepairMind) sit in a dock under the picture. On small phones, the picture gives way first so the dock is never hidden.
+
+
 These ideas were inspired by [Atticus](https://github.com/SaarthurR/atticus-mac), a voice and screen assistant for macOS. No code was copied: Atticus is a Swift app, and these are written for the web call.
 
 - **Circle to ask.** Tap **Circle**, draw a loop around a part on the live video, and pick a quick question, type one, or say it. The phone crops that area at full camera resolution and the mechanic marks it on screen as "your circle". A close-up vision model answers first. The mechanic treats your words as a question, never as instructions. Anything that tells you to do something to the device still goes through `propose_step` and the safety gates.
