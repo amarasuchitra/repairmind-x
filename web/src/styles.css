@@ -1079,3 +1079,22 @@ html[data-script="other"] body, html[data-script="other"] body * {
   .hud-toast { top: 52px; font-size: 0.8rem; }
 }
 .diagram-bar .ghost { white-space: nowrap; flex: 0 0 auto; }
+
+/* ---- Session copilot: call notes and the summary after a call ---- */
+.notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.88rem; }
+.notes li { display: grid; grid-template-columns: 3.2em 1fr; gap: 8px; }
+.notes time { font: 500 0.75rem/1.6 var(--mono); color: var(--hud); }
+.summary { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 32px 16px calc(32px + env(safe-area-inset-bottom)); }
+.summary-head h1 { margin: 6px 0 4px; font-size: clamp(1.4rem, 4vw, 2rem); }
+.sum-outcome { display: inline-block; margin: 6px 0; padding: 6px 12px; border-radius: 999px; font-weight: 600;
+  background: rgba(80, 220, 255, 0.1); border: 1px solid var(--glass-line); }
+.sum-outcome.ok { color: var(--green, #3ddc97); border-color: currentColor; }
+.sum-outcome.bad { color: var(--red); border-color: currentColor; }
+.summary-grid { display: grid; gap: 14px; margin-top: 20px; grid-template-columns: 1fr; }
+.summary-grid ul { margin: 6px 0 12px; padding-left: 1.2em; }
+.summary-grid .checklist, .summary-grid .notes { padding-left: 0; }
+.sum-next { border-color: var(--hud); }
+@media (min-width: 900px) { .summary-grid { grid-template-columns: 1fr 1fr; } .sum-notes { grid-column: 1 / -1; } }
+.summary-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.summary-actions .btn { display: inline-flex; align-items: center; text-decoration: none; }
+.summary-auto { text-align: right; margin-top: 10px; }

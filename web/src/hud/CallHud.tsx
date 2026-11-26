@@ -36,6 +36,8 @@ export interface CallHudProps {
   ask?: ReactNode;
   diagram?: Diagram | null;
   onCloseDiagram?: () => void;
+  /** The call notes so far (session copilot), newest last. */
+  notes?: { at: string; text: string }[];
   /** A short confirmation, e.g. "Sent. The mechanic is looking." */
   toast?: string;
   /** Optional per-frame audio source for the orb (used by the design preview). */
@@ -170,6 +172,16 @@ export function CallHud(p: CallHudProps) {
         {details && (
           <>
             <RepairPanel view={v} />
+            {p.notes && (
+              <div className="hud-card">
+                <h2 className="hud-h">{t("call.notes")}</h2>
+                {p.notes.length ? (
+                  <ul className="notes">{p.notes.slice(-12).map((n, i) => <li key={i}><time>{n.at}</time>{auto(n.text)}</li>)}</ul>
+                ) : (
+                  <p className="dim small">{t("call.notes.empty")}</p>
+                )}
+              </div>
+            )}
             {p.tools}
           </>
         )}

@@ -95,7 +95,7 @@ def test_diagram_numbers_only_found_parts_in_order():
 def test_locate_many_pads_and_cuts(monkeypatch):
     monkeypatch.setattr(vision.checker, "provider", lambda: "gemini")
 
-    async def fake(frames, prompt, schema):
+    async def fake(frames, prompt, schema, *_):
         return vision.GeminiBoxes(items=[vision.GeminiBox(found=True, box_2d=[100, 100, 300, 300])])
 
     monkeypatch.setattr(vision, "_parse", fake)

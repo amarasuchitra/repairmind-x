@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import ar, ask, i18n, reviewer, safety, sources, speech_guard, vision
+from . import ar, ask, i18n, summary, reviewer, safety, sources, speech_guard, vision
 from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
@@ -54,6 +54,7 @@ TOPIC_3D = "rmx.3d"
 TOPIC_AR_EVENTS = "rmx.ar"
 TOPIC_ASK = "rmx.ask"  # app -> agent: circle to ask, "what next?"
 TOPIC_DIAGRAM = "rmx.diagram"  # agent -> app: labelled diagram on a still
+TOPIC_NOTES = "rmx.notes"  # agent -> app: the call notes so far
 
 
 class Mechanic(Agent):
@@ -67,6 +68,7 @@ class Mechanic(Agent):
         self._marker_seq = 0
         self.ar_target: ar.ARTarget | None = None
         self.ask_throttle = ask.Throttle()
+        self.summary = summary.SummaryWriter(state, SESSIONS_DIR)
 
     def _manual(self) -> ManualIndex | None:
         path = manual_path(SESSIONS_DIR, self.state.session_id)
@@ -99,9 +101,15 @@ class Mechanic(Agent):
             note += " It has no reviewed procedures yet, so continue in general mode."
         return note
 
-    async def _done(self, result: GateResult) -> str:
+    async def changed(self) -> None:
+        """Save, show the new state and notes, and refresh the written summary in the background."""
         self.state.save(SESSIONS_DIR)
         await self.publish(TOPIC_STATE, self.state.ui_state())
+        await self.publish(TOPIC_NOTES, {"notes": summary.notes(self.state, limit=40)})
+        self.summary.touch()
+
+    async def _done(self, result: GateResult) -> str:
+        await self.changed()
         if not result.allowed and result.code.startswith(("red_", "hazard")):
             await self.publish(TOPIC_ALERT, {"kind": result.code, "message": result.say})
         return result.for_model()
@@ -432,9 +440,9 @@ class Mechanic(Agent):
         if not close:
             full = self.frames.jpeg_b64(max_side=2048) if self.frames else None
             close = ask.crop_b64(full, b) if full else ""
-        ans = await vision.ask(close, ask.vision_question(req.question, self.state.device)) if close else None
+        ans = await vision.ask(close, ask.vision_question(req.question, self.state.device), quick=True) if close else None
         self.state._record("circle_ask", question=req.question, answer=ans.answer if ans else "")
-        self.state.save(SESSIONS_DIR)
+        await self.changed()
         session.generate_reply(instructions=ask.circle_instructions(
             req.question, ans.answer if ans else None, bool(ans and ans.confident)))
 
@@ -579,6 +587,11 @@ async def entrypoint(ctx: JobContext) -> None:
         max_tool_steps=6,
     )
     mechanic = Mechanic(ctx, state, frames, language, ui_language)
+
+    async def _final_summary(*_args) -> None:
+        await mechanic.summary.flush()  # the summary is ready the moment the call ends
+
+    ctx.add_shutdown_callback(_final_summary)
 
     # Live AR: the app tells us when it loses the part it was tracking, so we can find it again.
     def _on_ar(reader, participant_identity: str) -> None:

@@ -28,13 +28,18 @@ from pydantic import BaseModel
 log = logging.getLogger("repairmind.checker")
 
 Provider = Literal["anthropic", "gemini"]
-Purpose = Literal["review", "vision", "design", "translate"]
+Purpose = Literal["review", "vision", "design", "translate", "quick"]
 
 ANTHROPIC_MODEL = {"review": os.getenv("RMX_REVIEW_MODEL", "claude-opus-5-5"),
                    "vision": os.getenv("RMX_VISION_MODEL", "claude-opus-5-5"),
                    "design": os.getenv("RMX_DESIGN_MODEL", "claude-opus-5-5"),
-                   "translate": os.getenv("RMX_TRANSLATE_MODEL", "claude-opus-5-5")}
+                   "translate": os.getenv("RMX_TRANSLATE_MODEL", "claude-opus-5-5"),
+                   # Model routing: quick explanations (circle to ask, labelled diagrams) go to a fast model.
+                   # Safety second opinions and camera step checks never do; they keep the strong model above.
+                   "quick": os.getenv("RMX_QUICK_MODEL", "claude-haiku-5-5")}
 GEMINI_MODEL = os.getenv("RMX_GEMINI_CHECK_MODEL", "gemini-3.5-flash")
+GEMINI_QUICK_MODEL = os.getenv("RMX_GEMINI_QUICK_MODEL", "gemini-3.5-flash-lite")
+QUICK_PURPOSES = ("quick",)
 
 
 def _anthropic_key() -> bool:
@@ -87,8 +92,8 @@ GEMINI_DESIGN_FALLBACKS = _models("RMX_GEMINI_DESIGN_FALLBACK_MODELS", "gemini-3
 ATTEMPTS_PER_MODEL = max(1, int(os.getenv("RMX_MODEL_ATTEMPTS", "3")))
 # How long one call may take in total, across every retry and backup: a multiple of its per-request timeout,
 # capped in seconds so a busy provider can't keep the page waiting for minutes.
-BUDGET = {"review": 1.5, "vision": 1.5, "design": 2.0, "translate": 2.0}
-MAX_SECONDS = {"review": 60.0, "vision": 45.0, "design": float(os.getenv("RMX_DESIGN_MAX_SECONDS", "240")), "translate": 90.0}
+BUDGET = {"review": 1.5, "vision": 1.5, "design": 2.0, "translate": 2.0, "quick": 1.5}
+MAX_SECONDS = {"review": 60.0, "vision": 45.0, "design": float(os.getenv("RMX_DESIGN_MAX_SECONDS", "240")), "translate": 90.0, "quick": 25.0}
 
 
 _sleep = asyncio.sleep
@@ -136,7 +141,8 @@ def _chain(p: Provider, purpose: Purpose) -> list[tuple[Provider, str]]:
     """The models to try, in order: the configured one first, then backups."""
     out: list[tuple[Provider, str]] = []
     extra = GEMINI_DESIGN_FALLBACKS if purpose in ("design", "translate") else []
-    gem = list(dict.fromkeys([GEMINI_MODEL, *GEMINI_FALLBACKS, *extra]))
+    first = [GEMINI_QUICK_MODEL] if purpose in QUICK_PURPOSES else []  # fast first, the full model as backup
+    gem = list(dict.fromkeys([*first, GEMINI_MODEL, *GEMINI_FALLBACKS, *extra]))
     if p == "anthropic":
         out.append(("anthropic", ANTHROPIC_MODEL[purpose]))
         if os.getenv("RMX_CHECK_PROVIDER", "auto").strip().lower() == "auto" and _google_key():

@@ -23,6 +23,7 @@ import {
   TOPIC_ALERT,
   TOPIC_ASK,
   TOPIC_DIAGRAM,
+  TOPIC_NOTES,
   TOPIC_MARKER,
   TOPIC_STATE,
 } from "./types";
@@ -87,6 +88,8 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
   const { textStreams: diagramStreams } = useTextStream(TOPIC_DIAGRAM);
   const diagram = useMemo(() => lastJson<Diagram>(diagramStreams), [diagramStreams]);
   const [closedDiagrams, setClosedDiagrams] = useState(0);
+  const { textStreams: notesStreams } = useTextStream(TOPIC_NOTES);
+  const notes = useMemo(() => lastJson<{ notes: { at: string; text: string }[] }>(notesStreams)?.notes ?? [], [notesStreams]);
   const step3d = useMemo(() => lastJson<Step3D>(step3dStreams), [step3dStreams]);
   const view = useMemo(() => lastJson<SessionView>(stateStreams), [stateStreams]);
   const marker = useMemo(() => lastJson<Marker>(markerStreams), [markerStreams]);
@@ -282,6 +285,7 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
       diagram={diagram && diagramStreams.length > closedDiagrams && !arSuppressed ? diagram : null}
       onCloseDiagram={() => setClosedDiagrams(diagramStreams.length)}
       toast={toast}
+      notes={notes}
       frozen={frozen}
       onCloseFrozen={() => setFrozen(null)}
       micOn={isMicrophoneEnabled}
