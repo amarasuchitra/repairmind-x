@@ -37,6 +37,8 @@ _NOTE = {
     "escalate": lambda d, st: f"Handed to a human expert: {d.get('reason', '')}",
     "circle_ask": lambda d, st: f"You asked about a circled part: {(d.get('question') or '(by voice)').rstrip('.')}"
                                 + (f" Answer: {d['answer']}" if d.get("answer") else ""),
+    "known_fix": lambda d, st: f"Found a fix that worked before on this model: {d.get('diagnosis', '')}",
+    "part_search": lambda d, st: f"Searched shops for a part: {d.get('query', '')}",
     "speech_guard": lambda d, st: "The mechanic corrected itself after saying something the safety rules don't allow",
 }
 
@@ -119,6 +121,8 @@ def build(state: RepairSession) -> dict:
                         for p in state.precautions_required],
         "steps": steps,
         "failed_part": state.failed_part.get("part", "") if state.failed_part else "",
+        "parts": [{"part": p.get("part", ""), "number": p.get("number", ""), "links": p.get("links", [])}
+                  for p in state.parts],
         "next_time": next_time,
         "notes": notes(state),
     }
@@ -143,6 +147,12 @@ def to_markdown(s: dict) -> str:
                                           "can't be undone" if st["irreversible"] else "") if x)
             lines.append(f"{st['n']}. [{st['status']}] {st['text']}" + (f" ({extra})" if extra else ""))
         lines.append("")
+    if s.get("parts"):
+        lines += ["## Parts to look for"]
+        for p in s["parts"]:
+            links = ", ".join(f"[{lk['shop']}]({lk['url']})" for lk in p["links"])
+            lines.append(f"- {p['part']}" + (f" ({p['number']})" if p["number"] else "") + f": {links}")
+        lines += ["", "_Check the part number on the old part before buying._", ""]
     if s["next_time"]:
         lines += ["## Next time", *[f"- {x}" for x in s["next_time"]], ""]
     if s["notes"]:

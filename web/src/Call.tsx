@@ -24,12 +24,16 @@ import {
   TOPIC_ASK,
   TOPIC_DIAGRAM,
   TOPIC_NOTES,
+  TOPIC_PARTS,
+  type PartSearch,
   TOPIC_MARKER,
   TOPIC_STATE,
 } from "./types";
 
 import { ARLayer } from "./ar/ARLayer";
 import { CircleAsk, type CircleAskPayload } from "./ask/CircleAsk";
+import { installWake, listenForWake, wakeAvailability } from "./ask/wakeWord";
+import { speechTag } from "./i18n/languages";
 import { CallHud } from "./hud/CallHud";
 import { useI18n } from "./i18n";
 import type { OrbState } from "./hud/VoiceOrb";
@@ -89,6 +93,8 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
   const diagram = useMemo(() => lastJson<Diagram>(diagramStreams), [diagramStreams]);
   const [closedDiagrams, setClosedDiagrams] = useState(0);
   const { textStreams: notesStreams } = useTextStream(TOPIC_NOTES);
+  const { textStreams: partsStreams } = useTextStream(TOPIC_PARTS);
+  const parts = useMemo(() => lastJson<{ parts: PartSearch[] }>(partsStreams)?.parts ?? [], [partsStreams]);
   const notes = useMemo(() => lastJson<{ notes: { at: string; text: string }[] }>(notesStreams)?.notes ?? [], [notesStreams]);
   const step3d = useMemo(() => lastJson<Step3D>(step3dStreams), [step3dStreams]);
   const view = useMemo(() => lastJson<SessionView>(stateStreams), [stateStreams]);
@@ -202,6 +208,64 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
     };
   }, [ptt]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ---- "Hey RepairMind": hands-free, heard on this device only (see ask/wakeWord.ts) ----
+  const wakeLang = useMemo(() => speechTag("en"), []);
+  const [wakeAvail, setWakeAvail] = useState<"available" | "downloadable" | "downloading" | "unavailable">("unavailable");
+  const [wakeOn, setWakeOn] = useState(() => {
+    try { return localStorage.getItem("rmx.wake") === "1"; } catch { return false; }
+  });
+  const [installing, setInstalling] = useState(false);
+  const wakeTimer = useRef(0);
+  const wakeStarted = useRef(0);
+  useEffect(() => {
+    wakeAvailability(wakeLang).then(setWakeAvail).catch(() => setWakeAvail("unavailable"));
+  }, [wakeLang]);
+  const wakeReady = wakeAvail === "available";
+  useEffect(() => {
+    if (!wakeOn || !ptt || !wakeReady) return;
+    // Open the mic on the wake phrase; keep it open while the user keeps talking (up to 30 s), then close it.
+    const holdUntil = (ms: number) => {
+      window.clearTimeout(wakeTimer.current);
+      const left = Math.max(0, 30000 - (Date.now() - wakeStarted.current));
+      wakeTimer.current = window.setTimeout(() => talk(false), Math.min(ms, left));
+    };
+    const stop = listenForWake(
+      wakeLang,
+      () => {
+        wakeStarted.current = Date.now();
+        talk(true);
+        setToast(t("call.wake.heard"));
+        holdUntil(6000);
+      },
+      () => holdUntil(2500),
+    );
+    return () => {
+      stop();
+      window.clearTimeout(wakeTimer.current);
+    };
+  }, [wakeOn, ptt, wakeReady, wakeLang]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function toggleWake() {
+    const next = !wakeOn;
+    if (next && wakeAvail !== "available") {
+      setInstalling(true);
+      setToast(t("call.wake.installing"));
+      const ok = await installWake(wakeLang);
+      setInstalling(false);
+      const now = ok ? await wakeAvailability(wakeLang) : "unavailable";
+      setWakeAvail(now);
+      if (now !== "available") {
+        setToast(t("call.wake.failed"));
+        return;
+      }
+    }
+    setWakeOn(next);
+    try { localStorage.setItem("rmx.wake", next ? "1" : "0"); } catch { /* private mode */ }
+    if (next && !ptt) togglePtt(); // hands-free means the mic is closed until you say the phrase
+    setToast(next ? t("call.wake.on") : t("call.wake.off"));
+  }
+  const wakeAction =
+    wakeAvail === "unavailable" ? undefined : { state: installing ? ("installing" as const) : wakeOn && ptt ? ("on" as const) : ("off" as const), onToggle: toggleWake };
+
   async function switchCamera() {
     const next = facing === "environment" ? "user" : "environment";
     const pub = localParticipant.getTrackPublication(Track.Source.Camera);
@@ -278,7 +342,9 @@ function CallView({ room, onEnd }: { room: string; onEnd: (finished: boolean) =>
         talking,
         onTogglePtt: togglePtt,
         onTalk: talk,
+        wake: wakeAction,
       }}
+      parts={parts}
       ask={circling && !arSuppressed && (
         <CircleAsk host={host} mirrored={facing === "user"} onAsk={askCircle} onCancel={() => setCircling(false)} />
       )}
