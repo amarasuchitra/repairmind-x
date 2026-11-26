@@ -14,10 +14,11 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from livekit import api
 from pydantic import BaseModel
 
-from . import i18n
+from . import i18n, summary
 from .agent import AGENT_NAME, SESSIONS_DIR
 from .expert import products as expert_products
 from .inspection.api import router as inspection_router
@@ -26,6 +27,7 @@ from .library.api import router as library_router
 from .redesign.api import router as redesign_router
 from .upgrade.api import router as upgrade_router
 from .manuals import ManualIndex, manual_path
+from .session import RepairSession
 
 load_dotenv()
 
@@ -117,6 +119,25 @@ def token(req: TokenRequest) -> TokenResponse:
         .to_jwt()
     )
     return TokenResponse(server_url=url, participant_token=jwt, room=room)
+
+
+@app.get("/api/sessions/{room}/summary")
+def session_summary(room: str, format: str = "json"):
+    """The automatic repair summary for a call: JSON for the app, or Markdown to download (?format=md).
+    The room name is a random id only the caller's device knows, the same as for manual uploads."""
+    if not ROOM_RE.match(room):
+        raise HTTPException(400, "Unknown repair session.")
+    pj, pm = summary.paths(SESSIONS_DIR, room)
+    if pj.exists():
+        data = json.loads(pj.read_text(encoding="utf-8"))
+    elif (SESSIONS_DIR / f"{room}.json").exists():
+        data = summary.build(RepairSession.load(SESSIONS_DIR / f"{room}.json"))
+    else:
+        raise HTTPException(404, "No summary for this call yet.")
+    if format == "md":
+        return PlainTextResponse(summary.to_markdown(data), media_type="text/markdown; charset=utf-8",
+                                 headers={"Content-Disposition": f'attachment; filename="repair-{room}.md"'})
+    return data
 
 
 MAX_MANUAL_BYTES = 40 * 1024 * 1024

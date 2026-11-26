@@ -5,12 +5,38 @@ import type { OrbState } from "./hud/VoiceOrb";
 import { makeDemoVoice } from "./fx/demoVoice";
 import type { Diagram, SessionView } from "./types";
 import { CircleAsk } from "./ask/CircleAsk";
+import { CallSummary, type RepairSummary } from "./CallSummary";
 
 /**
  * Design preview at #demo: the real call screen with sample data and a simulated voice, so the
  * interface can be reviewed without a server, camera or LiveKit. #demo-alert shows a hazard stop,
- * #demo-amber shows a job that needs precautions, #demo-diagram a labelled diagram (teach mode).
+ * #demo-amber shows a job that needs precautions, #demo-diagram a labelled diagram (teach mode),
+ * #demo-summary the summary shown after a call.
  */
+const NOTES = [
+  { at: "00:12", text: "Device: Example belt-drive turntable EX-TT20 (model confirmed)" },
+  { at: "00:40", text: "Symptom: platter doesn't turn, motor hums" },
+  { at: "01:55", text: "Test: Spun the platter by hand: turns freely, no belt on the pulley" },
+  { at: "02:30", text: "Diagnosis: Worn drive belt" },
+  { at: "03:05", text: "Safety check done: The device is unplugged from the wall (show the loose plug on camera)" },
+  { at: "04:10", text: "You asked about a circled part: What is this? Answer: The brass motor pulley that drives the belt" },
+  { at: "05:20", text: "Step done (checked on camera): Take the mat off, then lift the platter straight up" },
+];
+const SUMMARY: RepairSummary = {
+  session_id: "demo", started: "2026-11-26 17:05", minutes: 9.5, device: "Example belt-drive turntable EX-TT20",
+  outcome: "in_progress", outcome_text: "In progress: 2 of 4 steps done",
+  symptoms: ["Platter doesn't turn, motor hums"], diagnosis: "Worn drive belt", confidence: 0.88,
+  precautions: [{ text: "Unplugged from the wall", done: true }, { text: "Stylus guard on, arm clipped in its rest", done: true }],
+  steps: [
+    { n: 1, text: "Switch the turntable off and unplug it from the wall.", status: "done", checked: "checked on camera", source: "" },
+    { n: 2, text: "Take the mat off, then lift the platter straight up and set it down face first on a towel.", status: "done", checked: "checked on camera", source: "" },
+    { n: 3, text: "Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon.", status: "active", checked: "", source: "" },
+    { n: 4, text: "Refit the platter, turn it by hand to seat the belt, then check the speed with the strobe dots.", status: "pending", checked: "", source: "" },
+  ],
+  next_time: ["Pick up at step 3: Loop the new belt round the sub-platter, then pull it over the motor pulley with the ribbon."],
+  notes: NOTES,
+};
+
 const DIAGRAM: Diagram = {
   title: "Inside the turntable",
   image: "demo/turntable-still.jpg",
@@ -84,8 +110,12 @@ export function Demo() {
         ? { ...VIEW, risk_level: "red", hazard: "Smoke near the motor housing" }
         : VIEW;
 
+  if (variant === "summary") {
+    return <CallSummary room="demo" data={SUMMARY} onResume={() => undefined} onDone={() => { window.location.hash = "#demo"; }} />;
+  }
   return (
     <CallHud
+      notes={NOTES}
       status={{ speaking: "Speaking", listening: "Listening", thinking: "Thinking", connecting: "Connecting", idle: "Online" }[orbState]}
       orbState={orbState}
       bands={[]}

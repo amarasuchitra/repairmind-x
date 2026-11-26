@@ -159,7 +159,14 @@ These ideas were inspired by [Atticus](https://github.com/SaarthurR/atticus-mac)
 - **Push-to-talk.** Turn it on and the mic stays closed until you hold the talk button, or the Space bar on a keyboard, so workshop noise doesn't interrupt. The setting is remembered on that device.
 - **Labelled diagrams (teach mode).** When you ask "what's in here?" or "explain this", the mechanic calls `draw_diagram`. Up to six parts are found in one vision call and numbered on a still, with the names listed underneath so they never cover the parts. Parts it can't find clearly are left out and named, never guessed.
 
-Asks run one at a time, at most one every two seconds. They are ignored during a hazard stop. Preview them without a call at `#demo` (tools), `#demo-diagram` and `#demo-circle`.
+**Call notes and repair summary (session copilot).** The agent keeps a plain timeline of the call. It records what was identified, tested, diagnosed, checked and done, plus anything you asked about. The notes come from what the session recorded, never from the model's memory, so they can't claim a step was checked when it wasn't. The summary is rewritten in the background a moment after each change, and once more as the call ends. That way it is ready straight away and survives a dropped call.
+- **During the call:** the notes appear under **Show details**.
+- **After the call:** you get the summary, with the outcome, the diagnosis, the steps, the safety checks, what to do next time and the notes. You can download it as Markdown or continue the repair.
+- **API:** `GET /api/sessions/{room}/summary` returns JSON, and `?format=md` returns Markdown.
+
+**Model routing.** Quick explanations, such as circle-to-ask answers and finding parts for a diagram, try a fast model first: `gemini-3.5-flash-lite` (free) or Claude Haiku. They fall back to the full model. The safety second opinion and camera step checks always use the full model.
+
+Asks run one at a time, at most one every two seconds. They are ignored during a hazard stop. Preview them without a call at `#demo` (tools), `#demo-diagram`, `#demo-circle` and `#demo-summary`.
 
 | Circle to ask | Push-to-talk | Labelled diagram |
 | --- | --- | --- |
