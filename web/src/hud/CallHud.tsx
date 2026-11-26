@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
-import type { Alert, Marker, SessionView, StepView } from "../types";
+import type { Alert, Diagram, Marker, SessionView, StepView } from "../types";
 import { VoiceOrb, type OrbState } from "./VoiceOrb";
-import { Flip, Logo, Mic, MicOff, PhoneOff } from "../ui/Icons";
+import { Flip, Hand, Lasso, Logo, Mic, MicOff, NextStep, PhoneOff } from "../ui/Icons";
 import { AnatomyFigure, hasAnatomy } from "../anatomy/Anatomy";
 import { LanguagePicker, useI18n } from "../i18n";
 import type { Key } from "../i18n/en";
@@ -30,8 +30,26 @@ export interface CallHudProps {
   alert: Alert | null;
   onDismissAlert: () => void;
   hostRef?: (el: HTMLElement | null) => void;
+  /** Hands-on tools: circle to ask, "What next?" and push-to-talk. Left out, the call screen hides them. */
+  actions?: HudActions;
+  /** The circle-to-ask drawing layer, shown over the live video while circling. */
+  ask?: ReactNode;
+  diagram?: Diagram | null;
+  onCloseDiagram?: () => void;
+  /** A short confirmation, e.g. "Sent. The mechanic is looking." */
+  toast?: string;
   /** Optional per-frame audio source for the orb (used by the design preview). */
   voice?: () => number[];
+}
+
+export interface HudActions {
+  circling: boolean;
+  onCircle: () => void;
+  onNext: () => void;
+  ptt: boolean; // push-to-talk mode: the mic is open only while the hold button (or Space) is held
+  talking: boolean;
+  onTogglePtt: () => void;
+  onTalk: (down: boolean) => void;
 }
 
 const STATE_LINE: Record<OrbState, Key> = {
@@ -82,6 +100,22 @@ export function CallHud(p: CallHudProps) {
           <span className="scan" />
         </div>
         {p.overlay}
+        {p.ask}
+        {p.actions && !p.actions.circling && (
+          <div className="hud-actions">
+            <button className="act" onClick={p.actions.onCircle} title={t("call.circle.hint")}>
+              <Lasso size={20} /><span>{t("call.circle")}</span>
+            </button>
+            <button className="act" onClick={p.actions.onNext}>
+              <NextStep size={20} /><span>{t("call.next")}</span>
+            </button>
+            <button className={`act${p.actions.ptt ? " on" : ""}`} aria-pressed={p.actions.ptt} onClick={p.actions.onTogglePtt}
+                    title={p.actions.ptt ? t("call.ptt.on") : t("call.ptt.off")}>
+              <Hand size={20} /><span>{t("call.ptt")}</span>
+            </button>
+          </div>
+        )}
+        {p.toast && <div className="hud-toast" role="status">{p.toast}</div>}
         <div className="hud-readout" aria-label="Session status">
           <div><b>{t("call.device")}</b> {v?.device ? auto(v.device) : t("call.scanning")}</div>
         </div>
@@ -116,6 +150,8 @@ export function CallHud(p: CallHudProps) {
         </section>
       )}
 
+      {p.diagram && <DiagramView d={p.diagram} onClose={p.onCloseDiagram} />}
+
       <aside className="panel">
         <div className={`presence presence-${p.orbState}`}>
           <VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={160} detail="full" />
@@ -140,9 +176,18 @@ export function CallHud(p: CallHudProps) {
       </aside>
 
       <footer className="controls">
-        <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
-          {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? t("call.mute") : t("call.unmute")}</span>
-        </button>
+        {p.actions?.ptt ? (
+          <button className={`ctl ptt${p.actions.talking ? " talking" : ""}`} aria-pressed={p.actions.talking}
+                  onPointerDown={(e) => { e.currentTarget.setPointerCapture?.(e.pointerId); p.actions!.onTalk(true); }}
+                  onPointerUp={() => p.actions!.onTalk(false)} onPointerCancel={() => p.actions!.onTalk(false)}
+                  onContextMenu={(e) => e.preventDefault()}>
+            <Mic size={18} /><span>{p.actions.talking ? t("call.ptt.talking") : t("call.ptt.hold")}</span>
+          </button>
+        ) : (
+          <button className={p.micOn ? "ctl" : "ctl off"} onClick={p.onToggleMic} aria-pressed={!p.micOn}>
+            {p.micOn ? <Mic size={18} /> : <MicOff size={18} />}<span>{p.micOn ? t("call.mute") : t("call.unmute")}</span>
+          </button>
+        )}
         <div className="orb-slot"><VoiceOrb state={p.orbState} bands={p.bands} voice={p.voice} size={92} /></div>
         <button className="ctl" onClick={p.onSwitchCamera}><Flip size={18} /><span>{t("call.flip")}</span></button>
         <button className="ctl danger" onClick={p.onEnd}><PhoneOff size={18} /><span>{t("call.end")}</span></button>
@@ -158,6 +203,38 @@ export function CallHud(p: CallHudProps) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Teach mode: a still of the camera with numbered parts, and the names in a numbered list under it,
+ *  so labels never cover the parts or each other, even on a small phone screen. */
+export function DiagramView({ d, onClose }: { d: Diagram; onClose?: () => void }) {
+  const { t, auto } = useI18n();
+  return (
+    <section className="frozen diagram" aria-label={t("call.diagram")}>
+      <div className="frozen-img">
+        <img src={d.image} alt={t("call.still")} />
+        <svg className="diagram-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          {d.items.map((i) => {
+            const x0 = (i.x - i.w / 2) * 100, y0 = (i.y - i.h / 2) * 100;
+            return <path key={i.n} className="mk-box" d={brackets(x0, y0, x0 + i.w * 100, y0 + i.h * 100, Math.min(i.w, i.h) * 30 + 1.5)} />;
+          })}
+        </svg>
+        {d.items.map((i) => (
+          <b key={i.n} className="dg-num" aria-hidden
+             style={{ left: `${Math.max(0, i.x - i.w / 2) * 100}%`, top: `${Math.max(0, i.y - i.h / 2) * 100}%` }}>{i.n}</b>
+        ))}
+      </div>
+      <div className="frozen-bar diagram-bar">
+        <div>
+          <b>{auto(d.title)}</b>
+          <ol className="dg-legend">
+            {d.items.map((i) => <li key={i.n}><b>{i.n}</b>{auto(i.label)}</li>)}
+          </ol>
+        </div>
+        {onClose && <button className="ghost" onClick={onClose}>{t("call.backLive")}</button>}
+      </div>
+    </section>
   );
 }
 

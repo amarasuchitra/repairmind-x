@@ -1028,3 +1028,54 @@ html[data-script="other"] body, html[data-script="other"] body * {
 .sx-assist i { width: 8px; height: 8px; border-radius: 50%; background: var(--hud); box-shadow: 0 0 10px var(--hud); animation: sx-assist 2.4s ease-in-out infinite; }
 @keyframes sx-assist { 50% { opacity: 0.45; box-shadow: 0 0 4px var(--hud); } }
 @media (prefers-reduced-motion: reduce) { .sx-assist i { animation: none; } }
+
+/* ---- Hands-on tools: circle to ask, "What next?", push-to-talk, labelled diagrams ---- */
+.hud-actions { position: absolute; z-index: 4; right: 16px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 10px; }
+.hud-actions .act { display: inline-flex; align-items: center; gap: 8px; padding: 0.55rem 0.9rem; border-radius: 999px; min-width: 0;
+  background: var(--glass-strong, rgba(4,14,30,.72)); color: var(--text); border: 1px solid var(--glass-line); backdrop-filter: blur(8px);
+  font: 600 0.78rem/1 var(--sans); letter-spacing: 0.02em; cursor: pointer; }
+.hud-actions .act:hover { border-color: var(--glass-line-hi, var(--hud)); }
+.hud-actions .act.on { border-color: var(--hud); color: var(--hud); box-shadow: 0 0 0 1px var(--hud) inset; }
+.hud-toast { position: absolute; z-index: 5; left: 50%; top: 64px; transform: translateX(-50%); max-width: calc(100% - 32px);
+  padding: 8px 14px; border-radius: 999px; background: var(--glass-strong, rgba(4,14,30,.85)); border: 1px solid var(--glass-line);
+  font-size: 0.85rem; text-align: center; }
+
+.circle-ask { position: absolute; inset: 0; z-index: 6; touch-action: none; cursor: crosshair; background: rgba(0, 0, 0, 0.18); }
+.circle-stroke { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.circle-stroke path { fill: rgba(80, 220, 255, 0.10); stroke: var(--hud); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 8 6; filter: drop-shadow(0 0 6px rgba(80, 220, 255, 0.7)); }
+.circle-hint { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+  max-width: calc(100% - 32px); padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--glass-strong, rgba(4,14,30,.85));
+  border: 1px solid var(--hud); font-weight: 600; font-size: 0.9rem; }
+.circle-hint .ghost { padding: 0.4rem 0.8rem; }
+.circle-sheet { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(460px, calc(100% - 32px));
+  display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: var(--glass-strong, rgba(4,14,30,.92));
+  border: 1px solid var(--glass-line); backdrop-filter: blur(10px); cursor: auto; }
+.circle-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.circle-chips .chip { padding: 0.5rem 0.8rem; border-radius: 999px; background: rgba(80, 220, 255, 0.08); color: var(--text);
+  border: 1px solid var(--glass-line); font-size: 0.85rem; min-width: 0; }
+.circle-row { display: flex; gap: 8px; }
+.circle-row input { flex: 1 1 auto; min-width: 0; }
+.circle-row .ghost { flex: 1 1 0; }
+
+.hud .ctl.ptt { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hud .ctl.ptt.talking { background: rgba(80, 220, 255, 0.22); border-color: var(--hud); color: #fff; box-shadow: 0 0 18px -2px var(--hud); }
+
+.diagram .frozen-img { overflow: visible; }
+.diagram-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.diagram-lines .mk-box { fill: none; stroke: var(--hud); vector-effect: non-scaling-stroke; stroke-width: 2.5; }
+.dg-num { position: absolute; transform: translate(-40%, -40%); display: grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--hud); color: #02121c; font-size: 0.8rem; box-shadow: 0 0 0 2px rgba(2, 8, 18, 0.9); }
+.diagram-bar { align-items: flex-start; gap: 12px; }
+.dg-legend { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-weight: 500; }
+.dg-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.dg-legend b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--hud);
+  color: #02121c; font-size: 0.75rem; }
+
+@media (max-width: 600px) {
+  .hud-actions { right: 10px; gap: 8px; }
+  .hud-actions .act { padding: 0.7rem; }
+  .hud-actions .act span { display: none; }
+  .hud-toast { top: 52px; font-size: 0.8rem; }
+}
+.diagram-bar .ghost { white-space: nowrap; flex: 0 0 auto; }

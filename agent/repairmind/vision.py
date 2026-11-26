@@ -108,6 +108,38 @@ async def locate(frame_b64: str, description: str) -> Location | None:
                         "of the image size. If it's not clearly visible, set found=false.", Location)
 
 
+class GeminiBoxes(BaseModel):
+    items: list[GeminiBox] = Field(description="one per requested part, in the same order")
+
+
+class Locations(BaseModel):
+    items: list[Location] = Field(description="one per requested part, in the same order")
+
+
+async def locate_many(frame_b64: str, descriptions: list[str]) -> list[Location] | None:
+    """Several parts in one call, for labelled diagrams. Same order as asked; None if vision is unavailable."""
+    if not available() or not descriptions:
+        return None
+    listed = "\n".join(f"{i + 1}. {d}" for i, d in enumerate(descriptions))
+    if checker.provider() == "gemini":
+        g = await _parse([frame_b64], "Detect each of these parts, in this order:\n" + listed + "\nReturn one item "
+                         "per part with found and box_2d as [ymin, xmin, ymax, xmax] normalised to 0-1000. If a "
+                         "part isn't clearly visible, set found=false for it. Never guess.", GeminiBoxes)
+        if not isinstance(g, GeminiBoxes):
+            return None
+        locs = [gemini_box_to_location(b) for b in g.items]
+    else:
+        r = await _parse([frame_b64], "Find each of these parts in the photo, in this order:\n" + listed + "\nGive "
+                         "one item per part with its bounding box as fractions of the image size. If a part isn't "
+                         "clearly visible, set found=false for it. Never guess.", Locations)
+        if not isinstance(r, Locations):
+            return None
+        locs = list(r.items)
+    # A short or long answer must not shift labels onto the wrong parts: pad with "not found", cut the rest.
+    locs = locs[:len(descriptions)]
+    return locs + [Location(found=False, note="not returned")] * (len(descriptions) - len(locs))
+
+
 def gemini_box_to_location(g: GeminiBox) -> Location:
     if not g.found or len(g.box_2d) != 4:
         return Location(found=False, note=g.note or "not visible")

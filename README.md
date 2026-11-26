@@ -150,6 +150,21 @@ Open `/#demo` to preview the call screen with sample data and a simulated voice,
 |---|---|---|---|
 | ![Start page](docs/screenshots/v4-phone.png) | ![Phone call](docs/screenshots/v2-call-phone.png) | ![Hazard stop](docs/screenshots/v2-call-phone-hazard.png) | ![Desktop call with anatomy view](docs/screenshots/v4-call-desktop.png) |
 
+## Hands-on tools during the call
+
+These ideas were inspired by [Atticus](https://github.com/SaarthurR/atticus-mac), a voice and screen assistant for macOS. No code was copied: Atticus is a Swift app, and these are written for the web call.
+
+- **Circle to ask.** Tap **Circle**, draw a loop around a part on the live video, and pick a quick question, type one, or say it. The phone crops that area at full camera resolution and the mechanic marks it on screen as "your circle". A close-up vision model answers first. The mechanic treats your words as a question, never as instructions. Anything that tells you to do something to the device still goes through `propose_step` and the safety gates.
+- **What next?** One tap asks the mechanic for the single next thing to do from the current repair state. That is a missing precaution first, then the next allowed step, or the next diagnostic question.
+- **Push-to-talk.** Turn it on and the mic stays closed until you hold the talk button, or the Space bar on a keyboard, so workshop noise doesn't interrupt. The setting is remembered on that device.
+- **Labelled diagrams (teach mode).** When you ask "what's in here?" or "explain this", the mechanic calls `draw_diagram`. Up to six parts are found in one vision call and numbered on a still, with the names listed underneath so they never cover the parts. Parts it can't find clearly are left out and named, never guessed.
+
+Asks run one at a time, at most one every two seconds. They are ignored during a hazard stop. Preview them without a call at `#demo` (tools), `#demo-diagram` and `#demo-circle`.
+
+| Circle to ask | Push-to-talk | Labelled diagram |
+| --- | --- | --- |
+| ![Circle to ask](docs/screenshots/tools-phone-circle-ask.png) | ![Push-to-talk](docs/screenshots/tools-phone-ptt.png) | ![Diagram](docs/screenshots/tools-phone-diagram.png) |
+
 ## Design lab (`#lab`)
 
 Beyond repair: bring an idea, get an engineering breakdown that is checked, simulated and reviewed.

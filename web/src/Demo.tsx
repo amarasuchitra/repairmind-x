@@ -3,13 +3,26 @@ import { CameraView } from "./fx/showroom/CameraView";
 import { CallHud, MarkerOverlay } from "./hud/CallHud";
 import type { OrbState } from "./hud/VoiceOrb";
 import { makeDemoVoice } from "./fx/demoVoice";
-import type { SessionView } from "./types";
+import type { Diagram, SessionView } from "./types";
+import { CircleAsk } from "./ask/CircleAsk";
 
 /**
  * Design preview at #demo: the real call screen with sample data and a simulated voice, so the
  * interface can be reviewed without a server, camera or LiveKit. #demo-alert shows a hazard stop,
- * #demo-amber shows a job that needs precautions.
+ * #demo-amber shows a job that needs precautions, #demo-diagram a labelled diagram (teach mode).
  */
+const DIAGRAM: Diagram = {
+  title: "Inside the turntable",
+  image: "demo/turntable-still.jpg",
+  items: [
+    { n: 1, label: "motor pulley", x: 0.323, y: 0.381, w: 0.04, h: 0.06 },
+    { n: 2, label: "sub-platter", x: 0.405, y: 0.465, w: 0.105, h: 0.13 },
+    { n: 3, label: "speed controls", x: 0.295, y: 0.6, w: 0.08, h: 0.06 },
+    { n: 4, label: "tonearm", x: 0.576, y: 0.435, w: 0.06, h: 0.28 },
+    { n: 5, label: "platter (lifted off)", x: 0.79, y: 0.7, w: 0.3, h: 0.38 },
+  ],
+};
+
 const VIEW: SessionView = {
   session_id: "demo",
   device: "Example belt-drive turntable (EX-TT20)",
@@ -52,6 +65,12 @@ export function Demo() {
   }, [phase, fixed]);
   const orbState = fixed ?? CYCLE[phase].state;
   const [alertOpen, setAlertOpen] = useState(variant === "alert");
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const [circling, setCircling] = useState(variant === "circle");
+  const [ptt, setPtt] = useState(false);
+  const [talking, setTalking] = useState(false);
+  const [toast, setToast] = useState("");
+  const [diagramOpen, setDiagramOpen] = useState(variant === "diagram");
   // the AR marker follows the motor pulley as the handheld camera moves
   const [pin, setPin] = useState({ x: 0.3, y: 0.36 });
   const onPin = useCallback((x: number, y: number) => {
@@ -83,6 +102,23 @@ export function Demo() {
           <span className="ar-label demo-ar-label" style={{ left: `${pin.x * 100}%`, top: `${(pin.y - 0.11) * 100}%` }}>MOTOR PULLEY</span>
         </div>
       }
+      hostRef={setHost}
+      actions={{
+        circling,
+        onCircle: () => setCircling(true),
+        onNext: () => setToast("Asked the mechanic what's next."),
+        ptt,
+        talking,
+        onTogglePtt: () => setPtt((v) => !v),
+        onTalk: setTalking,
+      }}
+      ask={circling && (
+        <CircleAsk host={host} mirrored={false} onCancel={() => setCircling(false)}
+                   onAsk={() => { setCircling(false); setToast("Sent. The mechanic is looking."); }} />
+      )}
+      toast={toast}
+      diagram={diagramOpen ? DIAGRAM : null}
+      onCloseDiagram={() => setDiagramOpen(false)}
       frozen={null}
       onCloseFrozen={() => undefined}
       micOn
