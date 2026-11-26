@@ -28,7 +28,7 @@ from livekit.agents import (
 from livekit.agents.voice import VoiceActivityVideoSampler
 from livekit.plugins import google
 
-from . import ar, i18n, reviewer, safety, sources, speech_guard, vision
+from . import ar, ask, i18n, reviewer, safety, sources, speech_guard, vision
 from .audio_warmup import warm_up_resampler
 from .frames import FrameGrabber
 from .manuals import ManualIndex, manual_path
@@ -52,6 +52,8 @@ TOPIC_MARKER = "rmx.marker"
 TOPIC_ALERT = "rmx.alert"
 TOPIC_3D = "rmx.3d"
 TOPIC_AR_EVENTS = "rmx.ar"
+TOPIC_ASK = "rmx.ask"  # app -> agent: circle to ask, "what next?"
+TOPIC_DIAGRAM = "rmx.diagram"  # agent -> app: labelled diagram on a still
 
 
 class Mechanic(Agent):
@@ -64,6 +66,7 @@ class Mechanic(Agent):
         self.session_path = SESSIONS_DIR / f"{state.session_id}.json"
         self._marker_seq = 0
         self.ar_target: ar.ARTarget | None = None
+        self.ask_throttle = ask.Throttle()
 
     def _manual(self) -> ManualIndex | None:
         path = manual_path(SESSIONS_DIR, self.state.session_id)
@@ -387,6 +390,58 @@ class Mechanic(Agent):
         })
 
     @function_tool
+    async def draw_diagram(self, context: RunContext, title: str, parts: list[str], labels: list[str]) -> str:
+        """Teach mode: label several parts on a still of the camera, numbered, so you can explain how
+        something works or what the parts are. Use it when the user asks "what's in here?" or "explain this".
+
+        Args:
+            title: Short heading, e.g. "Inside the pump".
+            parts: Up to 6 precise descriptions to find, e.g. "the white impeller in the centre".
+            labels: Short on-screen labels, same order, e.g. "impeller".
+        """
+        n = min(len(parts), len(labels), ask.MAX_DIAGRAM_PARTS)
+        if n == 0:
+            return "Give at least one part and its label."
+        parts, labels = [p[:200] for p in parts[:n]], [lb[:40] for lb in labels[:n]]
+        frame = self.frames.jpeg_b64(max_side=1280) if self.frames else None
+        if frame is None:
+            return "No camera frame yet."
+        locs = await vision.locate_many(frame, parts)
+        if locs is None:
+            return "Diagrams are unavailable right now. Explain in words, part by part."
+        boxes = [ask.Box(lc.x_center, lc.y_center, lc.width, lc.height) if lc.found else None for lc in locs]
+        items = ask.diagram_items(labels, boxes)
+        if items:
+            await self.publish(TOPIC_DIAGRAM, {"title": title[:60], "image": "data:image/jpeg;base64," + frame,
+                                               "items": items})
+        return ask.diagram_result(labels, boxes)
+
+    async def answer_circle(self, req: ask.AskRequest, session: AgentSession) -> None:
+        """The user circled something on the live video: mark it, look closely, and let the mechanic answer."""
+        assert req.box is not None
+        b = req.box
+        frame = self.frames.jpeg_b64(max_side=960) if self.frames else None
+        self._marker_seq += 1
+        marker = {"x": b.x, "y": b.y, "w": b.w, "h": b.h, "label": "your circle", "precise": bool(frame),
+                  "id": self._marker_seq, "action": "", "step_id": ""}
+        if frame:
+            marker["image"] = "data:image/jpeg;base64," + frame
+        self.ar_target = None  # the user's own circle isn't re-found by description
+        await self.publish(TOPIC_MARKER, marker)
+        close = req.image_b64
+        if not close:
+            full = self.frames.jpeg_b64(max_side=2048) if self.frames else None
+            close = ask.crop_b64(full, b) if full else ""
+        ans = await vision.ask(close, ask.vision_question(req.question, self.state.device)) if close else None
+        self.state._record("circle_ask", question=req.question, answer=ans.answer if ans else "")
+        self.state.save(SESSIONS_DIR)
+        session.generate_reply(instructions=ask.circle_instructions(
+            req.question, ans.answer if ans else None, bool(ans and ans.confident)))
+
+    def what_next(self, session: AgentSession) -> None:
+        session.generate_reply(instructions=ask.next_instructions(self.state.ui_state()))
+
+    @function_tool
     async def read_label(self, context: RunContext) -> str:
         """Read the brand and exact model from the rating label in the current full-resolution frame.
         Ask the user to hold the camera close and steady on the label first."""
@@ -538,6 +593,28 @@ async def entrypoint(ctx: JobContext) -> None:
         asyncio.create_task(handle())
 
     ctx.room.register_text_stream_handler(TOPIC_AR_EVENTS, _on_ar)
+
+    # Circle to ask and "What next?" from the call screen. One at a time, so taps can't flood the model.
+    def _on_ask(reader, participant_identity: str) -> None:
+        async def handle() -> None:
+            if not mechanic.ask_throttle.try_start():
+                return
+            try:
+                req = ask.parse_ask(await reader.read_all())
+                if req is None or state.hazard_stop:
+                    return  # during a hazard stop nothing distracts from it
+                if req.kind == "next":
+                    mechanic.what_next(session)
+                else:
+                    await mechanic.answer_circle(req, session)
+            except Exception:
+                log.exception("ask failed")
+            finally:
+                mechanic.ask_throttle.done()
+
+        asyncio.create_task(handle())
+
+    ctx.room.register_text_stream_handler(TOPIC_ASK, _on_ask)
 
     # Safety net that doesn't depend on the model noticing: scan every final user transcript.
     @session.on("user_input_transcribed")

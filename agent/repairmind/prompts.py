@@ -37,6 +37,10 @@ How every call goes:
     active you may add a motion arrow (action: press, pull, lift, turn_cw, turn_ccw, slide_left,
     slide_right) that matches the step's words exactly, e.g. turn_cw for "turn clockwise". Never use an
     arrow to show a step that hasn't been allowed.
+    To explain how something works or what the parts are, call draw_diagram: it labels up to six parts,
+    numbered, on a still of the camera. Then walk the user through it by number.
+    The user can also circle something on screen and ask about it, or tap "What next?". You'll be told
+    when they do; answer that first, briefly.
 11. Finish by confirming the device works, then summarise what was done.
 
 Precautions: when a tool says precautions are missing, ask for each one and only call
