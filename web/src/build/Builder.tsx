@@ -209,6 +209,7 @@ export function Builder({ onBack }: { onBack: () => void }) {
         <div className="lab-brand"><span className="lab-mark" aria-hidden>◆</span> RepairMind X <i>/</i> <b>{t("bd.title")}</b></div>
         <LanguagePicker className="lab-lang" />
         <div className="bd-top-actions">
+          <button className="lab-btn solid" onClick={() => { window.location.hash = "make"; }}>{t("gd.talkIt")}</button>
           {view === "build" && <button className="lab-btn" onClick={() => fileIn.current?.click()}>{t("bd.openFile")}</button>}
           {view === "build" && project && <button className="lab-btn" onClick={() => download(`${(project.name || "project").replace(/[^\w-]+/g, "_")}.json`, JSON.stringify(project, null, 1), "application/json")}>{t("bd.saveFile")}</button>}
           {view !== "idea" && <button className="lab-btn" onClick={() => { setProject(null); setIdea(EMPTY_IDEA); setNote(""); setView("idea"); }}>{t("bd.new")}</button>}
@@ -608,7 +609,7 @@ function ProductForm({ project, setProject, onFiles }: { project: Project; setPr
 
 // --- outputs ----------------------------------------------------------------------------------------------
 
-function WiringTab({ report }: { report: Report }) {
+export function WiringTab({ report }: { report: Report }) {
   const { t, auto } = useI18n();
   if (!report.conns.length) return <p className="lab-muted">{t("bd.stepsEmpty")}</p>;
   return (
@@ -632,7 +633,7 @@ function WiringTab({ report }: { report: Report }) {
   );
 }
 
-function PartsTab({ report }: { report: Report }) {
+export function PartsTab({ report }: { report: Report }) {
   const { t, auto } = useI18n();
   if (!report.bom.length) return <p className="lab-muted">{t("bd.stepsEmpty")}</p>;
   return (
@@ -653,7 +654,7 @@ function PartsTab({ report }: { report: Report }) {
   );
 }
 
-function CodeTab({ project, report }: { project: Project; report: Report }) {
+export function CodeTab({ project, report }: { project: Project; report: Report }) {
   const { t } = useI18n();
   const { name, code } = useMemo(() => firmware(project, report), [project, report]);
   const [copied, setCopied] = useState(false);
@@ -671,7 +672,7 @@ function CodeTab({ project, report }: { project: Project; report: Report }) {
   );
 }
 
-function StepsTab({ report }: { report: Report }) {
+export function StepsTab({ report }: { report: Report }) {
   const { t, auto } = useI18n();
   if (!report.steps.length) return <p className="lab-muted">{t("bd.stepsEmpty")}</p>;
   return (

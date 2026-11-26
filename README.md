@@ -216,6 +216,44 @@ cd agent && .venv/bin/python scripts/eval_ideas.py              # all 50, about 
 
 Each run is saved in `agent/evals/results/` and compared with the previous one, listing ideas that got 10 or more points worse or better. Run it before and after changing a prompt, a model or the library, so "it feels smarter" becomes a number.
 
+## Three screens: intro, start page, assistant
+
+The app has three screens. The **intro** and the scrolling **start page** are unchanged. Everything after them happens
+on one **assistant** screen (`#assistant`, `web/src/workspace/`), laid out like a chat app: chats and tools on the
+left, the conversation in the middle, and a panel on the right where any tool opens. Nothing is a separate page any
+more: the live repair call, the design lab, the parts canvas, redesign, bulk inspection and the references all open
+as panels beside the conversation, and the assistant can open them itself. Old addresses (`#lab`, `#build`,
+`#redesign`, `#inspect`, `#demo`) open the assistant with that panel.
+
+| Part | Where | What it does |
+|---|---|---|
+| One assistant | `agent/repairmind/guide/`, `POST /api/guide/turn` | One general engineer for everything: fixing (it offers the live call, or diagnoses from photos in the chat), making and improving things, mechanisms, redesign, inspection, and plain questions answered from the cited library. One model call per turn through `checker.parse` (Gemini or Claude, same retries and backups), with the project's live state. It picks tools; the page runs them on the real engines and returns the results as facts, and it carries on by itself (up to 4 rounds). Plain-code `safety.py` can only make it more careful. |
+| Tools it drives | `web/src/workspace/tools.ts`, `Workspace.tsx` | The idea analyst, the parts checker and fixes, behaviours, the virtual bench, the 3D body, the design lab's engineer and rethink loop, build steps, plus: open any panel, start the live repair call, search the library, ask for a photo (opens the camera), check a photo of the real build, show the buying list, download the build pack. |
+| Ways in | `Workspace.tsx` | Type; dictate (mic); **voice mode** (hands-free: it listens, answers out loud, listens again; works in Chrome, Edge and Safari); take a photo with the camera; share the screen (one frame is sent); upload files or a whole folder; drag and drop. |
+| Chats | browser storage (`rmx.chats`, `rmx.chat.<id>`) | Each chat keeps its own conversation and project; switching chats switches the project every panel sees. |
+
+### Building real things precisely
+
+What the best hardware tools do well, tied to the checker so it can't drift from the design, plus what they miss:
+
+| Feature | Where | Compared with others |
+|---|---|---|
+| Wire by wire | `web/src/workspace/precision.ts` `wireList` | Every connection is one numbered wire with the usual colours (red +, black ground, orange 3.3 V, a different colour per signal), to tick off as it's placed. Fritzing and Cirkit Designer draw a picture; this is a list you build from, and the assistant names wires by number. |
+| Photo check of the real build | `agent/repairmind/guide/photo_check.py`, `POST /api/guide/check-build` | A photo of the breadboard is compared wire by wire with the list: looks right, wrong (with the fix) or can't see. It may only say "right" when it sees both ends; plain code then decides "don't power on yet" if anything is wrong or unclear. Wokwi, Tinkercad and Flux check the circuit you drew, never the one on your desk. |
+| Readings to expect | `precision.ts` `readings` | What a correct build reads on a multimeter, power-off short check first, then supply, booster, board and 3.3 V pins and total current, with what it means if the reading is off. Ranges come from the parts' data, not the model. Simulators stop at the simulation. |
+| Parts to buy | `precision.ts` `buyList`, `buyCsv` | Quantities and rupee prices from the checker, with Robu, Amazon.in and Robocraze search links and a CSV. |
+| Build pack | `precision.ts` `buildPack` | One Markdown file (parts, wire checklist, pins, readings, steps, libraries, code) plus the `.ino`, readable on a phone at the bench. |
+
+The assistant uses these during the build-along: it names the wires for each step, asks for the multimeter reading
+and compares it with the expected range, and asks for a photo and checks it before power goes on.
+
+| Start | Wire by wire, checked from a photo | Live repair call in the panel | Phone, voice mode |
+|---|---|---|---|
+| ![Start](docs/screenshots/workspace/desktop-1-start.png) | ![Photo check](docs/screenshots/workspace/desktop-4-photo-check.png) | ![Repair call](docs/screenshots/workspace/desktop-6-repair-call.png) | ![Voice](docs/screenshots/workspace/phone-4-voice.png) |
+
+The screenshots use scripted assistant replies (no AI key was available when they were taken); the tools behind them
+(checker, wire list, readings, buying list) ran for real.
+
 ## Idea to reality (`#build`)
 
 For people with an idea but no hardware background. Describe a new invention, or something you own and how

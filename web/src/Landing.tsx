@@ -20,6 +20,7 @@ export interface LandingProps {
   onStart: (room?: string) => void;
   onInspect: () => void;
   onLab: () => void;
+  onMake: () => void;
   onRedesign: () => void;
   /** the calm assistant: one box to say or type what you need */
   onAssistant: () => void;
@@ -235,6 +236,7 @@ export function Landing(p: LandingProps) {
           <LanguagePicker />
           <SoundSwitch />
           <a href="#assistant" className="sx-assist" onClick={(e) => { e.preventDefault(); p.onAssistant(); }}><i aria-hidden />{t("start.nav.assistant")}</a>
+          <a href="#make" onClick={(e) => { e.preventDefault(); p.onMake(); }}>{t("start.nav.make")}</a>
           <a href="#lab" onClick={(e) => { e.preventDefault(); p.onLab(); }}>{t("start.nav.lab")}</a>
           <a href="#redesign" onClick={(e) => { e.preventDefault(); p.onRedesign(); }}>{t("start.nav.redesign")}</a>
           <a href="#inspect" onClick={(e) => { e.preventDefault(); p.onInspect(); }}>{t("start.nav.inspect")}</a>
