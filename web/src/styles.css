@@ -1028,3 +1028,104 @@ html[data-script="other"] body, html[data-script="other"] body * {
 .sx-assist i { width: 8px; height: 8px; border-radius: 50%; background: var(--hud); box-shadow: 0 0 10px var(--hud); animation: sx-assist 2.4s ease-in-out infinite; }
 @keyframes sx-assist { 50% { opacity: 0.45; box-shadow: 0 0 4px var(--hud); } }
 @media (prefers-reduced-motion: reduce) { .sx-assist i { animation: none; } }
+
+/* ---- Hands-on tools: circle to ask, "What next?", push-to-talk, labelled diagrams ---- */
+.circle-ask { position: absolute; inset: 0; z-index: 6; touch-action: none; cursor: crosshair; background: rgba(0, 0, 0, 0.18); }
+.circle-stroke { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.circle-stroke path { fill: rgba(80, 220, 255, 0.10); stroke: var(--hud); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 8 6; filter: drop-shadow(0 0 6px rgba(80, 220, 255, 0.7)); }
+.circle-hint { position: absolute; left: 50%; top: 16px; transform: translateX(-50%); display: flex; gap: 12px; align-items: center;
+  max-width: calc(100% - 32px); padding: 8px 8px 8px 16px; border-radius: 999px; background: var(--glass-strong, rgba(4,14,30,.85));
+  border: 1px solid var(--hud); font-weight: 600; font-size: 0.9rem; }
+.circle-hint .ghost { padding: 0.4rem 0.8rem; }
+.circle-sheet { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); width: min(460px, calc(100% - 32px));
+  display: grid; gap: 10px; padding: 14px; border-radius: 14px; background: var(--glass-strong, rgba(4,14,30,.92));
+  border: 1px solid var(--glass-line); backdrop-filter: blur(10px); cursor: auto; }
+.circle-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.circle-chips .chip { padding: 0.5rem 0.8rem; border-radius: 999px; background: rgba(80, 220, 255, 0.08); color: var(--text);
+  border: 1px solid var(--glass-line); font-size: 0.85rem; min-width: 0; }
+.circle-row { display: flex; gap: 8px; }
+.circle-row input { flex: 1 1 auto; min-width: 0; }
+.circle-row .ghost { flex: 1 1 0; }
+
+.hud .ctl.ptt { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.hud .ctl.ptt.talking { background: rgba(80, 220, 255, 0.22); border-color: var(--hud); color: #fff; box-shadow: 0 0 18px -2px var(--hud); }
+
+.diagram .frozen-img { overflow: visible; }
+.diagram-lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.diagram-lines .mk-box { fill: none; stroke: var(--hud); vector-effect: non-scaling-stroke; stroke-width: 2.5; }
+.dg-num { position: absolute; transform: translate(-40%, -40%); display: grid; place-items: center; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--hud); color: #02121c; font-size: 0.8rem; box-shadow: 0 0 0 2px rgba(2, 8, 18, 0.9); }
+.diagram-bar { align-items: flex-start; gap: 12px; }
+.dg-legend { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-weight: 500; }
+.dg-legend li { display: inline-flex; align-items: center; gap: 6px; }
+.dg-legend b { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--hud);
+  color: #02121c; font-size: 0.75rem; }
+
+@media (max-width: 600px) {
+}
+.diagram-bar .ghost { white-space: nowrap; flex: 0 0 auto; }
+
+/* ---- Session copilot: call notes and the summary after a call ---- */
+.notes { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.88rem; }
+.notes li { display: grid; grid-template-columns: 3.2em 1fr; gap: 8px; }
+.notes time { font: 500 0.75rem/1.6 var(--mono); color: var(--hud); }
+.summary { position: relative; z-index: 1; max-width: 980px; margin: 0 auto; padding: 32px 16px calc(32px + env(safe-area-inset-bottom)); }
+.summary-head h1 { margin: 6px 0 4px; font-size: clamp(1.4rem, 4vw, 2rem); }
+.sum-outcome { display: inline-block; margin: 6px 0; padding: 6px 12px; border-radius: 999px; font-weight: 600;
+  background: rgba(80, 220, 255, 0.1); border: 1px solid var(--glass-line); }
+.sum-outcome.ok { color: var(--green, #3ddc97); border-color: currentColor; }
+.sum-outcome.bad { color: var(--red); border-color: currentColor; }
+.summary-grid { display: grid; gap: 14px; margin-top: 20px; grid-template-columns: 1fr; }
+.summary-grid ul { margin: 6px 0 12px; padding-left: 1.2em; }
+.summary-grid .checklist, .summary-grid .notes { padding-left: 0; }
+.sum-next { border-color: var(--hud); }
+@media (min-width: 900px) { .summary-grid { grid-template-columns: 1fr 1fr; } .sum-notes { grid-column: 1 / -1; } }
+.summary-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.summary-actions .btn { display: inline-flex; align-items: center; text-decoration: none; }
+.summary-auto { text-align: right; margin-top: 10px; }
+
+/* ---- Part finder ---- */
+.hud-card.parts .hud-h { display: flex; align-items: center; justify-content: flex-start; gap: 8px; }
+.part { margin: 8px 0; }
+.part-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.part-links a { padding: 0.35rem 0.7rem; border-radius: 999px; border: 1px solid var(--glass-line); color: var(--hud);
+  text-decoration: none; font-size: 0.82rem; background: rgba(80, 220, 255, 0.06); }
+.part-links a:hover { border-color: var(--hud); }
+
+/* ---- Clear view: nothing sits on the live picture except what points at the real part ---- */
+.stage { grid-area: camera; display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.stage .camera, .hud .stage .camera { grid-area: auto; flex: 1 1 auto; min-height: 220px; border-bottom: 0; }
+.risk-strip { position: absolute; z-index: 5; top: 0; left: 0; right: 0; padding: 5px 12px; text-align: center;
+  font: 700 0.74rem/1.3 var(--mono); letter-spacing: 0.08em; color: #fff; }
+.risk-strip.risk-amber { background: rgba(160, 104, 0, 0.92); }
+.risk-strip.risk-red { background: rgba(190, 30, 30, 0.94); }
+.dock { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid var(--glass-line);
+  border-bottom: 1px solid var(--glass-line); background: linear-gradient(180deg, rgba(4, 12, 26, 0.96), rgba(2, 7, 16, 0.96)); }
+.dock-line { flex: 1 1 auto; min-width: 0; }
+.dock-line p { margin: 0; font-size: 0.92rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dock-line b { font: 700 0.64rem/1 var(--mono); letter-spacing: 0.14em; margin-right: 6px; padding: 2px 5px; border-radius: 3px;
+  border: 1px solid currentColor; vertical-align: 1px; }
+.dock-line .ai b { color: var(--hud); } .dock-line .me b { color: var(--muted); }
+.dock-toast { color: var(--hud); font-weight: 600; }
+.dock-tools { display: flex; gap: 6px; flex: 0 0 auto; }
+.dock-tools .tool { display: inline-flex; align-items: center; gap: 6px; padding: 0.5rem 0.75rem; min-width: 0; border-radius: 10px;
+  background: rgba(14, 38, 80, 0.45); border: 1px solid var(--glass-line); color: var(--text); font: 600 0.78rem/1 var(--sans); cursor: pointer; }
+.dock-tools .tool:hover { border-color: var(--glass-line-hi, var(--hud)); }
+.dock-tools .tool.on { border-color: var(--hud); color: var(--hud); background: rgba(80, 220, 255, 0.12); }
+.dock-tools .tool:disabled { opacity: 0.6; cursor: progress; }
+@media (max-width: 760px) {
+  .dock { flex-direction: column; align-items: stretch; gap: 8px; padding: 8px 10px; }
+  .dock-line p { font-size: 0.86rem; }
+  .dock-tools { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .dock-tools .tool { flex-direction: column; gap: 4px; padding: 0.45rem 0.25rem; font-size: 0.66rem; letter-spacing: 0.01em; }
+  .dock-tools .tool span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+}
+/* Small phones: the dock must never be pushed under the panel, so the picture gives way first. */
+.stage .camera, .hud .stage .camera { flex: 1 1 0; min-height: 0; }
+@media (max-width: 760px) and (max-height: 720px) {
+  .hud .panel { max-height: 30dvh; }
+  .dock-tools .tool span { display: none; }
+  .dock-tools .tool { padding: 0.5rem 0.25rem; }
+  .dock-line p { -webkit-line-clamp: 1; }
+}

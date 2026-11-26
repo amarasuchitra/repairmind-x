@@ -9,6 +9,7 @@ import { VoiceOrb2D } from "../hud/VoiceOrb2D";
 import { MicButton, recognitionCtor, uploadFiles, type AttachmentInfo, type Recognition } from "../lab/inputs.tsx";
 import { firmware } from "../build/firmware.ts";
 import { Call } from "../Call";
+import { CallSummary } from "../CallSummary";
 import { Wordmark } from "../ui/RingMark";
 import { buildPack, buyCsv, buyList, buyText, readings, wireList, wiresText } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
@@ -194,6 +195,8 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [callBusy, setCallBusy] = useState(false);
   const [callErr, setCallErr] = useState("");
   const [accepted, setAccepted] = useState(!!callNow);
+  // after a call: the repair summary, in the same panel
+  const [summaryRoom, setSummaryRoom] = useState<string | null>(null);
   const folderIn = useRef<HTMLInputElement>(null);
   const handsRef = useRef(false);
   handsRef.current = hands;
@@ -453,6 +456,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : res.status >= 500 ? t("common.serverDown") : t("common.error", { n: res.status }));
       rawSet(LAST_ROOM, body.room);
       rawSet("rmx.lastCallRoom", body.room);
+      setSummaryRoom(null);
       setCall({ serverUrl: body.server_url, token: body.participant_token, room: body.room });
       openApp("repair_call");
     } catch (e) {
@@ -463,6 +467,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   }
   function endCall(finished: boolean) {
     if (finished) rawSet(LAST_ROOM, null);
+    if (call) setSummaryRoom(call.room);
     setCall(null);
     say({ role: "guide", text: finished ? t("ws.call.endedDone") : t("ws.call.ended"), at: Date.now() });
   }
@@ -877,6 +882,8 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
               <Suspense fallback={<p className="lab-muted ws-pad"><span className="lab-spin" aria-hidden /> …</p>}>
                 {app === "repair_call" && (call
                   ? <div className="ws-call"><Call {...call} onEnd={endCall} /></div>
+                  : summaryRoom
+                  ? <CallSummary room={summaryRoom} onResume={() => { const r = summaryRoom; setSummaryRoom(null); void startCall(r); }} onDone={() => setSummaryRoom(null)} />
                   : <CallStart accepted={accepted} setAccepted={setAccepted} busy={callBusy} error={callErr} lastRoom={rawGet(LAST_ROOM)} onStart={(room) => void startCall(room)} />)}
                 {app === "design_lab" && <Lab onBack={() => setApp(null)} />}
                 {app === "builder" && <Builder onBack={() => setApp(null)} />}
