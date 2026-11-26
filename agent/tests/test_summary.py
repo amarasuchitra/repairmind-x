@@ -17,7 +17,7 @@ def test_summary_of_a_diagnosed_call():
     assert out["device"] == "Trek FX 2" and out["model_confirmed"]
     assert out["outcome"] == "diagnosed" and out["diagnosis"] == "Chain derailed"
     texts = [n["text"] for n in out["notes"]]
-    assert any(t.startswith("Device: Trek FX 2") for t in texts)
+    assert "Device: Trek FX 2 (model confirmed)" in texts
     assert any(t.startswith("Diagnosis: Chain derailed") for t in texts)
     md = summary.to_markdown(out)
     assert "# Repair summary: Trek FX 2" in md and "## Diagnosis" in md and "90% sure" in md

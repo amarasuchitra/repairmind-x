@@ -22,7 +22,7 @@ log = logging.getLogger("repairmind.summary")
 # Which log events become a note, and how. Anything else stays in the full session file only.
 _NOTE = {
     "identify_device": lambda d, st: f"Device: {' '.join(x for x in (d.get('brand'), d.get('model')) if x) or d.get('device', '')}"
-                                     + (" (model confirmed)" if d.get("model_confirmed") else ""),
+                                     + (" (model confirmed)" if d.get("confirmed") else ""),
     "symptom": lambda d, st: f"Symptom: {d.get('text', '')}",
     "test": lambda d, st: f"Test: {d.get('description', '')}: {d.get('result', '')}",
     "diagnosis": lambda d, st: f"Diagnosis: {d.get('cause', '')}",
