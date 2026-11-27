@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Literal
 
 from . import safety
+from .reasoning import evidence as ev
 from .safety import Assessment, RiskLevel
 
 # Confidence needed before the mechanic may instruct. Set conservatively for the
@@ -94,6 +95,8 @@ class RepairSession:
     history_answers: list[str] = field(default_factory=list)
     tests: list[SafeTest] = field(default_factory=list)
     hypotheses: list[Hypothesis] = field(default_factory=list)
+    # the priors, planned tests and readings behind the confidences; see reasoning/evidence.py
+    evidence: dict = field(default_factory=dict)
 
     diagnosis: str = ""
     diagnosis_confidence: float = 0.0
@@ -193,9 +196,103 @@ class RepairSession:
         return GateResult(True, "Test result recorded. Update the hypotheses with it.")
 
     def update_hypotheses(self, hypotheses: list[Hypothesis]) -> GateResult:
-        self.hypotheses = sorted(hypotheses, key=lambda h: h.confidence, reverse=True)
+        """Set the causes. Before any planned reading the confidences are the priors; once readings exist, a cause
+        already scored keeps its original prior (so restating a number can't inflate it) and only new causes take
+        the stated confidence. The confidences kept are always the evidence-backed ones."""
+        e = self.ev
+        if not e.measurements:
+            e.priors = {h.cause: max(0.0, min(1.0, h.confidence)) for h in hypotheses}
+        else:
+            keep = {ev.norm(c): (c, p) for c, p in e.priors.items()}
+            e.priors = {}
+            for h in hypotheses:
+                c, p = keep.get(ev.norm(h.cause), (h.cause, max(0.0, min(1.0, h.confidence))))
+                e.priors[c] = p
+        self._save_ev(e)
         self._record("hypotheses", items=[asdict(h) for h in self.hypotheses])
-        return GateResult(True, "Hypotheses updated.")
+        note = " Confidences for causes already tested come from the readings." if e.measurements else ""
+        return GateResult(True, "Hypotheses updated." + note + " " + self.confidence_line())
+
+    # ------------------------------------------------------ test-first diagnosis
+    @property
+    def ev(self) -> ev.Evidence:
+        return ev.Evidence.from_dict(self.evidence)
+
+    def _save_ev(self, e: ev.Evidence) -> None:
+        """Store the evidence and refresh the hypotheses from it (posterior, best first)."""
+        self.evidence = e.to_dict()
+        post = e.posterior()
+        old = {ev.norm(h.cause): h for h in self.hypotheses}
+        hyps = []
+        for c in e.priors:
+            h = old.get(ev.norm(c)) or Hypothesis(c, 0.0)
+            hyps.append(Hypothesis(c, round(post.get(c, 0.0), 3), h.evidence_for, h.evidence_against))
+        self.hypotheses = sorted(hyps, key=lambda h: h.confidence, reverse=True)
+
+    def unexplained(self) -> float:
+        """How much weight sits on causes nobody listed."""
+        return self.ev.posterior().get(ev.OTHER, 0.0) if self.ev.priors else 0.0
+
+    def confidence_line(self) -> str:
+        if not self.hypotheses:
+            return ""
+        parts = [f"{h.cause} {round(h.confidence * 100)}% ({ev.certainty(h.confidence)})" for h in self.hypotheses[:3]]
+        other = self.unexplained()
+        tail = f"; something not listed {round(other * 100)}%" if other >= 0.05 else ""
+        return "Now: " + "; ".join(parts) + tail + ". Say how sure you are in those words."
+
+    def plan_tests(self, candidates: list[ev.TestPlan]) -> GateResult:
+        """Choose the test that separates the causes best for the effort, and remember what each reading means."""
+        if len(self.hypotheses) < 2:
+            return GateResult(False, "List at least two possible causes with update_hypotheses first, so a test has "
+                              "something to separate.", "need_hypotheses")
+        known = {ev.norm(h.cause) for h in self.hypotheses}
+        usable = []
+        for c in candidates:
+            if safety.irreversible_actions(c.test):
+                continue  # a test must be reversible; cutting or desoldering is a repair step, not a test
+            c.expect = {k: v for k, v in c.expect.items() if ev.norm(k) in known and str(v).strip()}
+            if len(c.outcomes()) >= 2:
+                usable.append(c)
+        if not usable:
+            return GateResult(False, "No candidate tells the causes apart. For each test, give the reading each listed "
+                              "cause would produce, with at least two different readings, and keep tests reversible "
+                              "(look, listen, measure; never cut or desolder to test).", "no_useful_test")
+        e = self.ev
+        ranked = ev.plan(e, usable)
+        best, score = ranked[0]
+        a = safety.assess(best.test, base=self.assessment)
+        if a.level is RiskLevel.RED:
+            return GateResult(False, safety.red_refusal_message(a), "red_test", a.to_dict())
+        e.pending = best
+        self._save_ev(e)
+        self._record("test_planned", test=best.test, expect=best.expect, bits=round(score, 3))
+        means = "; ".join(f"{o} -> {', '.join(c for c, v in best.expect.items() if v == o)}" for o in best.outcomes())
+        others = ", ".join(f"{c.test!r}" for c, _ in ranked[1:3])
+        return GateResult(True, f"Best next test: {best.test!r}. Ask for it in one short instruction (say where to put "
+                          f"each probe and the meter setting). What each reading means: {means}. When they read it, "
+                          "call record_measurement with the reading."
+                          + (f" Next best: {others}." if others else ""), data={"bits": round(score, 3)})
+
+    def record_measurement(self, observed: str, detail: str = "") -> GateResult:
+        """Score the planned test's reading against every cause and update the confidences (Bayes' rule)."""
+        e = self.ev
+        if e.pending is None:
+            return GateResult(False, "No test is planned. Call plan_tests first, or record_test for a free-form check.",
+                              "no_pending_test")
+        plan = e.pending
+        got = ev.match_outcome(plan, observed)
+        e.measurements.append(ev.Measurement(plan.test, plan.expect, got, detail or observed))
+        e.pending = None
+        self._save_ev(e)
+        self.tests.append(SafeTest(plan.test, detail or observed))
+        self._record("measurement", test=plan.test, observed=got or "none predicted", detail=detail or observed)
+        say = (f"Reading recorded as {got!r}." if got
+               else "That reading isn't one any listed cause predicted, so the weight moved to 'something not listed'.")
+        if self.unexplained() >= 0.3:
+            say += (" The list of causes may be wrong: re-check the reading, look again, and add the causes it "
+                    "points to with update_hypotheses.")
+        return GateResult(True, say + " " + self.confidence_line())
 
     def set_diagnosis(self, cause: str, confidence: float, evidence: list[str]) -> GateResult:
         confidence = max(0.0, min(1.0, float(confidence)))
@@ -207,6 +304,11 @@ class RepairSession:
                             "what changed, sounds, smells, error codes, what was already tried)")
         if not evidence:
             problems.append("give the visible or test evidence that supports this cause")
+        backed = self.ev.confidence(cause) if self.ev.measurements else None
+        if self.ev.measurements and backed is None:
+            problems.append("add this cause with update_hypotheses first, so the readings can score it")
+        if self.unexplained() >= 0.3:
+            problems.append("the readings fit none of the listed causes well; find what they point to first")
         if len(self.hypotheses) >= 2:
             top, second = self.hypotheses[0], self.hypotheses[1]
             if top.confidence - second.confidence < 0.2:
@@ -217,6 +319,9 @@ class RepairSession:
             return GateResult(False, "Not ready to conclude. You must: " + "; ".join(problems) + ".",
                               "diagnosis_not_ready")
 
+        if backed is not None and backed < confidence:
+            # the readings decide how sure we are, not how sure the model sounds
+            confidence = round(backed, 3)
         self.diagnosis, self.diagnosis_confidence, self.diagnosis_evidence = cause, confidence, evidence
         a = self._reassess(cause)
         self._record("diagnosis", cause=cause, confidence=confidence, evidence=evidence)
@@ -528,6 +633,7 @@ class RepairSession:
             "history": self.history_answers,
             "tests": [asdict(t) for t in self.tests],
             "hypotheses": [asdict(h) for h in self.hypotheses],
+            "readings": self.evidence.get("measurements", []),
             "diagnosis": {"cause": self.diagnosis, "confidence": self.diagnosis_confidence,
                           "evidence": self.diagnosis_evidence},
             "risk": {"level": self.risk_level, "reasons": self.risk_reasons},
@@ -550,6 +656,10 @@ class RepairSession:
             "diagnosis": self.diagnosis,
             "confidence": self.diagnosis_confidence,
             "hypotheses": [{"cause": h.cause, "confidence": h.confidence} for h in self.hypotheses[:3]],
+            "unexplained": round(self.unexplained(), 3),
+            "next_test": self._next_test_view(),
+            "readings": [{"test": m["test"], "reading": m.get("detail") or m["observed"]}
+                         for m in self.evidence.get("measurements", [])][-4:],
             "steps": [{"id": s.id, "text": s.text, "status": s.status, "risk": s.risk,
                        "irreversible": s.irreversible, "source": s.source_ref or s.source_kind,
                        "cross_checked": self.reviews.get(self._key(s.text), {}).get("status") == "approve"}
@@ -558,6 +668,13 @@ class RepairSession:
             "expert_product": self.expert_product_id,
             "escalated": self.escalated,
         }
+
+    def _next_test_view(self) -> dict | None:
+        p = self.ev.pending
+        if not p:
+            return None
+        return {"test": p.test, "outcomes": [{"reading": o, "means": [c for c, v in p.expect.items() if v == o]}
+                                             for o in p.outcomes()]}
 
     def save(self, directory: Path) -> Path:
         directory.mkdir(parents=True, exist_ok=True)

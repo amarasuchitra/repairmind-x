@@ -21,6 +21,11 @@ export interface SessionView {
   diagnosis: string;
   confidence: number;
   hypotheses: { cause: string; confidence: number }[];
+  /** weight on causes nobody has listed yet: high means the readings fit none of them */
+  unexplained?: number;
+  /** the test the mechanic chose, with what each reading would mean */
+  next_test?: { test: string; outcomes: { reading: string; means: string[] }[] } | null;
+  readings?: { test: string; reading: string }[];
   steps: StepView[];
   hazard: string;
   escalated: boolean;

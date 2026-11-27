@@ -308,6 +308,11 @@ export function brackets(x0: number, y0: number, x1: number, y1: number, c: numb
   ].join(" ");
 }
 
+/** How sure, in words, matching the agent's thresholds (reasoning/evidence.py certainty()). */
+function certainKey(p: number): Key {
+  return (p >= 0.9 ? "call.certain.sure" : p >= 0.75 ? "call.certain.fairly" : p >= 0.5 ? "call.certain.leaning" : "call.certain.unsure") as Key;
+}
+
 /** The one thing that matters right now, in plain words: the current step, or what's wrong so far. */
 function NowCard({ view }: { view: SessionView | null }) {
   const { t, auto } = useI18n();
@@ -336,11 +341,14 @@ function NowCard({ view }: { view: SessionView | null }) {
   } else if (view.diagnosis) {
     k = t("call.now.diag");
     body = auto(view.diagnosis);
-    sub = t("call.sure", { pct });
+    sub = `${t(certainKey(pct / 100))} · ${t("call.sure", { pct })}`;
+  } else if (view.next_test) {
+    k = t("call.now.test");
+    body = auto(view.next_test.test);
   } else if (view.hypotheses.length) {
     k = t("call.now.likely");
     body = auto(view.hypotheses[0].cause);
-    sub = t("call.sure", { pct });
+    sub = `${t(certainKey(pct / 100))} · ${t("call.sure", { pct })}`;
   } else if (view.device) {
     k = t("call.now.device");
     body = auto(view.device);
@@ -354,6 +362,13 @@ function NowCard({ view }: { view: SessionView | null }) {
       <span className="now-k">{k}</span>
       <p className="now-t">{body}</p>
       {sub && <p className={`now-s${step ? " warn" : ""}`}>{sub}</p>}
+      {!step && !view.diagnosis && view.next_test && (
+        <ul className="now-test">
+          {view.next_test.outcomes.map((o) => (
+            <li key={o.reading}><b>{t("call.test.means", { reading: auto(o.reading) })}</b> {o.means.map(auto).join(", ")}</li>
+          ))}
+        </ul>
+      )}
       {steps.length > 0 && (
         <div className="now-bar" aria-hidden>
           {steps.map((s) => <i key={s.id} className={`st-${s.status}`} />)}
@@ -393,12 +408,24 @@ function RepairPanel({ view }: { view: SessionView | null }) {
             {view.device && !view.model_confirmed && <em className="warn-t">{t("call.showLabel")}</em>}
           </div>
         </div>
+        {(view.hypotheses.length > 0 || view.diagnosis) && (
+          <p className="dim small certain">{t(certainKey(view.diagnosis ? view.confidence : view.hypotheses[0]?.confidence ?? 0))}</p>
+        )}
         {!view.diagnosis && view.hypotheses.length > 1 && (
           <ul className="hyp">
             {view.hypotheses.slice(1).map((h) => (
               <li key={h.cause}><span>{auto(h.cause)}</span><Bar value={h.confidence} /></li>
             ))}
           </ul>
+        )}
+        {(view.unexplained ?? 0) >= 0.3 && <p className="warn-t small">{t("call.unexplained", { pct: Math.round((view.unexplained ?? 0) * 100) })}</p>}
+        {!!view.readings?.length && (
+          <>
+            <span className="lbl readings-h">{t("call.readings")}</span>
+            <ul className="readings">
+              {view.readings.map((r, i) => <li key={i}><span>{auto(r.test)}</span><b>{auto(r.reading)}</b></li>)}
+            </ul>
+          </>
         )}
       </div>
 

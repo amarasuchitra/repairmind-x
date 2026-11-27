@@ -59,6 +59,9 @@ def record(path: Path, state: RepairSession) -> bool:
     if not eligible(state):
         return False
     key = (_norm(state.brand), _norm(state.model), _norm(state.diagnosis))
+    # the readings that settled it, so next time the deciding test can come first
+    readings = [{"test": m["test"], "reading": m.get("detail") or m.get("observed", "")}
+                for m in state.evidence.get("measurements", [])][-6:]
     steps = [{"text": s.text, "source_kind": s.source_kind, "source_ref": s.source_ref,
               "expected_result": s.expected_result, "irreversible": bool(s.irreversible)} for s in state.steps]
     with _lock:
@@ -71,10 +74,13 @@ def record(path: Path, state: RepairSession) -> bool:
                 f["sessions"] = [*f.get("sessions", []), state.session_id][-20:]
                 f["symptoms"] = list(dict.fromkeys([*f.get("symptoms", []), *state.symptoms]))[-12:]
                 f["steps"], f["last"] = steps, time.time()  # the newest verified sequence wins
+                if readings:
+                    f["readings"] = readings
                 break
         else:
             fixes.append({"brand": state.brand, "model": state.model, "device": state.device,
                           "diagnosis": state.diagnosis, "symptoms": list(state.symptoms)[-12:], "steps": steps,
+                          "readings": readings,
                           "worked": 1, "sessions": [state.session_id], "last": time.time()})
         fixes.sort(key=lambda f: f.get("last", 0))
         _save(path, fixes[-MAX_FIXES:])
@@ -97,6 +103,49 @@ def lookup(path: Path, brand: str, model: str, symptoms: str = "", limit: int = 
     return sorted(same, key=score, reverse=True)[:limit]
 
 
+def similar(path: Path, device: str, symptoms: str, exclude_model: str = "", limit: int = 4) -> list[dict]:
+    """What fixed similar symptoms on other models of the same kind of device: causes with how often they
+    worked, best match first. This is how a repair on one model teaches the next, different one."""
+    kind = _words(device)
+    want = _words(symptoms)
+    if not kind or not want:
+        return []
+    skip = _norm(exclude_model)
+    by_cause: dict[str, dict] = {}
+    for f in load(path):
+        if skip and _norm(f.get("model", "")) == skip:
+            continue
+        if not kind & _words(f.get("device", "")):
+            continue
+        overlap = len(want & _words(" ".join(f.get("symptoms", []))))
+        if overlap == 0:
+            continue
+        key = _norm(f.get("diagnosis", ""))
+        agg = by_cause.setdefault(key, {"diagnosis": f.get("diagnosis", ""), "worked": 0, "models": [], "match": 0,
+                                         "readings": []})
+        agg["worked"] += int(f.get("worked", 1))
+        agg["match"] = max(agg["match"], overlap)
+        model = " ".join(x for x in (f.get("brand", ""), f.get("model", "")) if x)
+        if model and model not in agg["models"]:
+            agg["models"].append(model)
+        agg["readings"] = agg["readings"] or f.get("readings", [])
+    return sorted(by_cause.values(), key=lambda a: (a["match"], a["worked"]), reverse=True)[:limit]
+
+
+def similar_for_model(found: list[dict]) -> str:
+    if not found:
+        return ""
+    total = sum(a["worked"] for a in found) or 1
+    out = ["On other models of this kind of device, these causes fixed similar symptoms (use the shares as starting "
+           "confidences in update_hypotheses, then test; never skip the diagnosis gate):"]
+    for a in found:
+        out.append(f"- {a['diagnosis']}: fixed it {a['worked']} time{'s' if a['worked'] != 1 else ''} "
+                   f"({round(100 * a['worked'] / total)}% of similar repairs; {', '.join(a['models'][:3])})")
+        if a["readings"]:
+            out.append("  the reading that settled it: " + "; ".join(f"{r['test']} -> {r['reading']}" for r in a["readings"][:2]))
+    return "\n".join(out)
+
+
 def for_model(fixes: list[dict]) -> str:
     if not fixes:
         return "No remembered fixes for this exact model yet. Diagnose as usual."
@@ -109,4 +158,7 @@ def for_model(fixes: list[dict]) -> str:
             src = s.get("source_kind", "") + (f" {s['source_ref']}" if s.get("source_ref") else "")
             out.append(f"   {n}) \"{s.get('text')}\" [source: {src}; expected: {s.get('expected_result', '')}]"
                        + (" IRREVERSIBLE" if s.get("irreversible") else ""))
+        if f.get("readings"):
+            out.append("   The readings that settled it last time (try that test first): "
+                       + "; ".join(f"{r['test']} -> {r['reading']}" for r in f["readings"][:3]))
     return "\n".join(out)

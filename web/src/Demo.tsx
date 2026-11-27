@@ -64,6 +64,10 @@ const VIEW: SessionView = {
   diagnosis: "Worn drive belt",
   confidence: 0.88,
   hypotheses: [],
+  readings: [
+    { test: "Strobe dots at 33 rpm, platter spinning", reading: "drifting backwards" },
+    { test: "Belt stretched by hand: does it spring back?", reading: "stays loose" },
+  ],
   steps: [
     { id: "s1", text: "Switch the turntable off and unplug it from the wall.", status: "done", risk: "green", irreversible: [], source: "procedure example-turntable/replace-belt#s1" },
     { id: "s2", text: "Take the mat off, then lift the platter straight up and set it down face first on a towel.", status: "done", risk: "green", irreversible: [], source: "procedure example-turntable/replace-belt#s2", cross_checked: true },
@@ -106,7 +110,13 @@ export function Demo() {
   }, []);
 
   const view: SessionView =
-    variant === "amber"
+    variant === "test"
+      ? { ...VIEW, diagnosis: "", confidence: 0, steps: [],
+          hypotheses: [{ cause: "Worn drive belt", confidence: 0.58 }, { cause: "Motor running slow", confidence: 0.27 }, { cause: "Dirty spindle bearing", confidence: 0.06 }],
+          readings: [{ test: "Strobe dots at 33 rpm, platter spinning", reading: "drifting backwards" }],
+          next_test: { test: "Take the belt off and watch the bare motor pulley: does it keep a steady speed?", outcomes: [
+            { reading: "steady", means: ["Worn drive belt", "Dirty spindle bearing"] }, { reading: "slows or surges", means: ["Motor running slow"] }] } }
+      : variant === "amber"
       ? { ...VIEW, risk_level: "amber", risk_reasons: ["Fragile stylus near your hands"], precautions: [...VIEW.precautions, { id: "p3", text: "Take the cartridge off if the arm won\u2019t clip down", done: false }] }
       : variant === "alert"
         ? { ...VIEW, risk_level: "red", hazard: "Smoke near the motor housing" }
