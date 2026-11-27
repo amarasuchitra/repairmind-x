@@ -233,6 +233,19 @@ in place of the 3D view, and the assistant can open them itself.
   base ring. Pull apart or put together, turn, reset. Tap a label to ask the assistant about that part. Before you
   have a project it shows an example (a glowing star toy, marked "Example") built from real catalogue parts, so its
   checks and steps are the real ones.
+- **Lifelike parts, or a hologram**: each part is modelled at its real size as it looks out of the bag (the
+  blue Nano with its chip, mini-USB and pin rows, the DFPlayer's microSD slot, the red TTP223 pad, the speaker's
+  frame, cone and tabs, the ring's twelve lit LEDs, the battery cells), in a frosted moulded shell under studio
+  lighting with a soft shadow (`models.tsx`). "Hologram" draws the same shapes as glowing outlines.
+- **Code & files** (`folder.ts`): the project as a real folder in a file tree, like a code editor: the Arduino
+  sketch in its own folder (the IDE needs that), `README.md` (the whole build guide), `wiring.md`, `tests.md`,
+  `tools.md`, `parts.csv`, `project.json` and the two printable `.stl` halves. "Save folder to my computer" writes
+  it into a folder you pick (Chrome and Edge on a desktop); "Download folder (.zip)" works everywhere.
+- **Tools**: the instruments and hand tools this build needs, worked out from its parts (always a multimeter
+  and the board's USB data cable; a soldering kit only when a part has bare wires or pads; a precision screwdriver
+  for a booster), each marked Needed or Helpful, with shop links.
+- **Shop parts**: every component with quantity, typical price in rupees, "Buy at Robu / Amazon.in /
+  Robocraze" buttons, the total, a CSV and the build pack. Prices are typical: check the part on the shop page.
 - **Live camera card**: off until you turn it on, and nothing is sent until you tap "Show the assistant". The
   expand button opens the full live repair call.
 - **Step card**: "Step n / N" with a dot for every step (done ones in green), the step's first instruction and its

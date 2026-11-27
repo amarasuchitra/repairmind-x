@@ -12,7 +12,9 @@ import { Call } from "../Call";
 import { CallSummary } from "../CallSummary";
 import { Logo, Mic, MicOff, Shield } from "../ui/Icons";
 import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
-import { buildPack, buyCsv, buyList, buyText, readings, wireList, wiresText } from "./precision.ts";
+import { canSaveFolder, projectFiles, saveToFolder, zip, type FolderFile } from "./folder.ts";
+import type { ShellSpec } from "../sim/shell.ts";
+import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
 import { analyze, short, type Report } from "../build/engine.ts";
 import { BY_ID } from "../build/parts.ts";
@@ -216,6 +218,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [tick, setTick] = useState(0);
   const [ready, setReady] = useState<boolean | null>(null);
   const [sampleStep, setSampleStep] = useState(1);
+  const [tab, setTab] = useState<"3d" | "code" | "tools" | "shop">("3d");
   const fileIn = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const w = W.current;
@@ -521,7 +524,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
     const code = firmware(p, report);
     const base = (p.name || "project").replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "").toLowerCase() || "project";
     download(`${base}-build-pack.md`, buildPack(p, report, code), "text/markdown");
-    setTimeout(() => download(`${code.name}.ino`, code.code), 400);
+    setTimeout(() => download(`${code.name.replace(/\.ino$/, "")}.ino`, code.code), 400);
   }
 
   async function captureScreen() {
@@ -832,10 +835,29 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
               </div>
             </div>
           ) : (
-            <Suspense fallback={<div className="xv xv-wait"><span className="lab-spin" aria-hidden /></div>}>
-              <Exploded project={w.project ?? SAMPLE} body={w.project ? w.body : SAMPLE_BODY} sample={!w.project}
-                onAsk={(part) => void talk(w.project ? t("xv.ask", { part }) : t("xv.askSample", { part }))} />
-            </Suspense>
+            <>
+              <div className="ws-tabs" role="tablist" aria-label={t("xv.title")}>
+                {(["3d", "code", "tools", "shop"] as const).map((k) => (
+                  <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
+                    <TabIcon id={k} /><span>{t(`ws.tab.${k}` as Key)}</span>
+                  </button>
+                ))}
+                {!w.project && <span className="ws-pill dim ws-tabs-note">{t("xv.example")}</span>}
+              </div>
+              <div className="ws-stage-body">
+                {tab === "3d" && (
+                  <Suspense fallback={<div className="xv xv-wait"><span className="lab-spin" aria-hidden /></div>}>
+                    <Exploded project={w.project ?? SAMPLE} body={w.project ? w.body : SAMPLE_BODY} sample={!w.project}
+                      onAsk={(part) => void talk(w.project ? t("xv.ask", { part }) : t("xv.askSample", { part }))} />
+                  </Suspense>
+                )}
+                {tab === "code" && <CodePane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} body={w.project ? w.body : SAMPLE_BODY} sample={!w.project} />}
+                {tab === "tools" && <ToolsPane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} sample={!w.project} />}
+                {tab === "shop" && <ShopPane report={report ?? SAMPLE_REPORT} sample={!w.project}
+                  onCsv={() => download(`${((w.project ?? SAMPLE).name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report ?? SAMPLE_REPORT), "text/csv")}
+                  onPack={() => downloadPack(w.project ?? SAMPLE)} />}
+              </div>
+            </>
           )}
         </section>
 
@@ -1443,5 +1465,180 @@ function StepCard({ steps, at, done, sample, onGo, onDone, onOpen }: {
           : <button className="lab-btn solid" disabled={n >= total} onClick={() => onGo(n + 1)}>{t("ws.step.next")} ›</button>}
       </div>
     </section>
+  );
+}
+
+// --- beside the 3D view: the code, the tools, and the parts to buy ---------------------------------------------------
+
+function TabIcon({ id }: { id: "3d" | "code" | "tools" | "shop" }) {
+  const d = {
+    "3d": "M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 0v9m0 0 8-4.5M12 12l-8-4.5",
+    code: "m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14",
+    tools: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z",
+    shop: "M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
+  }[id];
+  return <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
+}
+
+function SampleNote({ sample }: { sample: boolean }) {
+  const { t } = useI18n();
+  return sample ? <p className="ws-pane-note">{t("ws.pane.sample")}</p> : null;
+}
+
+/**
+ * The project as a folder, like a code editor: the files down the side, the open one on the right. Saved straight
+ * into a folder on the computer where the browser allows it, otherwise downloaded as a .zip.
+ */
+function CodePane({ project, report, body, sample }: { project: Project; report: Report; body: { spec: ShellSpec } | null; sample: boolean }) {
+  const { t } = useI18n();
+  const { root, files } = useMemo(() => projectFiles(project, report, body), [project, report, body]);
+  const ino = files.find((f) => f.path.endsWith(".ino"))!;
+  const [open, setOpen] = useState(ino.path);
+  const [note, setNote] = useState("");
+  const [copied, setCopied] = useState(false);
+  const file = files.find((f) => f.path === open) ?? ino;
+  const board = project.parts.some((p) => p.id === "esp32") ? "ESP32 Dev Module" : "Arduino Nano";
+  // the folder tree: top-level files, then each subfolder with its files
+  const dirs = [...new Set(files.filter((f) => f.path.includes("/")).map((f) => f.path.split("/")[0]))];
+  const top = files.filter((f) => !f.path.includes("/"));
+
+  function downloadZip() {
+    const blob = new Blob([zip(root, files)], { type: "application/zip" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = `${root}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    setNote(t("ws.folder.zipped", { name: `${root}.zip` }));
+  }
+  async function save() {
+    try { const name = await saveToFolder(root, files); setNote(t("ws.folder.saved", { name, n: files.length })); }
+    catch (e) { if (!(e instanceof DOMException && e.name === "AbortError")) setNote(t("ws.folder.failed")); }
+  }
+  const row = (f: FolderFile, depth: number) => (
+    <li key={f.path}>
+      <button className={f.path === file.path ? "on" : ""} style={{ paddingLeft: 10 + depth * 16 }} onClick={() => setOpen(f.path)} title={f.about}>
+        <FileIcon name={f.path} /><span>{f.path.split("/").pop()}</span>
+      </button>
+    </li>
+  );
+  return (
+    <div className="ws-pane ws-ide">
+      <SampleNote sample={sample} />
+      <div className="ws-pane-head">
+        <div>
+          <h2><FolderIcon /> {root}</h2>
+          <p className="ws-pane-sub">{t("ws.folder.sub", { n: files.length, board })}</p>
+        </div>
+        <span className="ws-grow" />
+        {canSaveFolder() && <button className="lab-btn solid" onClick={() => void save()}>{t("ws.folder.save")}</button>}
+        <button className={`lab-btn${canSaveFolder() ? "" : " solid"}`} onClick={downloadZip}>{t("ws.folder.zip")}</button>
+      </div>
+      {note && <p className="ws-pane-ok" role="status">{note}</p>}
+      {report.libs.length > 0 && (
+        <p className="ws-libs"><b>{t("ws.code.libs")}</b> {report.libs.map((l) => <code key={l}>{l}</code>)}</p>
+      )}
+      <div className="ws-ide-body">
+        <nav className="ws-tree" aria-label={t("ws.folder.files")}>
+          <div className="ws-tree-root"><FolderIcon open /> {root}</div>
+          <ul>
+            {dirs.map((d) => (
+              <li key={d}>
+                <div className="ws-tree-dir" style={{ paddingLeft: 26 }}><FolderIcon open /> {d}</div>
+                <ul>{files.filter((f) => f.path.startsWith(`${d}/`)).map((f) => row(f, 2))}</ul>
+              </li>
+            ))}
+            {top.map((f) => row(f, 1))}
+          </ul>
+        </nav>
+        <section className="ws-file" aria-label={file.path}>
+          <div className="ws-file-head">
+            <span className="mono">{file.path}</span>
+            <small>{file.about}</small>
+            <span className="ws-grow" />
+            {typeof file.data === "string" && (
+              <button className="lab-chip" onClick={() => { void navigator.clipboard?.writeText(file.data as string).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); }).catch(() => {}); }}>
+                {copied ? t("ws.code.copied") : t("ws.code.copy")}
+              </button>
+            )}
+          </div>
+          {typeof file.data === "string"
+            ? <pre className="ws-code"><code>{file.data}</code></pre>
+            : <p className="ws-file-bin">{t("ws.folder.stl", { kb: Math.max(1, Math.round(file.data.length / 1024)) })}</p>}
+          {file === ino && <p className="ws-pane-sub">{t("ws.code.how", { board })}</p>}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function FolderIcon({ open = false }: { open?: boolean }) {
+  return <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" className="ws-ficon dir">
+    {open ? <path d="M3 7a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v1H7.5a2 2 0 0 0-1.9 1.4L3 19zM3 19l2.6-7.6A2 2 0 0 1 7.5 10H21l-2.7 7.7a2 2 0 0 1-1.9 1.3z" /> : <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />}
+  </svg>;
+}
+
+function FileIcon({ name }: { name: string }) {
+  const ext = name.split(".").pop() ?? "";
+  const kind = ext === "ino" ? "code" : ext === "stl" ? "model" : ext === "csv" ? "sheet" : ext === "json" ? "data" : "doc";
+  return <span className={`ws-ficon ${kind}`} aria-hidden>{{ code: "</>", model: "3D", sheet: "▦", data: "{}", doc: "¶" }[kind]}</span>;
+}
+
+/** The instruments and hand tools this build needs, with where to get them. */
+function ToolsPane({ project, report, sample }: { project: Project; report: Report; sample: boolean }) {
+  const { t, auto } = useI18n();
+  const tools = useMemo(() => toolsFor(project, report), [project, report]);
+  const groups: ToolLine["group"][] = ["measure", "software", "assemble", "solder", "make", "safety"];
+  return (
+    <div className="ws-pane">
+      <SampleNote sample={sample} />
+      <div className="ws-pane-head"><div><h2>{t("ws.tools.title")}</h2><p className="ws-pane-sub">{t("ws.tools.sub", { n: tools.filter((x) => x.must).length })}</p></div></div>
+      {groups.map((g) => {
+        const list = tools.filter((x) => x.group === g);
+        if (!list.length) return null;
+        return (
+          <section key={g} className="ws-toolgroup">
+            <span className="lab-kicker">{t(`ws.tools.g.${g}` as Key)}</span>
+            <ul>
+              {list.map((x) => (
+                <li key={x.name}>
+                  <span className={`ws-need ${x.must ? "must" : ""}`}>{x.must ? t("ws.tools.must") : t("ws.tools.nice")}</span>
+                  <div className="ws-tool-text"><b>{auto(x.name)}</b><small>{auto(x.why)}</small></div>
+                  {!/Arduino IDE/.test(x.name) && <div className="ws-buybtns">{x.shops.map((s) => <a key={s.name} className="ws-buy-btn" href={s.url} target="_blank" rel="noreferrer">{s.name}</a>)}</div>}
+                  {g === "software" && /Arduino IDE/.test(x.name) && <div className="ws-buybtns"><a className="ws-buy-btn" href="https://www.arduino.cc/en/software" target="_blank" rel="noreferrer">{t("ws.tools.getIde")}</a></div>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Every part to buy, with quantity, typical price and buttons that open the shops. */
+function ShopPane({ report, sample, onCsv, onPack }: { report: Report; sample: boolean; onCsv: () => void; onPack: () => void }) {
+  const { t, auto } = useI18n();
+  const { lines, total } = buyList(report);
+  return (
+    <div className="ws-pane">
+      <SampleNote sample={sample} />
+      <div className="ws-pane-head">
+        <div><h2>{t("ws.shop.title")}</h2><p className="ws-pane-sub">{t("ws.shop.sub")}</p></div>
+        <span className="ws-grow" />
+        <button className="lab-btn" onClick={onCsv}>{t("ws.buy.csv")}</button>
+        <button className="lab-btn solid" onClick={onPack}>{t("ws.pack")}</button>
+      </div>
+      <ul className="ws-shoplist">
+        {lines.map((l) => (
+          <li key={l.name}>
+            <span className="ws-qty">{l.qty}×</span>
+            <div className="ws-tool-text"><b>{auto(l.name)}</b><small>₹{l.each.toLocaleString("en-IN")} {t("ws.shop.each")} · ₹{l.total.toLocaleString("en-IN")}</small></div>
+            <div className="ws-buybtns">{l.shops.map((s) => <a key={s.name} className="ws-buy-btn" href={s.url} target="_blank" rel="noreferrer">{t("ws.shop.buyAt", { shop: s.name })}</a>)}</div>
+          </li>
+        ))}
+      </ul>
+      <div className="ws-shop-total"><span>{t("ws.shop.total")}</span><b>₹{total.toLocaleString("en-IN")}</b></div>
+      <p className="ws-pane-sub">{t("ws.shop.check")}</p>
+    </div>
   );
 }

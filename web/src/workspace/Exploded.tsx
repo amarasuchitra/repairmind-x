@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Html, Line, OrbitControls } from "@react-three/drei";
+import { ContactShadows, Environment, Html, Lightformer, Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useI18n } from "../i18n";
 import type { Project } from "../build/project.ts";
-import { buildShell, halfMesh, type ShellSpec, type Tri } from "../sim/shell.ts";
+import { buildShell, halfMesh, type ShellSpec } from "../sim/shell.ts";
 import { at, explode, shapeLabel, type Piece } from "./explode.ts";
+import { PartModel, ShellHalf, type Look } from "./models.tsx";
 
 const ACCENT = "#46e2ff";
 
@@ -23,6 +24,7 @@ export function Exploded({ project, body, sample, onAsk }: {
   const { t, auto } = useI18n();
   const [apart, setApart] = useState(true);
   const [spin, setSpin] = useState(false);
+  const [look, setLook] = useState<Look>("real");
   const [resetN, setResetN] = useState(0);
   const [view, setView] = useState({ w: 800, h: 600 });
   const compact = view.w < 560;
@@ -65,23 +67,41 @@ export function Exploded({ project, body, sample, onAsk }: {
   return (
     <div className="xv" ref={box}>
       <Canvas key={`${resetN}:${view.w}x${view.h}`} camera={{ position: cam.pos, fov: 36, near: 1, far: cam.d * 10 }} dpr={[1, 2]} gl={{ alpha: true, antialias: true }}>
-        <hemisphereLight args={["#cfeeff", "#0b1430", 1.0]} />
-        <directionalLight position={[s, s * 2, s]} intensity={1.4} />
-        <pointLight position={[0, layout.bottom - 12, 0]} color={ACCENT} intensity={2.2} distance={s * 2} decay={1} />
+        {look === "real" ? (
+          <>
+            <ambientLight intensity={0.25} />
+            <directionalLight position={[s, s * 2, s * 1.2]} intensity={1.6} />
+            <directionalLight position={[-s * 1.5, s * 0.6, -s]} intensity={0.5} color="#9fc6ff" />
+            <Environment resolution={256} frames={1}>
+              <Lightformer form="rect" intensity={3} position={[0, 5, -6]} scale={[12, 3, 1]} color="#ffffff" />
+              <Lightformer form="rect" intensity={1.6} position={[-6, 2, 2]} rotation-y={Math.PI / 2} scale={[8, 3, 1]} color="#cfe6ff" />
+              <Lightformer form="rect" intensity={1.2} position={[6, 1, 2]} rotation-y={-Math.PI / 2} scale={[8, 3, 1]} color="#ffe9cf" />
+              <Lightformer form="ring" intensity={2} position={[0, 8, 0]} rotation-x={Math.PI / 2} scale={4} color="#ffffff" />
+            </Environment>
+          </>
+        ) : (
+          <>
+            <ambientLight intensity={0.4} />
+            <pointLight position={[0, 0, 0]} color={ACCENT} intensity={1.5} distance={s * 2} decay={1} />
+          </>
+        )}
         <group rotation={[-Math.PI / 2, 0, 0]} position={[0, -mid, 0]}>
           {layout.pieces.map((p, i) => (
             <Moving key={p.key} piece={p} apart={apart} instant={reduced}>
-              {p.kind === "shellTop" ? <Half tris={front} opacity={0.5} />
-                : p.kind === "shellBottom" ? <Half tris={back} opacity={0.92} />
-                : <PartMesh piece={p} />}
+              {p.kind === "shellTop" || p.kind === "shellBottom"
+                ? <ShellHalf tris={p.kind === "shellTop" ? front : back} look={look} top={p.kind === "shellTop"} />
+                : <PartModel piece={p} look={look} lit />}
               {apart && (
                 <Callout piece={p} n={i + 1} radius={layout.radius} compact={compact} text={label(p)}
                   onClick={onAsk ? () => onAsk(label(p)) : undefined} />
               )}
             </Moving>
           ))}
+          {/* put together, the lights inside glow through the frosted shell like the real night light */}
+          {!apart && look === "real" && <pointLight position={[0, 0, 0]} color="#ffc977" intensity={3} distance={layout.radius * 3} decay={1} />}
           <BaseRing radius={layout.radius} z={ringZ} />
         </group>
+        {look === "real" && <ContactShadows position={[0, ringZ - mid + 0.5, 0]} scale={layout.radius * 3.2} blur={2.4} far={s} opacity={0.55} resolution={512} color="#000814" />}
         <OrbitControls makeDefault enablePan={false} autoRotate={spin} autoRotateSpeed={0.8} minDistance={s * 0.5} maxDistance={cam.d * 2.5} target={[0, 0, 0]} />
       </Canvas>
 
@@ -89,6 +109,10 @@ export function Exploded({ project, body, sample, onAsk }: {
         <button className={apart ? "on" : ""} aria-pressed={apart} onClick={() => setApart((x) => !x)} title={apart ? t("xv.together") : t("xv.apart")}>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M12 3 4 7l8 4 8-4-8-4ZM4 12l8 4 8-4M4 17l8 4 8-4" /></svg>
           <span>{apart ? t("xv.together") : t("xv.apart")}</span>
+        </button>
+        <button className={look === "holo" ? "on" : ""} aria-pressed={look === "holo"} onClick={() => setLook((x) => (x === "real" ? "holo" : "real"))} title={look === "real" ? t("xv.holo") : t("xv.real")}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M12 3v3M5.6 5.6l2.1 2.1M3 12h3M18.4 5.6l-2.1 2.1M21 12h-3" /><circle cx="12" cy="14" r="4" /><path d="M6 21h12" /></svg>
+          <span>{look === "real" ? t("xv.holo") : t("xv.real")}</span>
         </button>
         <button className={spin ? "on" : ""} aria-pressed={spin} onClick={() => setSpin((x) => !x)} title={t("xv.spin")}>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" /></svg>
@@ -146,87 +170,6 @@ function Callout({ piece, n, radius, compact, text, onClick }: {
       </Html>
     </>
   );
-}
-
-function Half({ tris, opacity }: { tris: Tri[]; opacity: number }) {
-  const geo = useMemo(() => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.BufferAttribute(Float32Array.from(tris.flat()), 3));
-    g.computeVertexNormals();
-    return g;
-  }, [tris]);
-  useEffect(() => () => geo.dispose(), [geo]);
-  return (
-    <group>
-      <mesh geometry={geo}>
-        <meshPhysicalMaterial color="#d9ecff" roughness={0.35} metalness={0} transmission={0} transparent opacity={opacity}
-          side={THREE.DoubleSide} depthWrite={opacity > 0.8} emissive="#103a66" emissiveIntensity={0.35} />
-      </mesh>
-      <lineSegments>
-        <edgesGeometry args={[geo, 30]} />
-        <lineBasicMaterial color={ACCENT} transparent opacity={0.55} />
-      </lineSegments>
-    </group>
-  );
-}
-
-const LED_COLORS = ["#ff4d6d", "#ffb703", "#ffe66d", "#3ecf8e", "#46e2ff", "#4d7cff", "#9b5de5", "#f15bb5"];
-
-/** A recognisable stand-in for each kind of part, at its real size. */
-function PartMesh({ piece }: { piece: Piece }) {
-  const [w, h, d] = piece.size;
-  switch (piece.kind) {
-    case "board":
-      return (
-        <group>
-          <mesh><boxGeometry args={[w, h, Math.max(1.6, d * 0.25)]} /><meshStandardMaterial color="#1d6e8c" roughness={0.6} /></mesh>
-          <mesh position={[0, 0, d * 0.25]}><boxGeometry args={[w * 0.32, h * 0.38, Math.max(1.5, d * 0.35)]} /><meshStandardMaterial color="#111823" roughness={0.4} /></mesh>
-          {Array.from({ length: Math.max(2, Math.round(w / 6)) }, (_, i) => (
-            <mesh key={i} position={[-w / 2 + 3 + i * ((w - 6) / Math.max(1, Math.round(w / 6) - 1)), h / 2 - 2, d * 0.12]}>
-              <boxGeometry args={[1.4, 1.4, 1.2]} /><meshStandardMaterial color="#e0c36a" metalness={0.8} roughness={0.3} />
-            </mesh>
-          ))}
-        </group>
-      );
-    case "speaker":
-      return (
-        <group rotation={[Math.PI / 2, 0, 0]}>
-          <mesh><cylinderGeometry args={[w / 2, w / 2.4, d, 40]} /><meshStandardMaterial color="#2a3242" metalness={0.5} roughness={0.4} /></mesh>
-          <mesh position={[0, d / 2 + 0.2, 0]}><cylinderGeometry args={[w / 2.4, w / 2.4, 0.6, 40]} /><meshStandardMaterial color="#0b0f17" roughness={0.9} /></mesh>
-          <mesh position={[0, d / 2 + 0.8, 0]}><cylinderGeometry args={[w / 7, w / 7, 1.2, 24]} /><meshStandardMaterial color="#a6b4c8" metalness={0.7} roughness={0.3} /></mesh>
-        </group>
-      );
-    case "ring": {
-      const r = Math.max(w, h) / 2;
-      return (
-        <group>
-          <mesh><torusGeometry args={[r * 0.82, r * 0.16, 12, 48]} /><meshStandardMaterial color="#14202f" roughness={0.6} /></mesh>
-          {Array.from({ length: 12 }, (_, i) => {
-            const a = (i / 12) * Math.PI * 2;
-            return (
-              <mesh key={i} position={[Math.cos(a) * r * 0.82, Math.sin(a) * r * 0.82, r * 0.14]}>
-                <sphereGeometry args={[r * 0.11, 10, 10]} />
-                <meshBasicMaterial color={LED_COLORS[i % LED_COLORS.length]} toneMapped={false} />
-              </mesh>
-            );
-          })}
-        </group>
-      );
-    }
-    case "led":
-      return (
-        <group>
-          <mesh><boxGeometry args={[w, h, Math.max(1, d * 0.3)]} /><meshStandardMaterial color="#1b2431" /></mesh>
-          <mesh position={[0, 0, d * 0.4]}><sphereGeometry args={[Math.min(w, h) * 0.3, 14, 14]} /><meshBasicMaterial color="#ffd166" toneMapped={false} /></mesh>
-        </group>
-      );
-    case "battery":
-      return <mesh><boxGeometry args={[w, h, d]} /><meshStandardMaterial color="#26324a" metalness={0.3} roughness={0.5} /></mesh>;
-    case "motor":
-      return <mesh><boxGeometry args={[w, h, d]} /><meshStandardMaterial color="#2f62d9" roughness={0.45} /></mesh>;
-    default:
-      return <mesh><boxGeometry args={[w, h, d]} /><meshStandardMaterial color="#596a86" roughness={0.5} /></mesh>;
-  }
 }
 
 /** The glowing stand the product floats over. */
