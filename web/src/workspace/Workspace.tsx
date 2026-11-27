@@ -12,7 +12,9 @@ import { Call } from "../Call";
 import { CallSummary } from "../CallSummary";
 import { Logo, Mic, MicOff, Shield } from "../ui/Icons";
 import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
-import { canSaveFolder, projectFiles, saveToFolder, zip, type FolderFile } from "./folder.ts";
+import { canSaveFolder, projectFiles, saveToFolder, slug, zip, type FolderFile } from "./folder.ts";
+import { hoursText, specMarkdown, specSheet } from "../build/spec.ts";
+import { CommandBar, typing, type Cmd } from "./Command.tsx";
 import type { ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
@@ -218,7 +220,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [tick, setTick] = useState(0);
   const [ready, setReady] = useState<boolean | null>(null);
   const [sampleStep, setSampleStep] = useState(1);
-  const [tab, setTab] = useState<"3d" | "code" | "tools" | "shop">("3d");
+  const [tab, setTab] = useState<"3d" | "spec" | "code" | "tools" | "shop">("3d");
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const askRef = useRef<HTMLTextAreaElement>(null);
   const fileIn = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const w = W.current;
@@ -717,6 +721,28 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const panelOpen = app !== null || view !== "none";
   const panelTitle = app ? t(`ws.app.${app}` as Key) : t(`gd.view.${view}` as Key);
   const closePanel = () => { if (app) setApp(null); else setMem({ view: "none" }); setWide(false); };
+  const TABS = ["3d", "spec", "code", "tools", "shop"] as const;
+  // Ctrl+K / ⌘K opens the command bar; 1 to 5 switch the stage tabs; / jumps to the message box
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmdOpen((x) => !x); return; }
+      if (typing(e) || e.ctrlKey || e.metaKey || e.altKey || cmdOpen) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= TABS.length && !panelOpen) { setTab(TABS[n - 1]); return; }
+      if (e.key === "/") { e.preventDefault(); askRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [panelOpen, cmdOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const commands: Cmd[] = [
+    ...TABS.map((k, i) => ({ id: `tab-${k}`, label: t("cmd.show", { what: t(`ws.tab.${k}` as Key) }), hint: String(i + 1), run: () => { closePanel(); setTab(k); } })),
+    { id: "ask", label: t("cmd.ask"), hint: "/", run: () => askRef.current?.focus() },
+    ...(["builder", "design_lab", "repair_call", "redesign", "inspection", "library"] as const).map((id) => ({ id: `app-${id}`, label: t(`ws.app.${id}` as Key), hint: t(`ws.app.${id}.d` as Key), run: () => openApp(id) })),
+    ...(w.project ? [{ id: "pack", label: t("ws.pack"), run: () => downloadPack(w.project!) }] : []),
+    { id: "new", label: t("ws.newProject"), run: () => switchChat(null) },
+  ];
+  const live = report ?? SAMPLE_REPORT;
+  const flags = live.issues.filter((x) => x.level === "fix" || x.level === "block").length + live.issues.filter((x) => x.level === "warn").length;
   const name = profile && !profile.guest ? profile.name.split(" ")[0] : "";
   // the step card follows the person's own build, or walks through the example until they start one
   const stepList = w.project ? steps : SAMPLE_REPORT.steps;
@@ -770,6 +796,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       </aside>
       {side && <div className="ws-scrim" onClick={() => setSide(false)} aria-hidden />}
 
+      <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       <main className="ws-main lab">
         <header className="ws-top">
           <button className="ws-icon ws-only-narrow" aria-label={t("ws.menu")} onClick={() => setSide(true)}>☰</button>
@@ -784,7 +811,19 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
           <span className={`ws-status ${ready ? "on" : ready === false ? "off" : ""}`} role="status">
             <i aria-hidden />{ready ? t("ws.online") : ready === false ? t("ws.offline") : t("ws.checking")}
           </span>
+          <dl className="ws-readout ws-only-roomy" aria-label={t("ro.title")} title={w.project ? undefined : t("xv.example")}>
+            <div><dt>{t("ro.parts")}</dt><dd>{(w.project ?? SAMPLE).parts.length}</dd></div>
+            <div><dt>{t("ro.draw")}</dt><dd>{live.draw.mA}<small>mA</small></dd></div>
+            <div><dt>{t("ro.peak")}</dt><dd>{live.draw.peakmA}<small>mA</small></dd></div>
+            <div><dt>{t("ro.life")}</dt><dd>{live.hours != null ? hoursText(live.hours).replace(/^about /, "") : live.source?.kind === "usb" ? "USB" : "–"}</dd></div>
+            <div><dt>{t("ro.cost")}</dt><dd>₹{live.totalInr.toLocaleString("en-IN")}</dd></div>
+            <div className={flags ? "warn" : "ok"}><dt>{t("ro.checks")}</dt><dd>{flags ? t("ro.flags", { n: flags }) : t("ro.pass")}</dd></div>
+          </dl>
           <span className="ws-grow" />
+          <button className="ws-cmd-btn ws-only-roomy" onClick={() => setCmdOpen(true)} aria-label={t("cmd.title")}>
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></svg>
+            <span>{t("cmd.btn")}</span><kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</kbd>
+          </button>
           {w.project && (
             <details className="gd-more">
               <summary className="lab-chip">{t("gd.more")}</summary>
@@ -830,16 +869,16 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                     onPhoto={() => setCamera({ what: t("ws.wires.check") })}
                     onPack={() => w.project && downloadPack(w.project)}
                     onCsv={() => report && download(`${(w.project?.name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report), "text/csv")}
-                    onTicks={(ticks) => setMem({ wires: ticks })} />
+                    onTicks={(ticks) => setMem({ wires: ticks })} onSay={(s) => void talk(s)} />
                 )}
               </div>
             </div>
           ) : (
             <>
               <div className="ws-tabs" role="tablist" aria-label={t("xv.title")}>
-                {(["3d", "code", "tools", "shop"] as const).map((k) => (
+                {(["3d", "spec", "code", "tools", "shop"] as const).map((k) => (
                   <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
-                    <TabIcon id={k} /><span>{t(`ws.tab.${k}` as Key)}</span>
+                    <TabIcon id={k} /><span>{t(`ws.tab.${k}` as Key)}</span><kbd className="ws-tab-key" aria-hidden>{["3d", "spec", "code", "tools", "shop"].indexOf(k) + 1}</kbd>
                   </button>
                 ))}
                 {!w.project && <span className="ws-pill dim ws-tabs-note">{t("xv.example")}</span>}
@@ -852,6 +891,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                   </Suspense>
                 )}
                 {tab === "code" && <CodePane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} body={w.project ? w.body : SAMPLE_BODY} sample={!w.project} />}
+                {tab === "spec" && <SpecPane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} sample={!w.project} />}
                 {tab === "tools" && <ToolsPane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} sample={!w.project} />}
                 {tab === "shop" && <ShopPane report={report ?? SAMPLE_REPORT} sample={!w.project}
                   onCsv={() => download(`${((w.project ?? SAMPLE).name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report ?? SAMPLE_REPORT), "text/csv")}
@@ -968,7 +1008,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                   <button type="button" onClick={(e) => { closeDetails(e); void captureScreen(); }}>{t("ws.screen")}</button>
                 </div>
               </details>
-              <textarea rows={1} value={shown} maxLength={3000} placeholder={t("gd.ph")} aria-label={t("gd.ph")}
+              <textarea ref={askRef} rows={1} value={shown} maxLength={3000} placeholder={t("gd.ph")} aria-label={t("gd.ph")}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void talk(shown); } }} />
               <MicButton label=" " onInterim={setInterim}
@@ -1010,10 +1050,11 @@ async function smallPhoto(file: File): Promise<string> {
 
 // --- the one view beside the conversation -------------------------------------------------------------------------
 
-function Stage({ view, world, report, memory, check, onStep, onDone, onPhoto, onPack, onCsv, onTicks }: {
+function Stage({ view, world, report, memory, check, onStep, onDone, onPhoto, onPack, onCsv, onTicks, onSay }: {
   view: View; world: World; report: Report | null; memory: Memory; check: PhotoCheck | null;
   onStep: (n: number) => void; onDone: (n: number) => void; onPhoto: () => void; onPack: () => void; onCsv: () => void;
   onTicks: (ticks: number[]) => void;
+  onSay: (words: string) => void;
 }) {
   const { t, auto } = useI18n();
   const p = world.project;
@@ -1025,6 +1066,34 @@ function Stage({ view, world, report, memory, check, onStep, onDone, onPhoto, on
       return (
         <div className="gd-plan">
           {world.idea.offline && <p className="ia-offline">{t("ia.offline")}</p>}
+          {(a.concepts?.length ?? 0) > 0 && (
+            <section className="gd-concepts" aria-label={t("gd.concepts")}>
+              <span className="lab-kicker">{t("gd.concepts")}</span>
+              <ol>
+                {a.concepts!.map((c, i) => (
+                  <li key={c.title} className={i === 0 ? "on" : ""}>
+                    <div className="gd-c-head">
+                      <span className="gd-c-n">{i + 1}</span>
+                      <div><b>{auto(c.title)}</b><p>{auto(c.pitch)}</p></div>
+                      {i === 0 ? <span className="ws-pill">{t("gd.c.building")}</span>
+                        : <button className="lab-btn" onClick={() => onSay(t("gd.c.pick", { title: c.title }))}>{t("gd.c.build")}</button>}
+                    </div>
+                    <dl>
+                      <dt>{t("gd.c.for")}</dt><dd>{auto(c.for_user)}</dd>
+                      <dt>{t("gd.c.tech")}</dt><dd>{auto(c.tech)}</dd>
+                      <dt>{t("gd.c.new")}</dt><dd>{auto(c.new_because)}</dd>
+                      <dt>{t("gd.c.risk")}</dt><dd>{auto(c.risk)}</dd>
+                    </dl>
+                    <div className="gd-c-foot">
+                      <span className="mono">₹{c.cost_inr.toLocaleString("en-IN")}</span>
+                      <span>{t(`gd.c.effort.${c.effort}` as Key)}</span>
+                      <span className="gd-c-parts">{c.parts.map((id) => BY_ID[id] ? auto(short(BY_ID[id])) : id).join(" · ")}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           <h2 className={`v-${a.overall}`}>{t(`ia.overall.${a.overall}` as Key)}</h2>
           <p>{auto(a.overall_why)}</p>
           <ul className="gd-wishes">
@@ -1470,14 +1539,23 @@ function StepCard({ steps, at, done, sample, onGo, onDone, onOpen }: {
 
 // --- beside the 3D view: the code, the tools, and the parts to buy ---------------------------------------------------
 
-function TabIcon({ id }: { id: "3d" | "code" | "tools" | "shop" }) {
+function TabIcon({ id }: { id: "3d" | "spec" | "code" | "tools" | "shop" }) {
   const d = {
     "3d": "M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 0v9m0 0 8-4.5M12 12l-8-4.5",
+    spec: "M4 20V10M10 20V4M16 20v-7M22 20H2",
     code: "m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14",
     tools: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z",
     shop: "M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
   }[id];
   return <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
+}
+
+function saveText(name: string, text: string, type = "text/plain") {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const el = document.createElement("a");
+  el.href = url; el.download = name;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function SampleNote({ sample }: { sample: boolean }) {
@@ -1611,6 +1689,58 @@ function ToolsPane({ project, report, sample }: { project: Project; report: Repo
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The engineering spec: every number the checks rest on, with its formula and the working, so anyone can redo it
+ * by hand. A load bar shows how close each limit is.
+ */
+function SpecPane({ project, report, sample }: { project: Project; report: Report; sample: boolean }) {
+  const { t, auto } = useI18n();
+  const groups = useMemo(() => specSheet(report), [report]);
+  const [open, setOpen] = useState<string | null>(null);
+  const flagged = groups.flatMap((g) => g.rows).filter((r) => r.verdict === "over" || r.verdict === "tight").length;
+  return (
+    <div className="ws-pane spec">
+      <SampleNote sample={sample} />
+      <div className="ws-pane-head">
+        <div><h2>{t("ws.spec.title")}</h2><p className="ws-pane-sub">{t("ws.spec.sub")}</p></div>
+        <div className="ws-buybtns">
+          <span className={`spec-status ${flagged ? "warn" : "ok"}`}>{flagged ? t("ws.spec.flagged", { n: flagged }) : t("ws.spec.clear")}</span>
+          <button className="ws-buy-btn" onClick={() => saveText(`${slug(project.name)}-spec.md`, specMarkdown(project.name || "Project", groups), "text/markdown")}>{t("ws.spec.save")}</button>
+        </div>
+      </div>
+      {!groups.length && <p className="ws-pane-sub">{t("ws.spec.empty")}</p>}
+      {groups.map((g) => (
+        <section key={g.id} className="spec-group">
+          <span className="lab-kicker">{t(`ws.spec.g.${g.id}` as Key)}</span>
+          <ul>
+            {g.rows.map((r) => {
+              const ratio = /\((\d+)%\)/.exec(r.value);
+              const shown = open === r.key;
+              return (
+                <li key={r.key} className={`spec-row ${r.verdict}`}>
+                  <button className="spec-line" aria-expanded={shown} onClick={() => setOpen(shown ? null : r.key)}>
+                    <span className="spec-label">{auto(r.label)}</span>
+                    <span className="spec-value">{r.value}</span>
+                    {r.verdict !== "info" && <span className={`spec-tag ${r.verdict}`}>{t(`ws.spec.v.${r.verdict}` as Key)}</span>}
+                  </button>
+                  {ratio && <span className="spec-bar" aria-hidden><i style={{ width: `${Math.min(100, Number(ratio[1]))}%` }} />{r.key !== "fill" && <b style={{ left: "80%" }} />}</span>}
+                  {shown && (
+                    <div className="spec-math">
+                      <code className="spec-f">{r.formula}</code>
+                      <code className="spec-w">{r.working}</code>
+                      <p>{auto(r.note)}</p>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }

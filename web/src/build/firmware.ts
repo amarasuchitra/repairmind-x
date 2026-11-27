@@ -3,7 +3,7 @@
  * and the "When… then…" list as a loop that reacts to the sensors. It is a starting point to upload and
  * then change, so it favours plain code over cleverness.
  */
-import { analyze, type Report } from "./engine.ts";
+import { analyze, libSteps, type Report } from "./engine.ts";
 import { BY_ID, type Part } from "./parts.ts";
 import { ACTIONS, TRIGGERS, type Project, type Rule, type Trigger } from "./project.ts";
 
@@ -53,7 +53,7 @@ export function firmware(project: Project, report: Report = analyze(project)): {
     `// ${cString(project.name || "My project")}: starter code from RepairMind X Build.`,
     `// Board: ${esp ? "ESP32 Dev Module (Tools > Board > esp32 > ESP32 Dev Module)" : "Arduino Nano (Tools > Board > Arduino AVR Boards > Arduino Nano)"}`,
   );
-  if (report.libs.length) out(`// Libraries (Tools > Manage Libraries): ${report.libs.join(", ")}`);
+  if (report.libs.length) out(...libSteps(report.libs).map((l) => `// ${l.replace(/→/g, ">")}`));
   if (useVoice === "amp") out("// Robot voice: use ESP32 board package 2.0.17 and ESP8266Audio 1.9.7, which share the classic I2S driver.");
   out("//", "// What it does:");
   if (!rules.length) out("//   Nothing yet. Add a \"When... then...\" in the builder.");

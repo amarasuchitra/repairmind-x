@@ -90,6 +90,18 @@ class Plan(BaseModel):
     warnings: list[str]
 
 
+class Concept(BaseModel):
+    title: str = Field(description="A short product name for this direction: 'Bedtime story star', 'Plant that texts you'")
+    pitch: str = Field(description="One sentence: what the product becomes")
+    for_user: str = Field(description="Who it is for and what changes in their day, concretely ('a 4-year-old falls asleep to a story instead of a screen')")
+    tech: str = Field(description="The technology that makes it work, in plain words, with the number that makes it feasible")
+    new_because: str = Field(description="Honestly: what similar products already exist, and what is new or better here")
+    parts: list[str] = Field(description="Catalogue part ids this concept needs, exactly as given in the request")
+    cost_inr: int = Field(description="Approximate total parts cost in Indian rupees")
+    effort: Literal["easy", "moderate", "hard"]
+    risk: str = Field(description="The biggest technical risk, and how the first prototype stage retires it")
+
+
 class Assessment(BaseModel):
     product: Product
     wishes: list[Wish]
@@ -99,3 +111,4 @@ class Assessment(BaseModel):
     restated: str = Field(description="The user's idea or wish restated in one or two plain sentences, so they can confirm you understood")
     questions: list[Question] = Field(description="Up to 4 questions that would most change the plan; empty when nothing important is unclear")
     design_lab: bool = Field(description="True when the idea has mechanical or structural parts (frames, loads, moving mechanisms) that need engineering calculations")
+    concepts: list[Concept] = Field(default_factory=list, description="Exactly 3 product concepts, ranked best first; the plan builds the chosen one (the first unless the user picked another)")

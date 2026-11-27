@@ -12,7 +12,7 @@
  *
  * Pure functions over the checker's report, so the tests run them in Node.
  */
-import type { Conn, Report } from "../build/engine.ts";
+import { libSteps, type Conn, type Report } from "../build/engine.ts";
 import type { Project } from "../build/project.ts";
 
 export interface Wire {
@@ -169,7 +169,7 @@ export function buildPack(project: Project, report: Report, code: { name: string
     ...tests.map((t) => `- **${t.what}** (${t.when}). ${t.probes}. Expect **${t.expect}**. ${t.ifNot}`),
     "\n## Build steps\n",
     ...report.steps.map((s, i) => `### ${i + 1}. ${s.title}\n\n${s.detail.map((d) => `- ${d}`).join("\n")}${s.safety?.length ? `\n\n> Safety: ${s.safety.join(" ")}` : ""}\n`),
-    report.libs.length ? `\n## Arduino libraries\n\n${report.libs.map((l) => `- ${l}`).join("\n")}` : "",
+    report.libs.length ? `\n## Arduino libraries\n\n${libSteps(report.libs).map((l) => `- ${l}`).join("\n")}` : "",
     `\n## Code (${code.name.replace(/\.ino$/, "")}.ino)\n\nCompile it in the Arduino IDE before flashing.\n\n\`\`\`cpp\n${code.code}\n\`\`\``,
   ].filter(Boolean).join("\n");
 }

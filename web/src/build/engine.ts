@@ -61,6 +61,13 @@ export interface Report {
 
 const GND = "GND";
 
+/** Booster efficiency at these loads (MT3608-class, 3-4.5 V in, 5 V out). */
+export const BOOST_EFF = 0.85;
+/** Share of a battery's rated capacity that is usable before the voltage sags too far. */
+export const USABLE = 0.8;
+/** Wires, air and mounting take about as much room again as the parts. */
+export const SPACE = 2;
+
 /** How a board names a pin for people. */
 export const pinLabel = (board: Board | null, pin: string) => (board?.id === "esp32" ? `GPIO ${pin}` : pin);
 
@@ -310,7 +317,7 @@ export function analyze(project: Project): Report {
   }
   let draw = { mA: Math.round(i5), peakmA: Math.round(p5) };
   if (source && boost && rail5?.[0] === 5 && source.kind === "battery") {
-    const k = 5 / (source.v[0] * 0.85);
+    const k = 5 / (source.v[0] * BOOST_EFF);
     draw = { mA: Math.round(i5 * k), peakmA: Math.round(p5 * k) };
     const boostMax = (POWER.find((x) => x.id === "boost5") as Power).maxmA;
     if (p5 > boostMax) issues.push({ level: "warn", text: `Everything at once can pull ${Math.round(p5)} mA from the booster, over its ${boostMax} mA. The code staggers things, but avoid running lights, voice and motors flat out together.` });
@@ -324,7 +331,7 @@ export function analyze(project: Project): Report {
   if ((has("servo") || has("pump") || has("strip")) && board) {
     issues.push({ level: "tip", text: "Put a 470 µF capacitor across 5 V and GND near the motor or LEDs so the brain doesn't restart when they start up." });
   }
-  const hours = source && source.kind === "battery" && draw.mA > 0 ? (source.mAh * 0.8) / draw.mA : null;
+  const hours = source && source.kind === "battery" && draw.mA > 0 ? (source.mAh * USABLE) / draw.mA : null;
 
   // --- kids ------------------------------------------------------------------------------------------------
   if (kids) {
@@ -335,7 +342,6 @@ export function analyze(project: Project): Report {
   // --- fit -------------------------------------------------------------------------------------------------
   const physical = items.filter((x) => x.part.size[0] > 0 && !(project.mode === "upgrade" && x.part.id === "usb"));
   const partsVolume = physical.reduce((s, x) => s + x.part.size[0] * x.part.size[1] * x.part.size[2], 0) / 1000;
-  const SPACE = 2; // wires, air and mounting take about as much room again
   const fitsIn = (inner: [number, number, number]) => {
     const room = [...inner].sort((a, c) => c - a);
     return physical.filter((x) => {
@@ -393,6 +399,22 @@ export function railFor(part: Part, board: Board | null): "5v" | "3v3" | "none" 
   return part.rail;
 }
 
+/** Libraries the Arduino Library Manager doesn't carry: they come as a .zip from GitHub. */
+export const ZIP_LIBS: Record<string, string> = {
+  ESP8266SAM: "https://github.com/earlephilhower/ESP8266SAM/archive/refs/heads/master.zip",
+};
+
+/** How to install each library, in plain steps: Library Manager for most, a GitHub .zip for the rest. */
+export function libSteps(libs: string[]): string[] {
+  if (!libs.length) return ["No extra libraries are needed."];
+  const managed = libs.filter((l) => !ZIP_LIBS[l]);
+  const zipped = libs.filter((l) => ZIP_LIBS[l]);
+  return [
+    ...(managed.length ? [`Install these libraries from Tools → Manage Libraries: ${managed.join(", ")}.`] : []),
+    ...zipped.map((l) => `${l} is not in the Library Manager: download ${ZIP_LIBS[l]} and add it with Sketch → Include Library → Add .ZIP Library.`),
+  ];
+}
+
 function buildSteps(project: Project, x: { board: Board | null; source: Power | null; boost: boolean; conns: Conn[]; items: { part: Part }[]; libs: string[] }): Step[] {
   const steps: Step[] = [];
   const has = (id: string) => x.items.some((i) => i.part.id === id);
@@ -417,7 +439,7 @@ function buildSteps(project: Project, x: { board: Board | null; source: Power | 
         x.board.id === "esp32"
           ? "Add the ESP32 boards: File → Preferences → Additional boards URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json, then Tools → Board → Boards Manager → install \"esp32\". Pick \"ESP32 Dev Module\"."
           : "Pick Tools → Board → Arduino Nano. On clone boards choose Processor → \"ATmega328P (Old Bootloader)\" if uploading fails.",
-        x.libs.length ? `Install these libraries from Tools → Manage Libraries: ${x.libs.join(", ")}.` : "No extra libraries are needed.",
+        ...libSteps(x.libs),
         "Open the code from the Code tab, press Upload, then open the Serial Monitor at 115200 baud to see what it's doing.",
       ],
     });
