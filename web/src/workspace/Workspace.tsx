@@ -13,7 +13,8 @@ import { CallSummary } from "../CallSummary";
 import { Logo, Mic, MicOff, Shield } from "../ui/Icons";
 import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
 import { canSaveFolder, projectFiles, saveToFolder, slug, zip, type FolderFile } from "./folder.ts";
-import { specMarkdown, specSheet } from "../build/spec.ts";
+import { hoursText, specMarkdown, specSheet } from "../build/spec.ts";
+import { CommandBar, typing, type Cmd } from "./Command.tsx";
 import type { ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
@@ -220,6 +221,8 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [ready, setReady] = useState<boolean | null>(null);
   const [sampleStep, setSampleStep] = useState(1);
   const [tab, setTab] = useState<"3d" | "spec" | "code" | "tools" | "shop">("3d");
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const askRef = useRef<HTMLTextAreaElement>(null);
   const fileIn = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const w = W.current;
@@ -718,6 +721,28 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const panelOpen = app !== null || view !== "none";
   const panelTitle = app ? t(`ws.app.${app}` as Key) : t(`gd.view.${view}` as Key);
   const closePanel = () => { if (app) setApp(null); else setMem({ view: "none" }); setWide(false); };
+  const TABS = ["3d", "spec", "code", "tools", "shop"] as const;
+  // Ctrl+K / ⌘K opens the command bar; 1 to 5 switch the stage tabs; / jumps to the message box
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmdOpen((x) => !x); return; }
+      if (typing(e) || e.ctrlKey || e.metaKey || e.altKey || cmdOpen) return;
+      const n = Number(e.key);
+      if (n >= 1 && n <= TABS.length && !panelOpen) { setTab(TABS[n - 1]); return; }
+      if (e.key === "/") { e.preventDefault(); askRef.current?.focus(); }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, [panelOpen, cmdOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  const commands: Cmd[] = [
+    ...TABS.map((k, i) => ({ id: `tab-${k}`, label: t("cmd.show", { what: t(`ws.tab.${k}` as Key) }), hint: String(i + 1), run: () => { closePanel(); setTab(k); } })),
+    { id: "ask", label: t("cmd.ask"), hint: "/", run: () => askRef.current?.focus() },
+    ...(["builder", "design_lab", "repair_call", "redesign", "inspection", "library"] as const).map((id) => ({ id: `app-${id}`, label: t(`ws.app.${id}` as Key), hint: t(`ws.app.${id}.d` as Key), run: () => openApp(id) })),
+    ...(w.project ? [{ id: "pack", label: t("ws.pack"), run: () => downloadPack(w.project!) }] : []),
+    { id: "new", label: t("ws.newProject"), run: () => switchChat(null) },
+  ];
+  const live = report ?? SAMPLE_REPORT;
+  const flags = live.issues.filter((x) => x.level === "fix" || x.level === "block").length + live.issues.filter((x) => x.level === "warn").length;
   const name = profile && !profile.guest ? profile.name.split(" ")[0] : "";
   // the step card follows the person's own build, or walks through the example until they start one
   const stepList = w.project ? steps : SAMPLE_REPORT.steps;
@@ -771,6 +796,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       </aside>
       {side && <div className="ws-scrim" onClick={() => setSide(false)} aria-hidden />}
 
+      <CommandBar open={cmdOpen} onClose={() => setCmdOpen(false)} commands={commands} />
       <main className="ws-main lab">
         <header className="ws-top">
           <button className="ws-icon ws-only-narrow" aria-label={t("ws.menu")} onClick={() => setSide(true)}>☰</button>
@@ -785,7 +811,19 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
           <span className={`ws-status ${ready ? "on" : ready === false ? "off" : ""}`} role="status">
             <i aria-hidden />{ready ? t("ws.online") : ready === false ? t("ws.offline") : t("ws.checking")}
           </span>
+          <dl className="ws-readout ws-only-roomy" aria-label={t("ro.title")} title={w.project ? undefined : t("xv.example")}>
+            <div><dt>{t("ro.parts")}</dt><dd>{(w.project ?? SAMPLE).parts.length}</dd></div>
+            <div><dt>{t("ro.draw")}</dt><dd>{live.draw.mA}<small>mA</small></dd></div>
+            <div><dt>{t("ro.peak")}</dt><dd>{live.draw.peakmA}<small>mA</small></dd></div>
+            <div><dt>{t("ro.life")}</dt><dd>{live.hours != null ? hoursText(live.hours).replace(/^about /, "") : live.source?.kind === "usb" ? "USB" : "–"}</dd></div>
+            <div><dt>{t("ro.cost")}</dt><dd>₹{live.totalInr.toLocaleString("en-IN")}</dd></div>
+            <div className={flags ? "warn" : "ok"}><dt>{t("ro.checks")}</dt><dd>{flags ? t("ro.flags", { n: flags }) : t("ro.pass")}</dd></div>
+          </dl>
           <span className="ws-grow" />
+          <button className="ws-cmd-btn ws-only-roomy" onClick={() => setCmdOpen(true)} aria-label={t("cmd.title")}>
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></svg>
+            <span>{t("cmd.btn")}</span><kbd>{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</kbd>
+          </button>
           {w.project && (
             <details className="gd-more">
               <summary className="lab-chip">{t("gd.more")}</summary>
@@ -840,7 +878,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
               <div className="ws-tabs" role="tablist" aria-label={t("xv.title")}>
                 {(["3d", "spec", "code", "tools", "shop"] as const).map((k) => (
                   <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
-                    <TabIcon id={k} /><span>{t(`ws.tab.${k}` as Key)}</span>
+                    <TabIcon id={k} /><span>{t(`ws.tab.${k}` as Key)}</span><kbd className="ws-tab-key" aria-hidden>{["3d", "spec", "code", "tools", "shop"].indexOf(k) + 1}</kbd>
                   </button>
                 ))}
                 {!w.project && <span className="ws-pill dim ws-tabs-note">{t("xv.example")}</span>}
@@ -970,7 +1008,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                   <button type="button" onClick={(e) => { closeDetails(e); void captureScreen(); }}>{t("ws.screen")}</button>
                 </div>
               </details>
-              <textarea rows={1} value={shown} maxLength={3000} placeholder={t("gd.ph")} aria-label={t("gd.ph")}
+              <textarea ref={askRef} rows={1} value={shown} maxLength={3000} placeholder={t("gd.ph")} aria-label={t("gd.ph")}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void talk(shown); } }} />
               <MicButton label=" " onInterim={setInterim}
@@ -1689,7 +1727,7 @@ function SpecPane({ project, report, sample }: { project: Project; report: Repor
                     <span className="spec-value">{r.value}</span>
                     {r.verdict !== "info" && <span className={`spec-tag ${r.verdict}`}>{t(`ws.spec.v.${r.verdict}` as Key)}</span>}
                   </button>
-                  {ratio && <span className="spec-bar" aria-hidden><i style={{ width: `${Math.min(100, Number(ratio[1]))}%` }} /><b style={{ left: "80%" }} /></span>}
+                  {ratio && <span className="spec-bar" aria-hidden><i style={{ width: `${Math.min(100, Number(ratio[1]))}%` }} />{r.key !== "fill" && <b style={{ left: "80%" }} />}</span>}
                   {shown && (
                     <div className="spec-math">
                       <code className="spec-f">{r.formula}</code>
