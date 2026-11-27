@@ -16,6 +16,8 @@ import { canSaveFolder, projectFiles, saveToFolder, slug, zip, type FolderFile }
 import { hoursText, specMarkdown, specSheet } from "../build/spec.ts";
 import { CommandBar, typing, type Cmd } from "./Command.tsx";
 import { briefFor, type AppAction, type Brief } from "./coach.ts";
+import type { LiveState } from "./GuideLive.tsx";
+const GuideLive = lazy(() => import("./GuideLive.tsx").then((m) => ({ default: m.GuideLive })));
 const BuildCall = lazy(() => import("./BuildCall.tsx").then((m) => ({ default: m.BuildCall })));
 import type { ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
@@ -214,6 +216,11 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   // always listening by default: the guide hears you, answers out loud and listens again (tap the orb to pause)
   const [hands, setHands] = useState(() => read("rmx.guide.hands", (r) => r !== "0"));
   const [micBlocked, setMicBlocked] = useState(false);
+  // the live voice (Gemini Live, like the repair call); the browser's own speech is the fallback when it can't connect
+  const [liveTok, setLive] = useState<{ serverUrl: string; token: string } | null>(null);
+  const [liveFail, setLiveFail] = useState(false);
+  const [liveState, setLiveState] = useState<LiveState>("connecting");
+  const liveSend = useRef<((text: string) => void) | null>(null);
   const [check, setCheck] = useState<PhotoCheck | null>(null);
   const [call, setCall] = useState<{ serverUrl: string; token: string; room: string } | null>(null);
   const [callBusy, setCallBusy] = useState(false);
@@ -281,7 +288,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const say = (s: Said) => setMem({ messages: [...W.current.memory.messages, s].slice(-120) });
 
   function speak(words: string) {
-    if ((!voice && !handsRef.current) || !words) return;
+    if ((!voice && !handsRef.current) || !words || liveSend.current) return;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(words);
@@ -628,7 +635,23 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
   // --- one conversation turn ----------------------------------------------------------------------------------------
 
+  function guideState(): string {
+    const cur = W.current;
+    return stateText({
+      memory: cur.memory, project: cur.project, report: cur.project ? analyze(cur.project) : null, assessment: cur.idea.assessment,
+      idea: cur.idea.input.idea, bench: cur.bench.text, body: cur.project ? bodyText(cur.project, cur.body) : "", design: cur.designText, language: lang,
+    }) + panelState();
+  }
+
   async function talk(words?: string) {
+    // in a live voice conversation, typed words go into it too
+    if (liveSend.current && words?.trim() && !pending.length) {
+      say({ role: "user", text: words.trim(), at: Date.now() });
+      touchChat(words.trim());
+      setText("");
+      liveSend.current(words.trim());
+      return;
+    }
     if (busy) return;
     setError(null);
     const files = pending;
@@ -649,10 +672,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
         const cur = W.current;
         const r = await post<GuideTurn>("/api/guide/turn", {
           messages: forRequest(cur.memory.messages),
-          state: stateText({
-            memory: cur.memory, project: cur.project, report: cur.project ? analyze(cur.project) : null, assessment: cur.idea.assessment,
-            idea: cur.idea.input.idea, bench: cur.bench.text, body: cur.project ? bodyText(cur.project, cur.body) : "", design: cur.designText, language: lang,
-          }) + panelState(),
+          state: guideState(),
           catalog: catalogText(),
           attachment_ids: hop === 0 ? files.map((f) => f.id) : [],
           language: lang,
@@ -725,7 +745,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [heard, setHeard] = useState("");
   const canListen = recognitionCtor() !== null;
   useEffect(() => {
-    if (!hands || busy || speaking || camera || !canListen) return;
+    if (!hands || !liveFail || busy || speaking || camera || !canListen) return;
     const Ctor = recognitionCtor()!;
     const r = new Ctor();
     r.continuous = false;
@@ -759,7 +779,37 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
     setMicBlocked(false);
     try { r.start(); } catch { /* already running */ }
     return () => { window.clearTimeout(restart); r.onend = null; try { r.stop(); } catch { /* stopped */ } rec.current = null; };
-  }, [hands, busy, speaking, camera, speech, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hands, liveFail, busy, speaking, camera, speech, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // listening means a live voice conversation: get it a room when listening starts, drop it when it stops
+  useEffect(() => {
+    if (!hands) { setLive(null); liveSend.current = null; return; }
+    if (liveTok || liveFail || ready === false) { if (ready === false) setLiveFail(true); return; }
+    let gone = false;
+    fetch("/api/token", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accepted_notice: true, mode: "guide", language: choice, ui_language: lang }) })
+      .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(String(b.detail ?? r.status)); return b; })
+      .then((b) => { if (!gone) setLive({ serverUrl: b.server_url, token: b.participant_token }); })
+      .catch(() => { if (!gone) setLiveFail(true); });
+    return () => { gone = true; };
+  }, [hands, ready, liveTok, liveFail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // if the voice never joins (the agent worker isn't running), fall back to the browser's own speech
+  useEffect(() => {
+    if (!liveTok || liveState !== "connecting") return;
+    const id = window.setTimeout(() => { setLive(null); liveSend.current = null; setLiveFail(true); }, 20000);
+    return () => window.clearTimeout(id);
+  }, [liveTok, liveState]);
+
+  async function liveTool(call: ToolCall): Promise<{ result: string; state: string }> {
+    const label = call.why || t(`gd.tool.${call.tool}` as Key);
+    setBusy(label);
+    let out: string;
+    try { out = await run(call); } catch (e) { out = `failed: ${e instanceof Error ? e.message : String(e)}`; }
+    finally { setBusy(""); }
+    say({ role: "tool", text: `${call.tool}: ${out}`, brief: label, at: Date.now() });
+    return { result: out, state: guideState() };
+  }
 
   function toggleHands() {
     const on = !hands;
@@ -772,7 +822,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
   const view = m.view;
   const shown = interim ? `${text}${text && !text.endsWith(" ") ? " " : ""}${interim}` : text;
-  const orb = busy ? "thinking" : speaking ? "speaking" : hands ? "listening" : "idle";
+  const orb = liveTok && hands
+    ? (busy ? "thinking" : liveState === "connecting" ? "connecting" : liveState === "idle" ? "listening" : liveState)
+    : busy ? "thinking" : speaking ? "speaking" : hands ? "listening" : "idle";
   const last = [...m.messages].reverse().find((x) => x.role === "guide");
   const welcomeBack = m.messages.length > 0 && !busy && m.messages[m.messages.length - 1].at < Date.now() - 30 * 60_000;
   const steps = report?.steps ?? [];
@@ -1004,13 +1056,24 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
             <span className="ws-ai-name">{t("ws.ai")}</span>
             <span className={`ws-dot ${ready ? "on" : ready === false ? "off" : ""}`} aria-hidden />
           </div>
+          {liveTok && hands && !call && !coach && (
+            <Suspense fallback={null}>
+              <GuideLive serverUrl={liveTok.serverUrl} token={liveTok.token}
+                context={() => ({ state: guideState(), catalog: catalogText() })}
+                onTool={liveTool}
+                onLine={(who, text) => { say({ role: who, text, at: Date.now() }); if (who === "user") touchChat(text); }}
+                onState={setLiveState}
+                onReady={(send) => { liveSend.current = send; }}
+                onEnd={() => { setLive(null); liveSend.current = null; if (handsRef.current) setLiveFail(true); }} />
+            </Suspense>
+          )}
           <div className="ws-ai-me">
             <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } else toggleHands(); }}
               aria-label={speaking ? t("ws.voice.speaking") : hands ? t("ws.voice.end") : t("ws.talk")}>
               <VoiceOrb2D state={orb} bands={[]} size={96} detail="compact" />
             </button>
             {(hands || busy || speaking || micBlocked) && (
-              <p className="ws-voice-state" role="status">{micBlocked ? t("ws.voice.blocked") : hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? t("ws.voice.thinking") : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
+              <p className="ws-voice-state" role="status">{micBlocked ? t("ws.voice.blocked") : hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? busy : liveTok && hands ? t(`ws.live.${liveState}` as Key) : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
             )}
           </div>
 

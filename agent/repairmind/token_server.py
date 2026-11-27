@@ -52,7 +52,7 @@ class TokenRequest(BaseModel):
     language: str = "auto"
     # The app's display language, used to greet in the right language when `language` is "auto".
     ui_language: str = ""
-    # "build" starts the live build coach instead of the repair mechanic.
+    # "build" starts the live build coach, "guide" the assistant's live voice, anything else the repair mechanic.
     mode: str = "repair"
 
 
@@ -119,7 +119,7 @@ def token(req: TokenRequest) -> TokenResponse:
             agent_name=AGENT_NAME,
             metadata=json.dumps({"language": i18n.normalize(req.language) or "auto",
                                  "ui_language": i18n.normalize(req.ui_language),
-                                 "mode": "build" if req.mode == "build" else "repair"}),
+                                 "mode": req.mode if req.mode in ("build", "guide") else "repair"}),
         )]))
         .to_jwt()
     )

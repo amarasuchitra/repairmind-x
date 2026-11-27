@@ -588,7 +588,8 @@ def _mode(metadata: str) -> str:
         data = json.loads(metadata) if metadata else {}
     except json.JSONDecodeError:
         return "repair"
-    return "build" if isinstance(data, dict) and data.get("mode") == "build" else "repair"
+    mode = data.get("mode") if isinstance(data, dict) else None
+    return mode if mode in ("build", "guide") else "repair"
 
 
 def _languages(metadata: str) -> tuple[str, str]:
@@ -612,6 +613,18 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
 
     metadata = getattr(ctx.job, "metadata", "") or ""
+    if _mode(metadata) == "guide":
+        from .guide import live as guide_live
+
+        language, ui_language = _languages(metadata)
+        speech_code = i18n.gemini_language_code(language)
+        session = AgentSession(
+            llm=google.realtime.RealtimeModel(model=GEMINI_MODEL, voice=GEMINI_VOICE, api_version=GEMINI_API_VERSION,
+                                              temperature=0.5, **({"language": speech_code} if speech_code else {})),
+            max_tool_steps=8,
+        )
+        await guide_live.run(ctx, session, language, ui_language)
+        return
     if _mode(metadata) == "build":
         from .coach import entry as coach_entry
 
