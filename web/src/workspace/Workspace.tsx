@@ -199,7 +199,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [wide, setWide] = useState(false);
   const [side, setSide] = useState(false);
   const [camera, setCamera] = useState<{ what: string } | null>(null);
-  const [hands, setHands] = useState(false);
+  // always listening by default: the guide hears you, answers out loud and listens again (tap the orb to pause)
+  const [hands, setHands] = useState(() => read("rmx.guide.hands", (r) => r !== "0"));
+  const [micBlocked, setMicBlocked] = useState(false);
   const [check, setCheck] = useState<PhotoCheck | null>(null);
   const [call, setCall] = useState<{ serverUrl: string; token: string; room: string } | null>(null);
   const [callBusy, setCallBusy] = useState(false);
@@ -726,7 +728,12 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       }
       setHeard((final + " " + interim).trim());
     };
-    r.onerror = () => { /* no-speech and aborted just restart below */ };
+    let pause = 400;
+    r.onerror = (e: { error?: string }) => {
+      // no microphone permission: stop retrying and say so; no-speech and aborted just restart below
+      if (e?.error === "not-allowed" || e?.error === "service-not-allowed" || e?.error === "audio-capture") { setMicBlocked(true); setHands(false); }
+      else if (e?.error === "network") pause = 3000;
+    };
     let restart: number | undefined;
     r.onend = () => {
       rec.current = null;
@@ -734,9 +741,10 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       setHeard("");
       if (said) void talkRef.current(said);
       // nothing heard: listen again after a breath, while voice mode stays on
-      else restart = window.setTimeout(() => setTick((n) => n + 1), 400);
+      else restart = window.setTimeout(() => setTick((n) => n + 1), pause);
     };
     rec.current = r;
+    setMicBlocked(false);
     try { r.start(); } catch { /* already running */ }
     return () => { window.clearTimeout(restart); r.onend = null; try { r.stop(); } catch { /* stopped */ } rec.current = null; };
   }, [hands, busy, speaking, camera, speech, tick]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -744,6 +752,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   function toggleHands() {
     const on = !hands;
     setHands(on);
+    write("rmx.guide.hands", on ? 1 : 0);
     if (!on) { try { speechSynthesis.cancel(); } catch { /* no speech */ } setSpeaking(false); setHeard(""); }
   }
 
@@ -974,8 +983,8 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
               aria-label={speaking ? t("ws.voice.speaking") : hands ? t("ws.voice.end") : t("ws.talk")}>
               <VoiceOrb2D state={orb} bands={[]} size={96} detail="compact" />
             </button>
-            {(hands || busy || speaking) && (
-              <p className="ws-voice-state" role="status">{hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? t("ws.voice.thinking") : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
+            {(hands || busy || speaking || micBlocked) && (
+              <p className="ws-voice-state" role="status">{micBlocked ? t("ws.voice.blocked") : hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? t("ws.voice.thinking") : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
             )}
           </div>
 
