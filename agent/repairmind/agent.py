@@ -35,6 +35,8 @@ from .manuals import ManualIndex, manual_path
 from .prompts import GREETING, MECHANIC_INSTRUCTIONS
 from .expert import detector as expert_detector
 from .expert import products as expert_products
+from .reasoning import circuit
+from .reasoning import evidence as ev
 from .session import GateResult, Hypothesis, RepairSession
 
 load_dotenv()
@@ -146,14 +148,18 @@ class Mechanic(Agent):
     async def check_known_fixes(self, context: RunContext) -> str:
         """Fixes that worked before on this exact model (learned shortcuts). Call it after hearing the symptoms.
         They are leads: still confirm the diagnosis and propose every step through the gates."""
-        if not self.state.model_confirmed:
-            return "The model isn't confirmed. Ask for the rating label first; remembered fixes are per exact model."
-        fixes = known_fixes.lookup(known_fixes.store_path(SESSIONS_DIR), self.state.brand, self.state.model,
-                                   " ".join(self.state.symptoms + self.state.history_answers))
+        store = known_fixes.store_path(SESSIONS_DIR)
+        said = " ".join(self.state.symptoms + self.state.history_answers)
+        fixes = (known_fixes.lookup(store, self.state.brand, self.state.model, said)
+                 if self.state.model_confirmed else [])
+        others = known_fixes.similar(store, self.state.device, said, exclude_model=self.state.model)
         if fixes:
             self.state._record("known_fix", diagnosis=fixes[0].get("diagnosis", ""), worked=fixes[0].get("worked", 1))
             await self.changed()
-        return known_fixes.for_model(fixes)
+        head = (known_fixes.for_model(fixes) if self.state.model_confirmed
+                else "The model isn't confirmed, so there are no exact-model fixes; read the label for those.")
+        tail = known_fixes.similar_for_model(others)
+        return head + ("\n" + tail if tail else "")
 
     @function_tool
     async def find_part(self, context: RunContext, part: str, part_number: str = "") -> str:
@@ -197,6 +203,60 @@ class Mechanic(Agent):
         """
         hyps = [Hypothesis(c, float(p)) for c, p in zip(causes, confidences)]
         return await self._done(self.state.update_hypotheses(hyps))
+
+    @function_tool
+    async def plan_tests(self, context: RunContext, tests_json: str) -> str:
+        """Pick the next test: the one that best separates the listed causes for the least effort. Call it whenever
+        two or more causes are still in play, instead of choosing a test by feel.
+
+        Args:
+            tests_json: JSON list of candidate tests. Each: {"test": "Set the meter to DC volts, black on GND, red on
+                the fuse's far side", "expect": {"<cause exactly as listed>": "<reading that cause gives, e.g. 0 V>"},
+                "cost": 1}. cost: 1 quick look or one reading, 2 needs a cover off, 3 slow or awkward. Give every
+                listed cause a predicted reading when you can. Tests must be reversible: look, listen, measure.
+        """
+        try:
+            raw = json.loads(tests_json)
+            cands = [ev.TestPlan(str(t["test"]), {str(k): str(v) for k, v in dict(t.get("expect", {})).items()},
+                                 float(t.get("cost", 1) or 1)) for t in (raw if isinstance(raw, list) else [raw])]
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            return f"Couldn't read the tests ({e}). Send a JSON list of {{test, expect: {{cause: reading}}, cost}}."
+        return await self._done(self.state.plan_tests(cands))
+
+    @function_tool
+    async def record_measurement(self, context: RunContext, reading: str, detail: str = "") -> str:
+        """Record the result of the test plan_tests chose. The confidences update from it by Bayes' rule.
+
+        Args:
+            reading: Which predicted reading it matched, word for word (e.g. "0 V"), or "none of these".
+            detail: What was actually read or seen, e.g. "4.87 V" or "fuse wire visibly broken".
+        """
+        return await self._done(self.state.record_measurement(reading, detail))
+
+    @function_tool
+    async def simulate_circuit(self, context: RunContext, netlist_json: str, readings_json: str = "[]") -> str:
+        """Simulate a low-voltage DC circuit (60 V or less) and rank which single failed part explains the readings.
+        Also names the next point to probe. Use it when you know the circuit (from the board, label or manual).
+
+        Args:
+            netlist_json: JSON list of parts. {"id": "R1", "type": "R", "a": "node", "b": "node", "value": 220}.
+                Types: R (ohms), V (volts, a is +), I (amps), D or LED (a is anode, optional vf), F (fuse),
+                S (switch, optional "closed": false), W (wire or solder joint). Ground is node "0".
+            readings_json: JSON list of meter readings: {"node": "led", "volts": 0.1} (to ground) or
+                {"from": "a", "to": "b", "volts": 4.9}.
+        """
+        try:
+            rep = circuit.report(json.loads(netlist_json), json.loads(readings_json or "[]"))
+        except circuit.Refused as e:
+            self.state._record("simulation_refused", reason=str(e))
+            await self.changed()
+            return f"REFUSED. {e}"
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
+            return f"Couldn't simulate: {e}"
+        self.state._record("simulation", top=rep["ranked"][0]["fault"] if rep["ranked"] else "",
+                           probe=(rep["probe"] or {}).get("node", ""))
+        await self.changed()
+        return circuit.for_model(rep)
 
     @function_tool
     async def set_diagnosis(self, context: RunContext, cause: str, confidence: float, evidence: list[str]) -> str:
