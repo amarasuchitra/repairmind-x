@@ -160,6 +160,8 @@ export function buildPack(project: Project, report: Report, code: { name: string
     "| Part | Qty | Each | Total |\n|---|---|---|---|",
     ...lines.map((l) => `| ${l.name} | ${l.qty} | ₹${l.each} | ₹${l.total} |`),
     `| **Total** | | | **₹${total}** |`,
+    "\n## Tools and instruments\n",
+    ...toolsFor(project, report).map((x) => `- [ ] ${x.must ? "**Needed:**" : "Helpful:"} ${x.name}. ${x.why}`),
     "\n## Wiring (tick each one off)\n",
     ...wires.map((w) => `- [ ] **${w.n}.** ${w.text}`),
     report.pinMap.length ? "\n## Board pins\n\n" + report.pinMap.map((p) => `- ${p.pin}: ${p.use}`).join("\n") : "",
@@ -168,7 +170,7 @@ export function buildPack(project: Project, report: Report, code: { name: string
     "\n## Build steps\n",
     ...report.steps.map((s, i) => `### ${i + 1}. ${s.title}\n\n${s.detail.map((d) => `- ${d}`).join("\n")}${s.safety?.length ? `\n\n> Safety: ${s.safety.join(" ")}` : ""}\n`),
     report.libs.length ? `\n## Arduino libraries\n\n${report.libs.map((l) => `- ${l}`).join("\n")}` : "",
-    `\n## Code (${code.name}.ino)\n\nCompile it in the Arduino IDE before flashing.\n\n\`\`\`cpp\n${code.code}\n\`\`\``,
+    `\n## Code (${code.name.replace(/\.ino$/, "")}.ino)\n\nCompile it in the Arduino IDE before flashing.\n\n\`\`\`cpp\n${code.code}\n\`\`\``,
   ].filter(Boolean).join("\n");
 }
 
@@ -182,4 +184,65 @@ export function readingsText(report: Report): string {
 export function buyText(report: Report): string {
   const { lines, total } = buyList(report);
   return lines.map((l) => `${l.qty} × ${l.name} ₹${l.total}`).join("\n") + `\nTotal ₹${total}. Shop links shown on screen (Robu, Amazon.in, Robocraze).`;
+}
+
+// --- the tools and instruments the build needs ---------------------------------------------------------------------
+
+export interface ToolLine {
+  name: string;
+  /** why this build needs it, in one line */
+  why: string;
+  /** without it the build can't be done; otherwise it makes the job easier or safer */
+  must: boolean;
+  group: "measure" | "assemble" | "solder" | "make" | "safety" | "software";
+  shops: { name: string; url: string }[];
+}
+
+const toolShops = (q: string) => [
+  { name: "Amazon.in", url: `https://www.amazon.in/s?k=${enc(q)}` },
+  { name: "Robu", url: `https://robu.in/?s=${enc(q)}&post_type=product` },
+];
+
+const SOLDERED = new Set(["speaker", "amp", "mic", "player", "ring", "strip", "pump", "vibe", "lipo", "boost5", "relay", "aa3", "aa4nimh"]);
+
+/**
+ * The instruments and hand tools for this project, worked out from its parts and its build steps: always a
+ * multimeter (the expected readings need one) and the board's USB cable; a soldering kit when a part has bare
+ * wires or pads that must be soldered; a small screwdriver for a booster's trimmer; somewhere to print the body.
+ */
+export function toolsFor(project: Project, report: Report): ToolLine[] {
+  const ids = new Set(project.parts.map((p) => p.id));
+  const board = ids.has("esp32") ? "ESP32" : ids.has("nano") ? "Arduino Nano" : "";
+  // parts with bare wires or pads; plug-in modules on header pins go on the breadboard without solder
+  const solder = [...ids].some((id) => SOLDERED.has(id));
+  const out: ToolLine[] = [];
+  const add = (t: Omit<ToolLine, "shops">, q = t.name) => out.push({ ...t, shops: toolShops(q) });
+
+  add({ name: "Digital multimeter", why: "To check the readings before and after power goes on (the Tests list).", must: true, group: "measure" }, "digital multimeter");
+  if (board) {
+    add({
+      name: board === "Arduino Nano" ? "Mini-USB data cable" : "USB data cable for the ESP32 (Micro-USB or USB-C, match your board)",
+      why: `To load the code onto the ${board}. A charge-only cable won't work.`, must: true, group: "software",
+    }, board === "Arduino Nano" ? "mini usb data cable arduino nano" : "esp32 usb data cable");
+    add({ name: "A computer with the free Arduino IDE", why: "To open, check and upload the code (Code tab).", must: true, group: "software" }, "arduino ide");
+  }
+  add({ name: "Breadboard and jumper wires (male-male and male-female)", why: "To wire and test everything on the desk before it goes in the body.", must: true, group: "assemble" }, "breadboard jumper wires kit");
+  add({ name: "Wire stripper and cutter", why: "To cut wires to length and strip the ends cleanly.", must: true, group: "assemble" }, "wire stripper cutter");
+  if (solder) {
+    add({ name: "Soldering iron (25-60 W, temperature controlled) with stand", why: "Some parts have pads or wires that must be soldered for a reliable joint.", must: true, group: "solder" }, "temperature controlled soldering iron kit");
+    add({ name: "Solder wire (63/37 or lead-free, 0.8 mm) and flux", why: "For the solder joints.", must: true, group: "solder" }, "solder wire 0.8mm flux");
+    add({ name: "Heat-shrink tubing assortment", why: "To cover every solder joint so nothing can short.", must: true, group: "solder" }, "heat shrink tubing assortment");
+    add({ name: "Helping hands or a small vice", why: "Holds the part steady while you solder.", must: false, group: "solder" }, "helping hands soldering");
+  }
+  if (ids.has("boost5")) add({ name: "Small precision screwdriver set", why: "To set the booster's output to 5.0 V with its little screw.", must: true, group: "assemble" }, "precision screwdriver set");
+  else add({ name: "Small screwdriver set", why: "For battery box and body screws.", must: false, group: "assemble" }, "precision screwdriver set");
+  add({ name: "Hot glue gun", why: "To hold the boards and speaker in place inside the body.", must: false, group: "assemble" }, "hot glue gun");
+  add({ name: "3D printer, or an online 3D printing service", why: "To make the body from the STL files (3D body view). A local print shop works too.", must: false, group: "make" }, "3d printing service");
+  add({ name: "Safety glasses", why: solder ? "Solder can spit, and clipped wire ends fly." : "Clipped wire ends fly.", must: true, group: "safety" }, "safety glasses");
+  if (ids.has("lipo")) add({ name: "Fire-safe LiPo bag", why: "To charge the lithium cell safely.", must: false, group: "safety" }, "lipo safe bag");
+  return out;
+}
+
+export function toolsText(project: Project, report: Report): string {
+  return toolsFor(project, report).map((x) => `${x.must ? "Needed" : "Helpful"}: ${x.name}: ${x.why}`).join("\n");
 }

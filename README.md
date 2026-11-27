@@ -219,10 +219,39 @@ Each run is saved in `agent/evals/results/` and compared with the previous one, 
 ## Three screens: intro, start page, assistant
 
 The app has three screens. The **intro** and the scrolling **start page** are unchanged. Everything after them happens
-on one **assistant** screen (`#assistant`, `web/src/workspace/`), laid out like a chat app: chats and tools on the
-left, the conversation in the middle, and a panel on the right where any tool opens. Nothing is a separate page any
-more: the live repair call, the design lab, the parts canvas, redesign, bulk inspection and the references all open
-as panels beside the conversation, and the assistant can open them itself. Old addresses (`#lab`, `#build`,
+on one **assistant** screen (`#assistant`, `web/src/workspace/`), laid out like a workbench: navigation and your
+projects on the left, a top bar (project picker, whether the AI is online, the time, your profile), **the product in
+3D in the middle**, the live camera and the current build step under it, and the assistant on the right (its orb,
+the conversation, a waveform, mute, a big "Tap to speak" and stop). Nothing is a separate page any more: the live
+repair call, the design lab, the parts canvas, redesign, bulk inspection and the references all open in the middle
+in place of the 3D view, and the assistant can open them itself.
+
+![The workbench](docs/screenshots/workbench-desktop.jpg)
+
+- **Exploded 3D view** (`Exploded.tsx`, maths in `explode.ts`): the project's own body (from the 3D body tool) split
+  into its two halves with every part inside on its own level, each with a label on a leader line, over a glowing
+  base ring. Pull apart or put together, turn, reset. Tap a label to ask the assistant about that part. Before you
+  have a project it shows an example (a glowing star toy, marked "Example") built from real catalogue parts, so its
+  checks and steps are the real ones.
+- **Lifelike parts, or a hologram**: each part is modelled at its real size as it looks out of the bag (the
+  blue Nano with its chip, mini-USB and pin rows, the DFPlayer's microSD slot, the red TTP223 pad, the speaker's
+  frame, cone and tabs, the ring's twelve lit LEDs, the battery cells), in a frosted moulded shell under studio
+  lighting with a soft shadow (`models.tsx`). "Hologram" draws the same shapes as glowing outlines.
+- **Code & files** (`folder.ts`): the project as a real folder in a file tree, like a code editor: the Arduino
+  sketch in its own folder (the IDE needs that), `README.md` (the whole build guide), `wiring.md`, `tests.md`,
+  `tools.md`, `parts.csv`, `project.json` and the two printable `.stl` halves. "Save folder to my computer" writes
+  it into a folder you pick (Chrome and Edge on a desktop); "Download folder (.zip)" works everywhere.
+- **Tools**: the instruments and hand tools this build needs, worked out from its parts (always a multimeter
+  and the board's USB data cable; a soldering kit only when a part has bare wires or pads; a precision screwdriver
+  for a booster), each marked Needed or Helpful, with shop links.
+- **Shop parts**: every component with quantity, typical price in rupees, "Buy at Robu / Amazon.in /
+  Robocraze" buttons, the total, a CSV and the build pack. Prices are typical: check the part on the shop page.
+- **Live camera card**: off until you turn it on, and nothing is sent until you tap "Show the assistant". The
+  expand button opens the full live repair call.
+- **Step card**: "Step n / N" with a dot for every step (done ones in green), the step's first instruction and its
+  safety note, Back / Next, and "I did this".
+- Below 1240 px the navigation slides in from the menu button; on phones it is one scrolling column (3D view, step,
+  assistant, camera) and tools open full screen ([phone](docs/screenshots/workbench-phone.jpg)). Old addresses (`#lab`, `#build`,
 `#redesign`, `#inspect`, `#demo`) open the assistant with that panel.
 
 | Part | Where | What it does |
