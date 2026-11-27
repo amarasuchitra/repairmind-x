@@ -69,6 +69,18 @@ const write = (k: string, v: unknown) => {
 
 const LAST_ROOM = "rmx.lastRoom";
 
+/**
+ * The three things RepairMind X is for. Every tool lives under one of them: building something new (the workbench,
+ * with the design lab, parts canvas and references), repairing a product (the live call, and redesigning a broken
+ * part), and finding manufacturing defects in bulk.
+ */
+type SectionId = "build" | "repair" | "inspect";
+const SECTIONS: { id: SectionId; icon: string; main: AppId | null; more: AppId[] }[] = [
+  { id: "build", icon: "build", main: null, more: ["design_lab", "builder", "library"] },
+  { id: "repair", icon: "repair_call", main: "repair_call", more: ["redesign"] },
+  { id: "inspect", icon: "inspection", main: "inspection", more: [] },
+];
+
 interface LibHit { ref: string; title: string; source: string; kind: string; text: string }
 interface WireVerdict { n: number; verdict: "ok" | "wrong" | "unclear"; note: string }
 interface PhotoCheck { photo: "good" | "poor"; wires: WireVerdict[]; other_problems: string[]; better_photo: string; power_on: boolean; summary: string }
@@ -791,6 +803,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const live = report ?? SAMPLE_REPORT;
   const flags = live.issues.filter((x) => x.level === "fix" || x.level === "block").length + live.issues.filter((x) => x.level === "warn").length;
   const name = profile && !profile.guest ? profile.name.split(" ")[0] : "";
+  const section: SectionId = app === "repair_call" || app === "redesign" || app === "demo" ? "repair" : app === "inspection" ? "inspect" : "build";
   // the step card follows the person's own build, or walks through the example until they start one
   const stepList = w.project ? steps : SAMPLE_REPORT.steps;
   const stepAt = w.project ? Math.min(Math.max(1, m.step || 1), Math.max(1, steps.length)) : sampleStep;
@@ -810,14 +823,27 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
         </div>
 
         <nav className="ws-nav" aria-label={t("ws.tools")}>
-          <button className={!panelOpen ? "on" : ""} aria-current={!panelOpen ? "page" : undefined} onClick={() => { setApp(null); setMem({ view: "none" }); setSide(false); }}>
-            <NavIcon id="home" /><span>{t("ws.home")}</span>
-          </button>
-          {APPS.map((id) => (
-            <button key={id} className={app === id ? "on" : ""} aria-current={app === id ? "page" : undefined} title={t(`ws.app.${id}.d` as Key)} onClick={() => openApp(app === id ? null : id)}>
-              <NavIcon id={id} /><span>{t(`ws.app.${id}` as Key)}</span>
-            </button>
-          ))}
+          {SECTIONS.map((sec) => {
+            const here = section === sec.id;
+            return (
+              <div key={sec.id} className={`ws-sec${here ? " on" : ""}`}>
+                <button className={`ws-sec-main${here ? " on" : ""}`} aria-current={here ? "page" : undefined}
+                  onClick={() => { if (sec.main) openApp(sec.main); else { setApp(null); setMem({ view: "none" }); } setSide(false); }}>
+                  <NavIcon id={sec.icon} />
+                  <span><b>{t(`ws.sec.${sec.id}` as Key)}</b><small>{t(`ws.sec.${sec.id}.d` as Key)}</small></span>
+                </button>
+                {here && sec.more.length > 0 && (
+                  <div className="ws-sub">
+                    {sec.more.map((id) => (
+                      <button key={id} className={app === id ? "on" : ""} aria-current={app === id ? "page" : undefined} title={t(`ws.app.${id}.d` as Key)} onClick={() => openApp(app === id ? null : id)}>
+                        {t(`ws.app.${id}` as Key)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <nav className="ws-chats" aria-label={t("ws.projects")}>
@@ -995,9 +1021,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                 <h1>{name ? t("home.hiName", { hi: t(greeting()), name }) : t(greeting())}</h1>
                 <p>{t("gd.hello")}</p>
                 <div className="ws-starters">
-                  {(["ws.app.repair_call", "ia.ex2", "ia.ex3", "ia.ex4"] as Key[]).map((k) => (
-                    <button key={k} className="lab-chip" onClick={() => (k === "ws.app.repair_call" ? openApp("repair_call") : void talk(t(k)))}>{t(k)}</button>
-                  ))}
+                  <button className="lab-chip" onClick={() => void talk(t("ws.start.build.say"))}>{t("ws.sec.build")}</button>
+                  <button className="lab-chip" onClick={() => openApp("repair_call")}>{t("ws.sec.repair")}</button>
+                  <button className="lab-chip" onClick={() => openApp("inspection")}>{t("ws.sec.inspect")}</button>
                 </div>
               </div>
             )}
@@ -1443,6 +1469,7 @@ function closeDetails(e: { currentTarget: HTMLElement }) {
 function NavIcon({ id }: { id: string }) {
   const d: Record<string, string> = {
     home: "M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z",
+    build: "M12 3v2M5.6 5.6l1.4 1.4M3 12h2M18.4 5.6 17 7M21 12h-2M9 18h6M10 21h4M12 7a5 5 0 0 0-3 9v2h6v-2a5 5 0 0 0-3-9Z",
     repair_call: "M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 10l5-3v10l-5-3",
     design_lab: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M7.5 15h9",
     builder: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7",
