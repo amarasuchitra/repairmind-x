@@ -11,6 +11,7 @@ import { firmware } from "../build/firmware.ts";
 import type { Project } from "../build/project.ts";
 import { buildShell, halfMesh, stl, type ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, readings, toolsFor, wireList } from "./precision.ts";
+import { specMarkdown, specSheet } from "../build/spec.ts";
 
 export interface FolderFile {
   /** path inside the project folder, with forward slashes */
@@ -44,6 +45,7 @@ export function projectFiles(project: Project, report: Report, body?: { spec: Sh
       path: "tools.md", about: "Tools and instruments, with shop links",
       data: [`# Tools and instruments: ${project.name}`, "", ...tools.map((x) => `- [ ] ${x.must ? "**Needed:**" : "Helpful:"} ${x.name}. ${x.why} ${x.shops.map((s) => `[${s.name}](${s.url})`).join(" · ")}`)].join("\n") + "\n",
     },
+    { path: "spec.md", about: "Engineering spec: every number with its formula", data: specMarkdown(project.name || "Project", specSheet(report)) + "\n" },
     { path: "parts.csv", about: "Parts to buy, with prices and shop links", data: buyCsv(report) + "\n" },
     { path: "project.json", about: "The project, to open again in RepairMind X", data: JSON.stringify(project, null, 2) + "\n" },
   ];

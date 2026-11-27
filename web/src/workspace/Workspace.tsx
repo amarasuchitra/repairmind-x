@@ -12,7 +12,8 @@ import { Call } from "../Call";
 import { CallSummary } from "../CallSummary";
 import { Logo, Mic, MicOff, Shield } from "../ui/Icons";
 import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
-import { canSaveFolder, projectFiles, saveToFolder, zip, type FolderFile } from "./folder.ts";
+import { canSaveFolder, projectFiles, saveToFolder, slug, zip, type FolderFile } from "./folder.ts";
+import { specMarkdown, specSheet } from "../build/spec.ts";
 import type { ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
@@ -218,7 +219,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [tick, setTick] = useState(0);
   const [ready, setReady] = useState<boolean | null>(null);
   const [sampleStep, setSampleStep] = useState(1);
-  const [tab, setTab] = useState<"3d" | "code" | "tools" | "shop">("3d");
+  const [tab, setTab] = useState<"3d" | "spec" | "code" | "tools" | "shop">("3d");
   const fileIn = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const w = W.current;
@@ -837,7 +838,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
           ) : (
             <>
               <div className="ws-tabs" role="tablist" aria-label={t("xv.title")}>
-                {(["3d", "code", "tools", "shop"] as const).map((k) => (
+                {(["3d", "spec", "code", "tools", "shop"] as const).map((k) => (
                   <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>
                     <TabIcon id={k} /><span>{t(`ws.tab.${k}` as Key)}</span>
                   </button>
@@ -852,6 +853,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                   </Suspense>
                 )}
                 {tab === "code" && <CodePane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} body={w.project ? w.body : SAMPLE_BODY} sample={!w.project} />}
+                {tab === "spec" && <SpecPane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} sample={!w.project} />}
                 {tab === "tools" && <ToolsPane project={w.project ?? SAMPLE} report={report ?? SAMPLE_REPORT} sample={!w.project} />}
                 {tab === "shop" && <ShopPane report={report ?? SAMPLE_REPORT} sample={!w.project}
                   onCsv={() => download(`${((w.project ?? SAMPLE).name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report ?? SAMPLE_REPORT), "text/csv")}
@@ -1499,14 +1501,23 @@ function StepCard({ steps, at, done, sample, onGo, onDone, onOpen }: {
 
 // --- beside the 3D view: the code, the tools, and the parts to buy ---------------------------------------------------
 
-function TabIcon({ id }: { id: "3d" | "code" | "tools" | "shop" }) {
+function TabIcon({ id }: { id: "3d" | "spec" | "code" | "tools" | "shop" }) {
   const d = {
     "3d": "M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Zm0 0v9m0 0 8-4.5M12 12l-8-4.5",
+    spec: "M4 20V10M10 20V4M16 20v-7M22 20H2",
     code: "m8 8-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14",
     tools: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z",
     shop: "M3 4h2l2.4 11.2a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2M9 20a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm8 0a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
   }[id];
   return <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d={d} /></svg>;
+}
+
+function saveText(name: string, text: string, type = "text/plain") {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const el = document.createElement("a");
+  el.href = url; el.download = name;
+  document.body.appendChild(el); el.click(); el.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
 
 function SampleNote({ sample }: { sample: boolean }) {
@@ -1640,6 +1651,58 @@ function ToolsPane({ project, report, sample }: { project: Project; report: Repo
           </section>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * The engineering spec: every number the checks rest on, with its formula and the working, so anyone can redo it
+ * by hand. A load bar shows how close each limit is.
+ */
+function SpecPane({ project, report, sample }: { project: Project; report: Report; sample: boolean }) {
+  const { t, auto } = useI18n();
+  const groups = useMemo(() => specSheet(report), [report]);
+  const [open, setOpen] = useState<string | null>(null);
+  const flagged = groups.flatMap((g) => g.rows).filter((r) => r.verdict === "over" || r.verdict === "tight").length;
+  return (
+    <div className="ws-pane spec">
+      <SampleNote sample={sample} />
+      <div className="ws-pane-head">
+        <div><h2>{t("ws.spec.title")}</h2><p className="ws-pane-sub">{t("ws.spec.sub")}</p></div>
+        <div className="ws-buybtns">
+          <span className={`spec-status ${flagged ? "warn" : "ok"}`}>{flagged ? t("ws.spec.flagged", { n: flagged }) : t("ws.spec.clear")}</span>
+          <button className="ws-buy-btn" onClick={() => saveText(`${slug(project.name)}-spec.md`, specMarkdown(project.name || "Project", groups), "text/markdown")}>{t("ws.spec.save")}</button>
+        </div>
+      </div>
+      {!groups.length && <p className="ws-pane-sub">{t("ws.spec.empty")}</p>}
+      {groups.map((g) => (
+        <section key={g.id} className="spec-group">
+          <span className="lab-kicker">{t(`ws.spec.g.${g.id}` as Key)}</span>
+          <ul>
+            {g.rows.map((r) => {
+              const ratio = /\((\d+)%\)/.exec(r.value);
+              const shown = open === r.key;
+              return (
+                <li key={r.key} className={`spec-row ${r.verdict}`}>
+                  <button className="spec-line" aria-expanded={shown} onClick={() => setOpen(shown ? null : r.key)}>
+                    <span className="spec-label">{auto(r.label)}</span>
+                    <span className="spec-value">{r.value}</span>
+                    {r.verdict !== "info" && <span className={`spec-tag ${r.verdict}`}>{t(`ws.spec.v.${r.verdict}` as Key)}</span>}
+                  </button>
+                  {ratio && <span className="spec-bar" aria-hidden><i style={{ width: `${Math.min(100, Number(ratio[1]))}%` }} /><b style={{ left: "80%" }} /></span>}
+                  {shown && (
+                    <div className="spec-math">
+                      <code className="spec-f">{r.formula}</code>
+                      <code className="spec-w">{r.working}</code>
+                      <p>{auto(r.note)}</p>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }

@@ -361,3 +361,40 @@
 .gd-c-foot .mono { color: var(--ws-accent); font-weight: 700; }
 .gd-c-parts { flex: 1 1 100%; }
 @media (max-width: 760px) { .gd-concepts dl { grid-template-columns: minmax(0, 1fr); margin-left: 0; } .gd-c-foot { margin-left: 0; } }
+
+/* --- engineering spec: readouts with their working ------------------------------------------------------------ */
+.spec-status { font: 600 0.72rem/1 ui-monospace, "JetBrains Mono", Menlo, monospace; letter-spacing: 0.06em; text-transform: uppercase; padding: 7px 10px; border-radius: 999px; border: 1px solid; }
+.spec-status.ok { color: #5cf0b0; border-color: rgba(92, 240, 176, 0.35); background: rgba(92, 240, 176, 0.08); }
+.spec-status.warn { color: #ffc24a; border-color: rgba(255, 194, 74, 0.35); background: rgba(255, 194, 74, 0.08); }
+.spec-group { margin-top: 18px; }
+.spec-group ul { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--ws-line); border-radius: 12px; overflow: hidden; background: var(--ws-card); }
+.spec-row { position: relative; border-top: 1px solid var(--ws-line); }
+.spec-row:first-child { border-top: 0; }
+.spec-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
+.spec-row.ok::before { background: #5cf0b0; }
+.spec-row.tight::before { background: #ffc24a; }
+.spec-row.over::before { background: #ff5a6e; }
+.spec-line { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 12px 14px 12px 16px; background: transparent; border: 0; color: inherit; text-align: left; cursor: pointer; }
+.spec-line:hover { background: rgba(70, 226, 255, 0.04); }
+.spec-line:focus-visible { outline: 2px solid var(--ws-accent); outline-offset: -2px; }
+.spec-label { color: var(--ws-dim); font-size: 0.86rem; }
+.spec-value { font: 600 0.92rem/1.2 ui-monospace, "JetBrains Mono", Menlo, monospace; color: var(--ws-ink); font-variant-numeric: tabular-nums; text-align: right; }
+.spec-tag { font: 700 0.66rem/1 ui-monospace, Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 7px; border-radius: 6px; }
+.spec-tag.ok { color: #5cf0b0; background: rgba(92, 240, 176, 0.1); }
+.spec-tag.tight { color: #ffc24a; background: rgba(255, 194, 74, 0.12); }
+.spec-tag.over { color: #ff5a6e; background: rgba(255, 90, 110, 0.12); }
+.spec-bar { position: relative; display: block; height: 3px; margin: -4px 16px 10px; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
+.spec-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: linear-gradient(90deg, var(--ws-blue), var(--ws-accent)); }
+.spec-row.tight .spec-bar i { background: linear-gradient(90deg, #d99a1f, #ffc24a); }
+.spec-row.over .spec-bar i { background: linear-gradient(90deg, #d93a4e, #ff5a6e); }
+.spec-bar b { position: absolute; top: -3px; bottom: -3px; width: 1px; background: rgba(255, 255, 255, 0.35); }
+.spec-math { display: grid; gap: 6px; padding: 0 16px 14px; }
+.spec-math code { display: block; padding: 8px 10px; border-radius: 8px; font: 0.8rem/1.45 ui-monospace, "JetBrains Mono", Menlo, monospace; overflow-wrap: anywhere; }
+.spec-f { color: var(--ws-accent); background: rgba(70, 226, 255, 0.06); border: 1px solid rgba(70, 226, 255, 0.18); }
+.spec-w { color: var(--ws-ink); background: rgba(0, 0, 0, 0.25); border: 1px solid var(--ws-line); }
+.spec-math p { margin: 2px 0 0; color: var(--ws-dim); font-size: 0.8rem; line-height: 1.45; }
+@media (max-width: 560px) {
+  .spec-line { grid-template-columns: minmax(0, 1fr) auto; }
+  .spec-value { grid-column: 1; text-align: left; }
+  .spec-tag { grid-row: 1 / span 2; grid-column: 2; }
+}
