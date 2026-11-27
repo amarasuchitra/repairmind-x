@@ -55,9 +55,9 @@ jobs:
       - name: Compile every generated sketch
         run: |
           fail=0
-          for row in $(jq -c '.[]' sketches/manifest.json); do
-            s=$(echo "$row" | jq -r .sketch); b=$(echo "$row" | jq -r .fqbn)
+          # one "sketch fqbn" pair per line (library names have spaces, so don't split the JSON on whitespace)
+          while read -r s b; do
             if arduino-cli compile --fqbn "$b" "sketches/$s" > "sketches/$s.log" 2>&1; then echo "ok   $s ($b)";
             else echo "FAIL $s ($b)"; tail -n 30 "sketches/$s.log"; fail=1; fi
-          done
+          done < <(jq -r '.[] | "\(.sketch) \(.fqbn)"' sketches/manifest.json)
           exit $fail
