@@ -52,6 +52,8 @@ class TokenRequest(BaseModel):
     language: str = "auto"
     # The app's display language, used to greet in the right language when `language` is "auto".
     ui_language: str = ""
+    # "build" starts the live build coach instead of the repair mechanic.
+    mode: str = "repair"
 
 
 class TokenResponse(BaseModel):
@@ -116,7 +118,8 @@ def token(req: TokenRequest) -> TokenResponse:
         .with_room_config(api.RoomConfiguration(agents=[api.RoomAgentDispatch(
             agent_name=AGENT_NAME,
             metadata=json.dumps({"language": i18n.normalize(req.language) or "auto",
-                                 "ui_language": i18n.normalize(req.ui_language)}),
+                                 "ui_language": i18n.normalize(req.ui_language),
+                                 "mode": "build" if req.mode == "build" else "repair"}),
         )]))
         .to_jwt()
     )

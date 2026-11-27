@@ -15,6 +15,8 @@ import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
 import { canSaveFolder, projectFiles, saveToFolder, slug, zip, type FolderFile } from "./folder.ts";
 import { hoursText, specMarkdown, specSheet } from "../build/spec.ts";
 import { CommandBar, typing, type Cmd } from "./Command.tsx";
+import { briefFor, type AppAction, type Brief } from "./coach.ts";
+const BuildCall = lazy(() => import("./BuildCall.tsx").then((m) => ({ default: m.BuildCall })));
 import type { ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
@@ -201,6 +203,10 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [check, setCheck] = useState<PhotoCheck | null>(null);
   const [call, setCall] = useState<{ serverUrl: string; token: string; room: string } | null>(null);
   const [callBusy, setCallBusy] = useState(false);
+  const [coach, setCoach] = useState<{ serverUrl: string; token: string; brief: Brief } | null>(null);
+  const [coachBig, setCoachBig] = useState(false);
+  const [coachNote, setCoachNote] = useState("");
+  const [saveAsked, setSaveAsked] = useState(false);
   const [callErr, setCallErr] = useState("");
   const [accepted, setAccepted] = useState(!!callNow);
   // after a call: the repair summary, in the same panel
@@ -477,6 +483,37 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       setCallBusy(false);
     }
   }
+  /** The live build coach: the project goes with it, so it guides exactly this build. */
+  async function startCoach() {
+    const p = w.project ?? SAMPLE;
+    setCoachNote("");
+    try {
+      const res = await fetch("/api/token", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepted_notice: true, mode: "build", language: choice, ui_language: lang }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : res.status >= 500 ? t("common.serverDown") : t("common.error", { n: res.status }));
+      setCoach({ serverUrl: body.server_url, token: body.participant_token, brief: briefFor(p, analyze(p)) });
+    } catch (e) {
+      setCoachNote(e instanceof Error ? e.message : String(e));
+    }
+  }
+  const onCoachAction = (a: AppAction) => {
+    if (a.action === "show_tab") { if (app) setApp(null); else if (view !== "none") setMem({ view: "none" }); setTab(a.target as typeof tab); }
+    else if (a.action === "download_pack") downloadPack(w.project ?? SAMPLE);
+    else if (a.action === "save_folder") setSaveAsked(true); // the browser only opens a folder picker on a tap
+    else if (a.action === "go_to_step") { const n = Number(a.target); if (n > 0) (w.project ? setMem({ step: n }) : setSampleStep(n)); }
+  };
+  async function saveFolderNow() {
+    setSaveAsked(false);
+    const p = w.project ?? SAMPLE;
+    const { root, files } = projectFiles(p, analyze(p), w.project ? w.body : SAMPLE_BODY);
+    if (canSaveFolder()) { try { await saveToFolder(root, files); return; } catch { /* cancelled: fall back to the zip */ } }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([zip(root, files)], { type: "application/zip" })); a.download = `${root}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
   function endCall(finished: boolean) {
     if (finished) rawSet(LAST_ROOM, null);
     if (call) setSummaryRoom(call.room);
@@ -737,6 +774,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const commands: Cmd[] = [
     ...TABS.map((k, i) => ({ id: `tab-${k}`, label: t("cmd.show", { what: t(`ws.tab.${k}` as Key) }), hint: String(i + 1), run: () => { closePanel(); setTab(k); } })),
     { id: "ask", label: t("cmd.ask"), hint: "/", run: () => askRef.current?.focus() },
+    { id: "coach", label: t("bc.start"), hint: t("bc.startHint"), run: () => void startCoach() },
     ...(["builder", "design_lab", "repair_call", "redesign", "inspection", "library"] as const).map((id) => ({ id: `app-${id}`, label: t(`ws.app.${id}` as Key), hint: t(`ws.app.${id}.d` as Key), run: () => openApp(id) })),
     ...(w.project ? [{ id: "pack", label: t("ws.pack"), run: () => downloadPack(w.project!) }] : []),
     { id: "new", label: t("ws.newProject"), run: () => switchChat(null) },
@@ -839,6 +877,13 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
         </header>
 
         <section className="ws-stage" aria-label={panelOpen ? panelTitle : t("xv.title")}>
+          {saveAsked && (
+            <div className="bc-ask" role="alert">
+              <span>{t("bc.saveAsk")}</span>
+              <button className="lab-btn solid" onClick={() => void saveFolderNow()}>{t("bc.saveBtn")}</button>
+              <button className="ws-icon" aria-label={t("ws.close")} onClick={() => setSaveAsked(false)}>×</button>
+            </div>
+          )}
           {panelOpen ? (
             <div className="ws-panel">
               <div className="ws-panel-head">
@@ -903,7 +948,15 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
         {!panelOpen && (
           <div className="ws-dock">
-            <CameraCard onShow={async (f) => { await attach([f]); setTimeout(() => void talkRef.current(t("ws.cam.look")), 50); }} onCall={() => openApp("repair_call")} />
+            {coach ? (
+              <Suspense fallback={<section className="ws-card ws-camcard"><span className="lab-spin" aria-hidden /></section>}>
+                <BuildCall serverUrl={coach.serverUrl} token={coach.token} brief={coach.brief} big={coachBig}
+                  onBig={() => setCoachBig((x) => !x)} onAction={onCoachAction} onEnd={(problem) => { setCoach(null); setCoachBig(false); if (problem) setCoachNote(t("bc.failed", { msg: problem })); }} />
+              </Suspense>
+            ) : (
+              <CameraCard onShow={async (f) => { await attach([f]); setTimeout(() => void talkRef.current(t("ws.cam.look")), 50); }} onCall={() => openApp("repair_call")}
+                onBuild={() => void startCoach()} note={coachNote} />
+            )}
             <StepCard steps={stepList} at={stepAt} done={w.project ? m.done : []} sample={!w.project}
               onGo={(n) => (w.project ? setMem({ step: n }) : setSampleStep(n))}
               onDone={(n) => { setMem({ done: [...new Set([...m.done, n])], step: n + 1 }); void talk(t("gd.didStep", { n })); }}
@@ -1432,7 +1485,7 @@ function Waveform({ live }: { live: boolean }) {
  * The camera, small, under the 3D view. Off until the person turns it on; nothing is sent until they tap
  * "Show the assistant", and the full live call (where the assistant watches continuously) is one tap away.
  */
-function CameraCard({ onShow, onCall }: { onShow: (f: File) => void | Promise<void>; onCall: () => void }) {
+function CameraCard({ onShow, onCall, onBuild, note }: { onShow: (f: File) => void | Promise<void>; onCall: () => void; onBuild: () => void; note: string }) {
   const { t } = useI18n();
   const [on, setOn] = useState(false);
   const [err, setErr] = useState(false);
@@ -1474,8 +1527,9 @@ function CameraCard({ onShow, onCall }: { onShow: (f: File) => void | Promise<vo
           </>
         ) : (
           <div className="ws-cam-off">
+            <button className="lab-btn solid bc-start" onClick={onBuild}><i className="bc-live" aria-hidden />{t("bc.start")}</button>
             <button className="lab-btn" onClick={() => { setErr(false); setOn(true); }}>{t("ws.cam.turnOn")}</button>
-            <small>{err ? t("ws.cam.blocked") : t("ws.cam.private")}</small>
+            <small>{note || (err ? t("ws.cam.blocked") : t("bc.startHint"))}</small>
           </div>
         )}
       </div>
