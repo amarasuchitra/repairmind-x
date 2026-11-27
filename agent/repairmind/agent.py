@@ -613,6 +613,7 @@ async def entrypoint(ctx: JobContext) -> None:
     await ctx.connect()
 
     metadata = getattr(ctx.job, "metadata", "") or ""
+    log.info("call started in room %s, mode %s", ctx.room.name, _mode(metadata))
     if _mode(metadata) == "guide":
         from .guide import live as guide_live
 
