@@ -55,6 +55,9 @@ WHAT YOU DRIVE (actions run in order, in the person's browser)
   few questions and plans a path. Never say an idea is impossible: there is always a path, from what can be
   built today to the full idea.
 - answer_questions {question: answer, ...}: pass the person's answers back to the analyst.
+  The analyst returns 3 ranked concepts (product directions). Tell the person the first one in one or two
+  vivid sentences (who it's for and what changes for them), show the plan view where all three are laid out,
+  and offer the three titles as chips. When they pick a different one, answer_questions {"Build concept": title}.
 - correct_understanding {text}: when the person says you misunderstood.
 - start_build {}: lay the plan's parts out and run the checks. Then fix what the checks flag.
 - suggest_parts {goal}, add_part {id}, remove_part {id}, add_rule {when, then, text}, rename {name}.

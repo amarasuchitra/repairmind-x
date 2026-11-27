@@ -124,3 +124,25 @@ def test_corrections_and_precedents_are_learned_and_reused(client, monkeypatch):
     assert 'soft toy: "Talk" -> possible' in last
     s = client.get("/api/upgrade/status").json()
     assert s["learned"] == 1 and s["precedents"] == 3
+
+
+def concept(title, parts):
+    return {"title": title, "pitch": "p", "for_user": "u", "tech": "t", "new_because": "n", "parts": parts,
+            "cost_inr": 900, "effort": "moderate", "risk": "r"}
+
+
+def test_concepts_are_kept_to_three_and_to_catalogue_parts(client, monkeypatch):
+    many = [concept("Story star", ["esp32", "player", "warp_drive"]), concept("Chatty owl", ["esp32", "mic"]),
+            concept("Sleep coach", ["nano", "ring"]), concept("Fourth", ["nano"])]
+    calls = fake(monkeypatch, lambda: answer(concepts=many))
+    r = client.post("/api/upgrade/assess", json=body())
+    assert r.status_code == 200, r.text
+    got = r.json()["concepts"]
+    assert [c["title"] for c in got] == ["Story star", "Chatty owl", "Sleep coach"]
+    assert got[0]["parts"] == ["esp32", "player"]
+    # the analyst is asked to innovate: three ranked directions, each grounded in a real user and real numbers
+    assert "exactly 3 concepts" in calls[0]["system"] and "Build concept:" in calls[0]["system"]
+
+
+def test_an_answer_without_concepts_still_validates():
+    assert answer().concepts == []

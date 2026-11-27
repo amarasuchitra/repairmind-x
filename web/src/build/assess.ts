@@ -40,6 +40,13 @@ export interface Assessment {
   restated: string;
   questions: { q: string; why: string; options: string[] }[];
   design_lab: boolean;
+  /** three ranked product directions; the plan builds the first (missing from older or offline answers) */
+  concepts?: Concept[];
+}
+
+export interface Concept {
+  title: string; pitch: string; for_user: string; tech: string; new_because: string;
+  parts: string[]; cost_inr: number; effort: "easy" | "moderate" | "hard"; risk: string;
 }
 
 export interface IdeaInput {

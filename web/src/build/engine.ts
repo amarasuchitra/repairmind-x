@@ -393,6 +393,22 @@ export function railFor(part: Part, board: Board | null): "5v" | "3v3" | "none" 
   return part.rail;
 }
 
+/** Libraries the Arduino Library Manager doesn't carry: they come as a .zip from GitHub. */
+export const ZIP_LIBS: Record<string, string> = {
+  ESP8266SAM: "https://github.com/earlephilhower/ESP8266SAM/archive/refs/heads/master.zip",
+};
+
+/** How to install each library, in plain steps: Library Manager for most, a GitHub .zip for the rest. */
+export function libSteps(libs: string[]): string[] {
+  if (!libs.length) return ["No extra libraries are needed."];
+  const managed = libs.filter((l) => !ZIP_LIBS[l]);
+  const zipped = libs.filter((l) => ZIP_LIBS[l]);
+  return [
+    ...(managed.length ? [`Install these libraries from Tools → Manage Libraries: ${managed.join(", ")}.`] : []),
+    ...zipped.map((l) => `${l} is not in the Library Manager: download ${ZIP_LIBS[l]} and add it with Sketch → Include Library → Add .ZIP Library.`),
+  ];
+}
+
 function buildSteps(project: Project, x: { board: Board | null; source: Power | null; boost: boolean; conns: Conn[]; items: { part: Part }[]; libs: string[] }): Step[] {
   const steps: Step[] = [];
   const has = (id: string) => x.items.some((i) => i.part.id === id);
@@ -417,7 +433,7 @@ function buildSteps(project: Project, x: { board: Board | null; source: Power | 
         x.board.id === "esp32"
           ? "Add the ESP32 boards: File → Preferences → Additional boards URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json, then Tools → Board → Boards Manager → install \"esp32\". Pick \"ESP32 Dev Module\"."
           : "Pick Tools → Board → Arduino Nano. On clone boards choose Processor → \"ATmega328P (Old Bootloader)\" if uploading fails.",
-        x.libs.length ? `Install these libraries from Tools → Manage Libraries: ${x.libs.join(", ")}.` : "No extra libraries are needed.",
+        ...libSteps(x.libs),
         "Open the code from the Code tab, press Upload, then open the Serial Monitor at 115200 baud to see what it's doing.",
       ],
     });

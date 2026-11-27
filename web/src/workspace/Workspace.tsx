@@ -830,7 +830,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                     onPhoto={() => setCamera({ what: t("ws.wires.check") })}
                     onPack={() => w.project && downloadPack(w.project)}
                     onCsv={() => report && download(`${(w.project?.name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report), "text/csv")}
-                    onTicks={(ticks) => setMem({ wires: ticks })} />
+                    onTicks={(ticks) => setMem({ wires: ticks })} onSay={(s) => void talk(s)} />
                 )}
               </div>
             </div>
@@ -1010,10 +1010,11 @@ async function smallPhoto(file: File): Promise<string> {
 
 // --- the one view beside the conversation -------------------------------------------------------------------------
 
-function Stage({ view, world, report, memory, check, onStep, onDone, onPhoto, onPack, onCsv, onTicks }: {
+function Stage({ view, world, report, memory, check, onStep, onDone, onPhoto, onPack, onCsv, onTicks, onSay }: {
   view: View; world: World; report: Report | null; memory: Memory; check: PhotoCheck | null;
   onStep: (n: number) => void; onDone: (n: number) => void; onPhoto: () => void; onPack: () => void; onCsv: () => void;
   onTicks: (ticks: number[]) => void;
+  onSay: (words: string) => void;
 }) {
   const { t, auto } = useI18n();
   const p = world.project;
@@ -1025,6 +1026,34 @@ function Stage({ view, world, report, memory, check, onStep, onDone, onPhoto, on
       return (
         <div className="gd-plan">
           {world.idea.offline && <p className="ia-offline">{t("ia.offline")}</p>}
+          {(a.concepts?.length ?? 0) > 0 && (
+            <section className="gd-concepts" aria-label={t("gd.concepts")}>
+              <span className="lab-kicker">{t("gd.concepts")}</span>
+              <ol>
+                {a.concepts!.map((c, i) => (
+                  <li key={c.title} className={i === 0 ? "on" : ""}>
+                    <div className="gd-c-head">
+                      <span className="gd-c-n">{i + 1}</span>
+                      <div><b>{auto(c.title)}</b><p>{auto(c.pitch)}</p></div>
+                      {i === 0 ? <span className="ws-pill">{t("gd.c.building")}</span>
+                        : <button className="lab-btn" onClick={() => onSay(t("gd.c.pick", { title: c.title }))}>{t("gd.c.build")}</button>}
+                    </div>
+                    <dl>
+                      <dt>{t("gd.c.for")}</dt><dd>{auto(c.for_user)}</dd>
+                      <dt>{t("gd.c.tech")}</dt><dd>{auto(c.tech)}</dd>
+                      <dt>{t("gd.c.new")}</dt><dd>{auto(c.new_because)}</dd>
+                      <dt>{t("gd.c.risk")}</dt><dd>{auto(c.risk)}</dd>
+                    </dl>
+                    <div className="gd-c-foot">
+                      <span className="mono">₹{c.cost_inr.toLocaleString("en-IN")}</span>
+                      <span>{t(`gd.c.effort.${c.effort}` as Key)}</span>
+                      <span className="gd-c-parts">{c.parts.map((id) => BY_ID[id] ? auto(short(BY_ID[id])) : id).join(" · ")}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
           <h2 className={`v-${a.overall}`}>{t(`ia.overall.${a.overall}` as Key)}</h2>
           <p>{auto(a.overall_why)}</p>
           <ul className="gd-wishes">

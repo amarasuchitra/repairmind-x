@@ -110,6 +110,17 @@ How to think:
   engineering calculations.
 - stages go from a desk prototype that proves the core idea for little money, to a working model, to a
   finished product. Keep each stage achievable for a beginner.
+- Innovate before you plan. Think like a product inventor at a hardware startup, not a parts catalogue. Give
+  exactly 3 concepts under concepts, ranked best first, each a different direction for turning this idea or this
+  ordinary product into something people would genuinely want: (1) the strongest one that can be built now,
+  (2) a bolder one (connected to a phone, Wi-Fi, a cloud speech or AI service, or data over time), (3) a
+  surprising angle a normal person wouldn't think of. Each must solve a real problem for a named person in a
+  named situation (for_user), name the technology with the number that makes it feasible (tech: "a PIR sees a
+  person up to 6 m, and the ring at 20% brightness draws about 60 mA, so 3 AA cells last about 2 nights"), and say
+  honestly what already exists on the market and what is new here (new_because). No gimmicks: a feature earns
+  its place only if the person would miss it once it's gone. Use only catalogue ids in a concept's parts.
+- The plan builds concepts[0], unless the answers say "Build concept: <title>": then build that one, keep it
+  first in concepts, and keep the other two after it.
 - questions: ask only what would change the plan most (who uses it, where, how big, how long on battery,
   budget, a photo of the inside), each with 2-4 tappable answers. Earlier answers are given; never repeat a
   question already answered. When nothing important is unclear, ask nothing.
@@ -241,6 +252,8 @@ def enforce(a: Assessment, req: AssessRequest) -> Assessment:
     act = {c.id for c in req.actions}
     if ids:
         a.plan.parts = [p for p in a.plan.parts if p.id in ids]
+        for c in a.concepts:
+            c.parts = [p for p in c.parts if p in ids]
     if trig and act:
         a.plan.rules = [r for r in a.plan.rules if r.when in trig and r.then in act]
 
@@ -255,6 +268,7 @@ def enforce(a: Assessment, req: AssessRequest) -> Assessment:
     if a.product.power == "wall":
         a.plan.parts = [p for p in a.plan.parts if p.id != "relay"]
         a.plan.rules = [r for r in a.plan.rules if r.then != "switch"]
+    a.concepts = a.concepts[:3]
     if (req.for_kids or a.product.for_kids) and any(p.id == "lipo" for p in a.plan.parts):
         a.plan.warnings.append("For a child's product, AA cells in a screwed compartment are safer than a lithium cell.")
     # wishes that can't be done as asked keep their plan: it builds the closest alternative, so there is no dead end

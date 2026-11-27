@@ -94,6 +94,7 @@ export function assessmentText(a: Assessment): string {
     a.plan.warnings.length ? `Warnings: ${a.plan.warnings.join("; ")}` : "",
     a.questions.length ? `Open questions: ${a.questions.map((q) => `${q.q} [${q.options.join(" / ")}]`).join(" | ")}` : "",
     a.design_lab ? "The analyst suggests the design lab for the mechanics." : "",
+    ...(a.concepts ?? []).map((c, i) => `Concept ${i + 1}${i === 0 ? " (being built)" : ""}: "${c.title}": ${c.pitch} For: ${c.for_user} Tech: ${c.tech} New: ${c.new_because} About Rs ${c.cost_inr}, ${c.effort}. Risk: ${c.risk}`),
   ].filter(Boolean).join("\n");
 }
 

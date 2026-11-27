@@ -48,7 +48,10 @@ jobs:
           arduino-cli core install esp32:esp32@2.0.17
           arduino-cli lib update-index
           arduino-cli lib install "Adafruit NeoPixel" "DFRobotDFPlayerMini" "DHT sensor library" "Adafruit Unified Sensor" \
-            "Adafruit SSD1306" "Adafruit GFX Library" "Servo" "ESP32Servo@1.2.1" "ESP8266Audio@1.9.7" "ESP8266SAM"
+            "Adafruit SSD1306" "Adafruit GFX Library" "Servo" "ESP32Servo@1.2.1" "ESP8266Audio@1.9.7"
+          # not in the Library Manager: the same GitHub source the build guide sends people to
+          arduino-cli config set library.enable_unsafe_install true
+          arduino-cli lib install --git-url https://github.com/earlephilhower/ESP8266SAM.git
       - name: Compile every generated sketch
         run: |
           fail=0

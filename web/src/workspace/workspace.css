@@ -343,3 +343,21 @@
 .ws-check .lab-kicker { display: block; margin-bottom: 2px; }
 .ws-chip { background: transparent; color: var(--ws-dim); border: 1px solid var(--ws-line); border-radius: 999px; padding: 6px 12px; font-size: 0.85rem; }
 .ws-chip.on { color: var(--ws-accent); border-color: rgba(70, 226, 255, 0.5); }
+
+/* the analyst's three product directions */
+.gd-concepts { margin-bottom: 18px; }
+.gd-concepts ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
+.gd-concepts li { border: 1px solid var(--ws-line); border-radius: 14px; padding: 12px 14px; background: rgba(10, 20, 40, 0.55); }
+.gd-concepts li.on { border-color: rgba(70, 226, 255, 0.45); background: linear-gradient(180deg, rgba(70, 226, 255, 0.09), rgba(47, 125, 255, 0.03)); }
+.gd-c-head { display: flex; gap: 12px; align-items: flex-start; }
+.gd-c-head > div { flex: 1 1 auto; min-width: 0; }
+.gd-c-head b { font-size: 1rem; }
+.gd-c-head p { margin: 2px 0 0; color: #c3d0e6; line-height: 1.45; }
+.gd-c-n { flex: 0 0 auto; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-weight: 800; color: var(--ws-accent); background: rgba(70, 226, 255, 0.1); border: 1px solid rgba(70, 226, 255, 0.3); }
+.gd-concepts dl { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 4px 12px; margin: 10px 0 8px 40px; font-size: 0.85rem; line-height: 1.45; }
+.gd-concepts dt { color: var(--ws-dim); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; padding-top: 2px; }
+.gd-concepts dd { margin: 0; color: #d5e0f2; }
+.gd-c-foot { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-left: 40px; font-size: 0.8rem; color: var(--ws-dim); }
+.gd-c-foot .mono { color: var(--ws-accent); font-weight: 700; }
+.gd-c-parts { flex: 1 1 100%; }
+@media (max-width: 760px) { .gd-concepts dl { grid-template-columns: minmax(0, 1fr); margin-left: 0; } .gd-c-foot { margin-left: 0; } }
