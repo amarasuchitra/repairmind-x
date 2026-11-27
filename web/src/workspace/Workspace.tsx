@@ -1590,6 +1590,7 @@ function CameraCard({ onShow, onCall, onBuild, note }: { onShow: (f: File) => vo
   const [on, setOn] = useState(false);
   const [err, setErr] = useState(false);
   const [sending, setSending] = useState(false);
+  const [big, setBig] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (!on) return;
@@ -1607,13 +1608,15 @@ function CameraCard({ onShow, onCall, onBuild, note }: { onShow: (f: File) => vo
     setSending(false);
   }
   return (
-    <section className="ws-card ws-camcard" aria-label={t("ws.cam.live")}>
+    <section className={`ws-card ws-camcard${big ? " big" : ""}`} aria-label={t("ws.cam.live")}>
       <div className="ws-card-head">
         <span className="ws-card-title"><Camera2 /> {t("ws.cam.live")}</span>
         {on && <span className="ws-pill"><i aria-hidden /> {t("ws.cam.on")}</span>}
         <span className="ws-grow" />
-        <button className="ws-icon" onClick={onCall} aria-label={t("ws.cam.call")} title={t("ws.cam.call")}>
-          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg>
+        <button className="ws-icon" onClick={() => setBig((x) => !x)} aria-label={big ? t("ws.shrink") : t("ws.expand")} title={big ? t("ws.shrink") : t("ws.expand")}>
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d={big ? "M10 4v6H4M14 20v-6h6M4 10l6-6M20 14l-6 6" : "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"} />
+          </svg>
         </button>
       </div>
       <div className="ws-cam-view">

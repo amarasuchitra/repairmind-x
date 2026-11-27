@@ -482,9 +482,16 @@ kbd { font: 600 0.68rem/1 ui-monospace, "JetBrains Mono", Menlo, monospace; padd
 .bc-actions { display: flex; align-items: center; gap: 8px; }
 .bc-count { flex: 1; text-align: center; color: var(--ws-dim); font: 600 0.72rem/1.2 ui-monospace, Menlo, monospace; }
 .bc-end { color: #ff8a9b; border-color: rgba(255, 90, 110, 0.4); }
-.bc.big .bc-card { position: fixed; z-index: 70; inset: 84px calc(var(--ws-ai) + 32px) 16px calc(var(--ws-side) + 16px); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
-@media (max-width: 1100px) { .bc.big .bc-card { inset: 70px 12px 12px; } }
+.bc.big .bc-card { position: fixed; z-index: 70; left: calc(var(--ws-side) + 16px); bottom: 16px; width: min(720px, calc(100vw - var(--ws-side) - var(--ws-ai) - 48px)); height: min(620px, calc(100vh - 120px)); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+@media (max-width: 1100px) { .bc.big .bc-card { left: 12px; right: 12px; width: auto; } }
 .bc-ask { position: absolute; z-index: 20; top: 64px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 14px; background: rgba(8, 18, 38, 0.96); border: 1px solid rgba(70, 226, 255, 0.4); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); font-size: 0.88rem; max-width: calc(100% - 32px); }
 @media (prefers-reduced-motion: reduce) { .bc-live, .bc-ring, .bc-progress i.now { animation: none; } }
 
 .ws-stage { position: relative; }
+
+/* the camera card, made bigger in place (it stays the camera, not a call) */
+.ws-camcard.big { position: fixed; z-index: 70; left: calc(var(--ws-side) + 16px); bottom: 16px; width: min(720px, calc(100vw - var(--ws-side) - var(--ws-ai) - 48px)); display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+.ws-camcard.big .ws-cam-view { height: auto; aspect-ratio: 16 / 10; }
+@media (max-width: 1100px) { .ws-camcard.big { left: 12px; right: 12px; width: auto; } }
+.ws-dock:has(.ws-camcard.big), .ws-dock:has(.bc.big) { position: relative; z-index: 90; }
+.ws-camcard.big, .bc.big .bc-card { background: #081325; width: min(600px, calc(100vw - var(--ws-side) - var(--ws-ai) - 48px)); }
