@@ -1166,7 +1166,7 @@ export const en = {
   "ws.voice.thinking": "Thinking…",
   "ws.voice.speaking": "Speaking… tap to interrupt",
   "ws.voice.end": "Pause listening",
-  "ws.voice.blocked": "Allow the microphone for this site (the icon in the address bar), then tap the mic to start listening again.",
+  "ws.voice.blocked": "Allow the microphone for this site (the icon in the address bar), then tap the circle above to start listening again.",
   "ws.voice.unsupported": "Hands-free voice needs Chrome, Edge or Safari. You can still use the microphone button to dictate.",
   "ws.cam.title": "Camera",
   "ws.cam.snap": "Take photo",

@@ -214,7 +214,8 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [side, setSide] = useState(false);
   const [camera, setCamera] = useState<{ what: string } | null>(null);
   // always listening by default: the guide hears you, answers out loud and listens again (tap the orb to pause)
-  const [hands, setHands] = useState(() => read("rmx.guide.hands", (r) => r !== "0"));
+  // always listening: there is no button to turn it off; a blocked microphone is the only thing that stops it
+  const [hands, setHands] = useState(true);
   const [micBlocked, setMicBlocked] = useState(false);
   // the live voice (Gemini Live, like the repair call); the browser's own speech is the fallback when it can't connect
   const [liveTok, setLive] = useState<{ serverUrl: string; token: string } | null>(null);
@@ -1068,7 +1069,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
             </Suspense>
           )}
           <div className="ws-ai-me">
-            <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } else toggleHands(); }}
+            <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } else if (!hands) { setMicBlocked(false); setHands(true); } }}
               aria-label={speaking ? t("ws.voice.speaking") : hands ? t("ws.voice.end") : t("ws.talk")}>
               <VoiceOrb2D state={orb} bands={[]} size={96} detail="compact" />
             </button>
@@ -1129,12 +1130,8 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                 aria-label={voice ? t("ws.mute") : t("ws.unmute")} title={voice ? t("ws.mute") : t("ws.unmute")}>
                 {voice ? <SpeakerIcon /> : <SpeakerIcon off />}
               </button>
-              <button className={`ws-talkbtn${hands ? " on" : ""}`} aria-pressed={hands} onClick={toggleHands}>
-                {hands ? <MicOff size={26} /> : <Mic size={26} />}
-                <span>{hands ? t("ws.voice.end") : t("ws.talk")}</span>
-              </button>
-              <button className="ws-round" aria-label={t("ws.stop")} title={t("ws.stop")} disabled={!speaking && !hands}
-                onClick={() => { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); if (hands) toggleHands(); }}>
+              <button className="ws-round" aria-label={t("ws.stop")} title={t("ws.stop")} disabled={!speaking}
+                onClick={() => { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); }}>
                 <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" /></svg>
               </button>
             </div>
