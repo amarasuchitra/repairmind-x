@@ -219,10 +219,26 @@ Each run is saved in `agent/evals/results/` and compared with the previous one, 
 ## Three screens: intro, start page, assistant
 
 The app has three screens. The **intro** and the scrolling **start page** are unchanged. Everything after them happens
-on one **assistant** screen (`#assistant`, `web/src/workspace/`), laid out like a chat app: chats and tools on the
-left, the conversation in the middle, and a panel on the right where any tool opens. Nothing is a separate page any
-more: the live repair call, the design lab, the parts canvas, redesign, bulk inspection and the references all open
-as panels beside the conversation, and the assistant can open them itself. Old addresses (`#lab`, `#build`,
+on one **assistant** screen (`#assistant`, `web/src/workspace/`), laid out like a workbench: navigation and your
+projects on the left, a top bar (project picker, whether the AI is online, the time, your profile), **the product in
+3D in the middle**, the live camera and the current build step under it, and the assistant on the right (its orb,
+the conversation, a waveform, mute, a big "Tap to speak" and stop). Nothing is a separate page any more: the live
+repair call, the design lab, the parts canvas, redesign, bulk inspection and the references all open in the middle
+in place of the 3D view, and the assistant can open them itself.
+
+![The workbench](docs/screenshots/workbench-desktop.jpg)
+
+- **Exploded 3D view** (`Exploded.tsx`, maths in `explode.ts`): the project's own body (from the 3D body tool) split
+  into its two halves with every part inside on its own level, each with a label on a leader line, over a glowing
+  base ring. Pull apart or put together, turn, reset. Tap a label to ask the assistant about that part. Before you
+  have a project it shows an example (a glowing star toy, marked "Example") built from real catalogue parts, so its
+  checks and steps are the real ones.
+- **Live camera card**: off until you turn it on, and nothing is sent until you tap "Show the assistant". The
+  expand button opens the full live repair call.
+- **Step card**: "Step n / N" with a dot for every step (done ones in green), the step's first instruction and its
+  safety note, Back / Next, and "I did this".
+- Below 1240 px the navigation slides in from the menu button; on phones it is one scrolling column (3D view, step,
+  assistant, camera) and tools open full screen ([phone](docs/screenshots/workbench-phone.jpg)). Old addresses (`#lab`, `#build`,
 `#redesign`, `#inspect`, `#demo`) open the assistant with that panel.
 
 | Part | Where | What it does |

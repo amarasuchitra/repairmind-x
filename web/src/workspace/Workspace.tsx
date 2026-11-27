@@ -10,7 +10,8 @@ import { MicButton, recognitionCtor, uploadFiles, type AttachmentInfo, type Reco
 import { firmware } from "../build/firmware.ts";
 import { Call } from "../Call";
 import { CallSummary } from "../CallSummary";
-import { Wordmark } from "../ui/RingMark";
+import { Logo, Mic, MicOff, Shield } from "../ui/Icons";
+import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, wireList, wiresText } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
 import { analyze, short, type Report } from "../build/engine.ts";
@@ -36,6 +37,9 @@ const Builder = lazy(() => import("../build/Builder.tsx").then((m) => ({ default
 const Redesign = lazy(() => import("../redesign/Redesign.tsx").then((m) => ({ default: m.Redesign })));
 const Inspect = lazy(() => import("../Inspect.tsx").then((m) => ({ default: m.Inspect })));
 const Demo = lazy(() => import("../Demo.tsx").then((m) => ({ default: m.Demo })));
+// the 3D view loads after the rest of the screen, so the conversation is ready first
+const Exploded = lazy(() => import("./Exploded.tsx").then((m) => ({ default: m.Exploded })));
+const SAMPLE_REPORT = analyze(SAMPLE);
 
 // shared with the builder (#build) and the design lab (#lab), so "Show everything" opens the same project
 const MEMORY = "rmx.guide";
@@ -211,6 +215,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [speaking, setSpeaking] = useState(false);
   const [tick, setTick] = useState(0);
   const [ready, setReady] = useState<boolean | null>(null);
+  const [sampleStep, setSampleStep] = useState(1);
   const fileIn = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const w = W.current;
@@ -219,7 +224,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   useEffect(() => {
     fetch("/api/guide/status").then((r) => r.json()).then((s) => setReady(!!s.ready)).catch(() => setReady(false));
   }, []);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }); }, [m.messages.length, busy]);
+  useEffect(() => { if (m.messages.length || busy) endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [m.messages.length, busy]);
   useEffect(() => () => { try { speechSynthesis.cancel(); } catch { /* no speech */ } }, []);
   // an idea typed or spoken on the start page: the guide picks it up straight away (once, even under StrictMode)
   const took = useRef(false);
@@ -710,6 +715,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const panelTitle = app ? t(`ws.app.${app}` as Key) : t(`gd.view.${view}` as Key);
   const closePanel = () => { if (app) setApp(null); else setMem({ view: "none" }); setWide(false); };
   const name = profile && !profile.guest ? profile.name.split(" ")[0] : "";
+  // the step card follows the person's own build, or walks through the example until they start one
+  const stepList = w.project ? steps : SAMPLE_REPORT.steps;
+  const stepAt = w.project ? Math.min(Math.max(1, m.step || 1), Math.max(1, steps.length)) : sampleStep;
 
   return (
     <div className={`ws${panelOpen ? " ws-panel-open" : ""}${wide && panelOpen ? " ws-wide" : ""}${side ? " ws-side-open" : ""}`}
@@ -718,35 +726,43 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
       <aside className="ws-side" aria-label={t("ws.menu")}>
         <div className="ws-side-top">
-          <a className="ws-brand" href="#" onClick={(e) => { e.preventDefault(); onTour(); }} aria-label={t("ws.tour")}><Wordmark /></a>
+          <a className="ws-brand" href="#" onClick={(e) => { e.preventDefault(); onTour(); }} aria-label={t("ws.tour")}>
+            <Logo size={34} />
+            <span><b>RepairMind <em>X</em></b><small>{t("ws.tagline")}</small></span>
+          </a>
           <button className="ws-icon ws-only-narrow" aria-label={t("ws.closeMenu")} onClick={() => setSide(false)}>×</button>
         </div>
-        <button className="ws-new" onClick={() => switchChat(null)}><span aria-hidden>＋</span> {t("ws.newChat")}</button>
 
-        <nav className="ws-tools" aria-label={t("ws.tools")}>
-          <span className="ws-label">{t("ws.tools")}</span>
+        <nav className="ws-nav" aria-label={t("ws.tools")}>
+          <button className={!panelOpen ? "on" : ""} aria-current={!panelOpen ? "page" : undefined} onClick={() => { setApp(null); setMem({ view: "none" }); setSide(false); }}>
+            <NavIcon id="home" /><span>{t("ws.home")}</span>
+          </button>
           {APPS.map((id) => (
-            <button key={id} className={app === id ? "on" : ""} onClick={() => openApp(app === id ? null : id)}>
-              <b>{t(`ws.app.${id}` as Key)}</b><small>{t(`ws.app.${id}.d` as Key)}</small>
+            <button key={id} className={app === id ? "on" : ""} aria-current={app === id ? "page" : undefined} title={t(`ws.app.${id}.d` as Key)} onClick={() => openApp(app === id ? null : id)}>
+              <NavIcon id={id} /><span>{t(`ws.app.${id}` as Key)}</span>
             </button>
           ))}
         </nav>
 
-        <nav className="ws-chats" aria-label={t("ws.chats")}>
-          <span className="ws-label">{t("ws.chats")}</span>
+        <nav className="ws-chats" aria-label={t("ws.projects")}>
+          <div className="ws-label-row">
+            <span className="ws-label">{t("ws.projects")}</span>
+            <button className="ws-new" onClick={() => switchChat(null)} aria-label={t("ws.newProject")} title={t("ws.newProject")}>＋</button>
+          </div>
           {chats.map((c) => (
             <div key={c.id} className={`ws-chat${c.id === chatId ? " on" : ""}`}>
               <button onClick={() => (c.id === chatId ? setSide(false) : switchChat(c.id))} title={c.title}>{c.title}</button>
               <button className="ws-x" aria-label={`${t("gd.remove")} ${c.title}`} onClick={() => deleteChat(c.id)}>×</button>
             </div>
           ))}
+          {!chats.length && <p className="ws-none">{t("ws.noProjects")}</p>}
         </nav>
 
         <div className="ws-side-foot">
-          <LanguagePicker className="lab-lang" />
-          <button className={`ws-chip${voice ? " on" : ""}`} aria-pressed={voice} onClick={() => { const v = !voice; setVoice(v); write("rmx.guide.voice", v ? 1 : 0); if (!v) try { speechSynthesis.cancel(); } catch { /* */ } }}>
-            {voice ? t("gd.voiceOn") : t("gd.voiceOff")}
-          </button>
+          <div className="ws-badge">
+            <Shield size={18} />
+            <span><b>{t("ws.badge")}</b><small>{t("ws.badge.d")}</small></span>
+          </div>
         </div>
       </aside>
       {side && <div className="ws-scrim" onClick={() => setSide(false)} aria-hidden />}
@@ -754,7 +770,18 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       <main className="ws-main lab">
         <header className="ws-top">
           <button className="ws-icon ws-only-narrow" aria-label={t("ws.menu")} onClick={() => setSide(true)}>☰</button>
-          <span className="ws-title">{chats.find((c) => c.id === chatId)?.title ?? t("gd.title")}</span>
+          <label className="ws-proj">
+            <span className="sr-only">{t("ws.projects")}</span>
+            <select value={chatId} onChange={(e) => (e.target.value === "__new" ? switchChat(null) : switchChat(e.target.value))}>
+              {!chats.some((c) => c.id === chatId) && <option value={chatId}>{w.project?.name || t("xv.untitled")}</option>}
+              {chats.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
+              <option value="__new">＋ {t("ws.newProject")}</option>
+            </select>
+          </label>
+          <span className={`ws-status ${ready ? "on" : ready === false ? "off" : ""}`} role="status">
+            <i aria-hidden />{ready ? t("ws.online") : ready === false ? t("ws.offline") : t("ws.checking")}
+          </span>
+          <span className="ws-grow" />
           {w.project && (
             <details className="gd-more">
               <summary className="lab-chip">{t("gd.more")}</summary>
@@ -764,15 +791,83 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
               </div>
             </details>
           )}
+          <LanguagePicker className="lab-lang ws-only-roomy" />
+          <Clock />
+          <span className="ws-avatar" title={profile?.name ?? t("ws.guest")} aria-label={profile?.name ?? t("ws.guest")}>{initials(profile?.guest ? "" : profile?.name ?? "") || <PersonIcon />}</span>
         </header>
 
-        <section className="ws-talk" aria-label={t("gd.title")}>
-          {ready === false && <p className="gd-note" role="note">{t("gd.noModel")} <button className="lab-link" onClick={() => openApp("builder")}>{t("gd.everything")}</button></p>}
+        <section className="ws-stage" aria-label={panelOpen ? panelTitle : t("xv.title")}>
+          {panelOpen ? (
+            <div className="ws-panel">
+              <div className="ws-panel-head">
+                <span className="lab-kicker">{panelTitle}</span>
+                <span className="ws-grow" />
+                <button className="lab-chip ws-only-wide" onClick={() => setWide((x) => !x)}>{wide ? t("ws.shrink") : t("ws.expand")}</button>
+                <button className="ws-icon" aria-label={t("ws.close")} title={t("ws.close")} onClick={closePanel}>×</button>
+              </div>
+              <div className="ws-panel-body">
+                {app ? (
+                  <Suspense fallback={<p className="lab-muted ws-pad"><span className="lab-spin" aria-hidden /> …</p>}>
+                    {app === "repair_call" && (call
+                      ? <div className="ws-call"><Call {...call} onEnd={endCall} /></div>
+                      : summaryRoom
+                      ? <CallSummary room={summaryRoom} onResume={() => { const r = summaryRoom; setSummaryRoom(null); void startCall(r); }} onDone={() => setSummaryRoom(null)} />
+                      : <CallStart accepted={accepted} setAccepted={setAccepted} busy={callBusy} error={callErr} lastRoom={rawGet(LAST_ROOM)} onStart={(room) => void startCall(room)} />)}
+                    {app === "design_lab" && <Lab onBack={() => setApp(null)} />}
+                    {app === "builder" && <Builder onBack={() => setApp(null)} />}
+                    {app === "redesign" && <Redesign onBack={() => setApp(null)} />}
+                    {app === "inspection" && <Inspect onBack={() => setApp(null)} />}
+                    {app === "library" && <Library />}
+                    {app === "demo" && <div className="ws-call"><Demo /></div>}
+                  </Suspense>
+                ) : (
+                  <Stage view={view} world={w} report={report} memory={m} check={check}
+                    onStep={(n) => setMem({ step: n })}
+                    onDone={(n) => { setMem({ done: [...new Set([...m.done, n])], step: n + 1 }); void talk(t("gd.didStep", { n })); }}
+                    onPhoto={() => setCamera({ what: t("ws.wires.check") })}
+                    onPack={() => w.project && downloadPack(w.project)}
+                    onCsv={() => report && download(`${(w.project?.name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report), "text/csv")}
+                    onTicks={(ticks) => setMem({ wires: ticks })} />
+                )}
+              </div>
+            </div>
+          ) : (
+            <Suspense fallback={<div className="xv xv-wait"><span className="lab-spin" aria-hidden /></div>}>
+              <Exploded project={w.project ?? SAMPLE} body={w.project ? w.body : SAMPLE_BODY} sample={!w.project}
+                onAsk={(part) => void talk(w.project ? t("xv.ask", { part }) : t("xv.askSample", { part }))} />
+            </Suspense>
+          )}
+        </section>
+
+        {!panelOpen && (
+          <div className="ws-dock">
+            <CameraCard onShow={async (f) => { await attach([f]); setTimeout(() => void talkRef.current(t("ws.cam.look")), 50); }} onCall={() => openApp("repair_call")} />
+            <StepCard steps={stepList} at={stepAt} done={w.project ? m.done : []} sample={!w.project}
+              onGo={(n) => (w.project ? setMem({ step: n }) : setSampleStep(n))}
+              onDone={(n) => { setMem({ done: [...new Set([...m.done, n])], step: n + 1 }); void talk(t("gd.didStep", { n })); }}
+              onOpen={() => (w.project ? setMem({ view: "steps" }) : void talk(t("xv.startSample")))} />
+          </div>
+        )}
+
+        <aside className="ws-ai" aria-label={t("ws.ai")}>
+          <div className="ws-ai-head">
+            <span className="ws-ai-name">{t("ws.ai")}</span>
+            <span className={`ws-dot ${ready ? "on" : ready === false ? "off" : ""}`} aria-hidden />
+          </div>
+          <div className="ws-ai-me">
+            <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } else toggleHands(); }}
+              aria-label={speaking ? t("ws.voice.speaking") : hands ? t("ws.voice.end") : t("ws.talk")}>
+              <VoiceOrb2D state={orb} bands={[]} size={96} detail="compact" />
+            </button>
+            {(hands || busy || speaking) && (
+              <p className="ws-voice-state" role="status">{hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? t("ws.voice.thinking") : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
+            )}
+          </div>
 
           <div className="gd-log" aria-live="polite">
+            {ready === false && <p className="gd-note" role="note">{t("gd.noModel")} <button className="lab-link" onClick={() => openApp("builder")}>{t("gd.everything")}</button></p>}
             {!m.messages.length && (
               <div className="ws-hello">
-                <div className="gd-orb" aria-hidden><VoiceOrb2D state={orb} bands={[]} size={120} detail="compact" /></div>
                 <h1>{name ? t("home.hiName", { hi: t(greeting()), name }) : t(greeting())}</h1>
                 <p>{t("gd.hello")}</p>
                 <div className="ws-starters">
@@ -814,96 +909,57 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
             <div ref={endRef} className="gd-end" />
           </div>
 
-          {hands ? (
-            <div className="ws-voice" role="group" aria-label={t("ws.voiceMode")}>
-              <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } }} aria-label={speaking ? t("ws.voice.speaking") : t("ws.voiceMode")}>
-                <VoiceOrb2D state={orb} bands={[]} size={110} detail="compact" />
+          <div className="ws-ai-controls" role="group" aria-label={t("ws.voiceMode")}>
+            <Waveform live={hands || speaking} />
+            <div className="ws-ai-row">
+              <button className={`ws-round${voice ? "" : " off"}`} aria-pressed={!voice} onClick={() => { const v = !voice; setVoice(v); write("rmx.guide.voice", v ? 1 : 0); if (!v) try { speechSynthesis.cancel(); } catch { /* */ } }}
+                aria-label={voice ? t("ws.mute") : t("ws.unmute")} title={voice ? t("ws.mute") : t("ws.unmute")}>
+                {voice ? <SpeakerIcon /> : <SpeakerIcon off />}
               </button>
-              <p className="ws-voice-state">{!canListen ? t("ws.voice.unsupported") : heard || (busy ? t("ws.voice.thinking") : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
-              <div className="ws-voice-row">
-                <button className="lab-btn" onClick={() => setCamera({ what: "" })}>{t("ws.camera")}</button>
-                <button className="lab-btn" onClick={() => void captureScreen()}>{t("ws.screen")}</button>
-                <button className="lab-btn solid" onClick={toggleHands}>{t("ws.voice.end")}</button>
-              </div>
+              <button className={`ws-talkbtn${hands ? " on" : ""}`} aria-pressed={hands} onClick={toggleHands}>
+                {hands ? <MicOff size={26} /> : <Mic size={26} />}
+                <span>{hands ? t("ws.voice.end") : t("ws.talk")}</span>
+              </button>
+              <button className="ws-round" aria-label={t("ws.stop")} title={t("ws.stop")} disabled={!speaking && !hands}
+                onClick={() => { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); if (hands) toggleHands(); }}>
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" /></svg>
+              </button>
             </div>
-          ) : (
-            <form className="ws-compose" onSubmit={(e) => { e.preventDefault(); void talk(shown); }}>
-              {pending.length > 0 && (
-                <div className="gd-pending">
-                  {pending.map((f) => (
-                    <span key={f.id} className="gd-file">{f.thumb ? <img src={f.thumb} alt="" /> : null}{f.name}
-                      <button type="button" aria-label={t("gd.remove")} onClick={() => setPending((p) => p.filter((x) => x.id !== f.id))}>×</button></span>
-                  ))}
+          </div>
+
+          <form className="ws-compose" onSubmit={(e) => { e.preventDefault(); void talk(shown); }}>
+            {pending.length > 0 && (
+              <div className="gd-pending">
+                {pending.map((f) => (
+                  <span key={f.id} className="gd-file">{f.thumb ? <img src={f.thumb} alt="" /> : null}{f.name}
+                    <button type="button" aria-label={t("gd.remove")} onClick={() => setPending((p) => p.filter((x) => x.id !== f.id))}>×</button></span>
+                ))}
+              </div>
+            )}
+            <div className="ws-compose-row">
+              <details className="ws-plus">
+                <summary className="ws-icon" aria-label={t("gd.attach")} title={t("gd.attach")}>{uploading ? "…" : "+"}</summary>
+                <div className="gd-menu ws-plus-menu">
+                  <button type="button" onClick={(e) => { closeDetails(e); fileIn.current?.click(); }}>{t("ws.files")}</button>
+                  <button type="button" onClick={(e) => { closeDetails(e); folderIn.current?.click(); }}>{t("ws.folder")}</button>
+                  <button type="button" onClick={(e) => { closeDetails(e); setCamera({ what: "" }); }}>{t("ws.camera")}</button>
+                  <button type="button" onClick={(e) => { closeDetails(e); void captureScreen(); }}>{t("ws.screen")}</button>
                 </div>
-              )}
+              </details>
               <textarea rows={1} value={shown} maxLength={3000} placeholder={t("gd.ph")} aria-label={t("gd.ph")}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void talk(shown); } }} />
-              <div className="ws-compose-row">
-                <details className="ws-plus">
-                  <summary className="ws-icon" aria-label={t("gd.attach")} title={t("gd.attach")}>{uploading ? "…" : "+"}</summary>
-                  <div className="gd-menu ws-plus-menu">
-                    <button type="button" onClick={(e) => { closeDetails(e); fileIn.current?.click(); }}>{t("ws.files")}</button>
-                    <button type="button" onClick={(e) => { closeDetails(e); folderIn.current?.click(); }}>{t("ws.folder")}</button>
-                    <button type="button" onClick={(e) => { closeDetails(e); setCamera({ what: "" }); }}>{t("ws.camera")}</button>
-                    <button type="button" onClick={(e) => { closeDetails(e); void captureScreen(); }}>{t("ws.screen")}</button>
-                  </div>
-                </details>
-                <button type="button" className="ws-icon" aria-label={t("ws.camera")} title={t("ws.camera")} onClick={() => setCamera({ what: "" })}>
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><path fill="currentColor" d="M9 4 7.2 6H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-3.2L15 4H9Zm3 4.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" /></svg>
-                </button>
-                <span className="ws-grow" />
-                <MicButton label=" " onInterim={setInterim}
-                  onText={(x) => { setInterim(""); setText((v) => (v ? `${v.trimEnd()} ${x}` : x).slice(0, 3000)); }} />
-                <button type="button" className="ws-icon ws-voice-btn" aria-label={t("ws.voiceMode")} title={t("ws.voiceMode")} onClick={toggleHands}>
-                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><path fill="currentColor" d="M3 10h2v4H3zm4-3h2v10H7zm4-4h2v18h-2zm4 4h2v10h-2zm4 3h2v4h-2z" /></svg>
-                </button>
-                <button type="submit" className="ws-send" aria-label={t("gd.send")} disabled={!!busy || (!shown.trim() && !pending.length)}>↑</button>
-              </div>
-            </form>
-          )}
+              <MicButton label=" " onInterim={setInterim}
+                onText={(x) => { setInterim(""); setText((v) => (v ? `${v.trimEnd()} ${x}` : x).slice(0, 3000)); }} />
+              <button type="submit" className="ws-send" aria-label={t("gd.send")} disabled={!!busy || (!shown.trim() && !pending.length)}>↑</button>
+            </div>
+          </form>
           <input ref={fileIn} type="file" hidden multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.csv,.json,.stl,.obj,.step,.stp,.dxf,.ino,.c,.cpp,.h,.py"
             onChange={(e) => { void attach(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
           <input ref={folderIn} type="file" hidden multiple {...{ webkitdirectory: "", directory: "" }}
             onChange={(e) => { void attach(Array.from(e.target.files ?? []).slice(0, 6)); e.target.value = ""; }} />
-        </section>
+        </aside>
       </main>
-
-      {panelOpen && (
-        <section className="ws-panel" aria-label={panelTitle}>
-          <div className="ws-panel-head">
-            <span className="lab-kicker">{panelTitle}</span>
-            <span className="ws-grow" />
-            <button className="lab-chip ws-only-wide" onClick={() => setWide((x) => !x)}>{wide ? t("ws.shrink") : t("ws.expand")}</button>
-            <button className="ws-icon" aria-label={t("ws.close")} title={t("ws.close")} onClick={closePanel}>×</button>
-          </div>
-          <div className="ws-panel-body">
-            {app ? (
-              <Suspense fallback={<p className="lab-muted ws-pad"><span className="lab-spin" aria-hidden /> …</p>}>
-                {app === "repair_call" && (call
-                  ? <div className="ws-call"><Call {...call} onEnd={endCall} /></div>
-                  : summaryRoom
-                  ? <CallSummary room={summaryRoom} onResume={() => { const r = summaryRoom; setSummaryRoom(null); void startCall(r); }} onDone={() => setSummaryRoom(null)} />
-                  : <CallStart accepted={accepted} setAccepted={setAccepted} busy={callBusy} error={callErr} lastRoom={rawGet(LAST_ROOM)} onStart={(room) => void startCall(room)} />)}
-                {app === "design_lab" && <Lab onBack={() => setApp(null)} />}
-                {app === "builder" && <Builder onBack={() => setApp(null)} />}
-                {app === "redesign" && <Redesign onBack={() => setApp(null)} />}
-                {app === "inspection" && <Inspect onBack={() => setApp(null)} />}
-                {app === "library" && <Library />}
-                {app === "demo" && <div className="ws-call"><Demo /></div>}
-              </Suspense>
-            ) : (
-              <Stage view={view} world={w} report={report} memory={m} check={check}
-                onStep={(n) => setMem({ step: n })}
-                onDone={(n) => { setMem({ done: [...new Set([...m.done, n])], step: n + 1 }); void talk(t("gd.didStep", { n })); }}
-                onPhoto={() => setCamera({ what: t("ws.wires.check") })}
-                onPack={() => w.project && downloadPack(w.project)}
-                onCsv={() => report && download(`${(w.project?.name || "parts").replace(/\W+/g, "-")}-parts.csv`, buyCsv(report), "text/csv")}
-                onTicks={(ticks) => setMem({ wires: ticks })} />
-            )}
-          </div>
-        </section>
-      )}
 
       {camera && (
         <CameraSheet what={camera.what}
@@ -1227,4 +1283,165 @@ function greeting(): Key {
 /** Close the "+" menu after picking from it. */
 function closeDetails(e: { currentTarget: HTMLElement }) {
   e.currentTarget.closest("details")?.removeAttribute("open");
+}
+
+// --- the frame around the assistant: navigation icons, clock, avatar, waveform, camera and step cards -------------
+
+function NavIcon({ id }: { id: string }) {
+  const d: Record<string, string> = {
+    home: "M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z",
+    repair_call: "M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 10l5-3v10l-5-3",
+    design_lab: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M7.5 15h9",
+    builder: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7",
+    redesign: "M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z",
+    inspection: "M4 6h16M4 12h10M4 18h7M17 15l2 2 3-4",
+    library: "M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3zM5 17a3 3 0 0 1 3-3h10",
+  };
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d={d[id] ?? d.home} />
+    </svg>
+  );
+}
+
+function PersonIcon() {
+  return <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></svg>;
+}
+
+function SpeakerIcon({ off = false }: { off?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 9h4l5-4v14l-5-4H4z" />
+      {off ? <path d="m16 9 5 6M21 9l-5 6" /> : <path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12" />}
+    </svg>
+  );
+}
+
+function initials(name: string): string {
+  const w = name.trim().split(/\s+/).filter(Boolean);
+  return w.length ? (w[0][0] + (w.length > 1 ? w[w.length - 1][0] : "")).toUpperCase() : "";
+}
+
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const id = window.setInterval(() => setNow(new Date()), 20_000); return () => window.clearInterval(id); }, []);
+  return <time className="ws-clock ws-only-roomy" dateTime={now.toISOString()}>{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>;
+}
+
+/** Calm bars under the assistant: they move only while it is listening or speaking. */
+function Waveform({ live }: { live: boolean }) {
+  return (
+    <div className={`ws-wave${live ? " live" : ""}`} aria-hidden>
+      {Array.from({ length: 28 }, (_, i) => <i key={i} style={{ animationDelay: `${(i % 7) * -0.13}s`, height: `${30 + 50 * Math.abs(Math.sin(i * 0.7))}%` }} />)}
+    </div>
+  );
+}
+
+/**
+ * The camera, small, under the 3D view. Off until the person turns it on; nothing is sent until they tap
+ * "Show the assistant", and the full live call (where the assistant watches continuously) is one tap away.
+ */
+function CameraCard({ onShow, onCall }: { onShow: (f: File) => void | Promise<void>; onCall: () => void }) {
+  const { t } = useI18n();
+  const [on, setOn] = useState(false);
+  const [err, setErr] = useState(false);
+  const [sending, setSending] = useState(false);
+  const video = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    if (!on) return;
+    let stream: MediaStream | null = null, gone = false;
+    navigator.mediaDevices?.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      .then((s) => { if (gone) { s.getTracks().forEach((x) => x.stop()); return; } stream = s; if (video.current) { video.current.srcObject = s; void video.current.play().catch(() => {}); } })
+      .catch(() => { setErr(true); setOn(false); });
+    return () => { gone = true; stream?.getTracks().forEach((x) => x.stop()); };
+  }, [on]);
+  async function show() {
+    if (!video.current || sending) return;
+    setSending(true);
+    const f = await frameToFile(video.current, `camera-${Date.now()}.jpg`);
+    if (f) await onShow(f);
+    setSending(false);
+  }
+  return (
+    <section className="ws-card ws-camcard" aria-label={t("ws.cam.live")}>
+      <div className="ws-card-head">
+        <span className="ws-card-title"><Camera2 /> {t("ws.cam.live")}</span>
+        {on && <span className="ws-pill"><i aria-hidden /> {t("ws.cam.on")}</span>}
+        <span className="ws-grow" />
+        <button className="ws-icon" onClick={onCall} aria-label={t("ws.cam.call")} title={t("ws.cam.call")}>
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg>
+        </button>
+      </div>
+      <div className="ws-cam-view">
+        {on ? (
+          <>
+            <video ref={video} muted playsInline />
+            <div className="ws-cam-actions">
+              <button className="lab-btn solid" onClick={() => void show()} disabled={sending}>{sending ? "…" : t("ws.cam.show")}</button>
+              <button className="lab-btn" onClick={() => setOn(false)}>{t("ws.cam.off")}</button>
+            </div>
+          </>
+        ) : (
+          <div className="ws-cam-off">
+            <button className="lab-btn" onClick={() => { setErr(false); setOn(true); }}>{t("ws.cam.turnOn")}</button>
+            <small>{err ? t("ws.cam.blocked") : t("ws.cam.private")}</small>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function Camera2() {
+  return <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 10l5-3v10l-5-3" /></svg>;
+}
+
+/** One build step at a time, with where you are in the whole build. */
+function StepCard({ steps, at, done, sample, onGo, onDone, onOpen }: {
+  steps: { title: string; detail: string[]; safety?: string[] }[];
+  at: number; done: number[]; sample: boolean;
+  onGo: (n: number) => void; onDone: (n: number) => void; onOpen: () => void;
+}) {
+  const { t, auto } = useI18n();
+  const total = steps.length;
+  if (!total) {
+    return (
+      <section className="ws-card ws-stepcard">
+        <div className="ws-card-head"><span className="ws-card-title">{t("ws.step.none")}</span></div>
+        <p className="ws-step-text">{t("ws.step.noneP")}</p>
+      </section>
+    );
+  }
+  const n = Math.min(Math.max(1, at), total);
+  const s = steps[n - 1];
+  const isDone = done.includes(n);
+  return (
+    <section className="ws-card ws-stepcard" aria-label={t("ws.step.of", { n, total })}>
+      <div className="ws-card-head">
+        <span className="ws-card-title">{t("ws.step.of", { n, total })}</span>
+        {sample && <span className="ws-pill dim">{t("xv.example")}</span>}
+        <span className="ws-grow" />
+        <ol className="ws-dots" aria-label={t("ws.step.all")}>
+          {steps.map((x, i) => (
+            <li key={i}><button className={`${i + 1 === n ? "now" : ""}${done.includes(i + 1) ? " done" : ""}`} aria-label={`${i + 1}. ${auto(x.title)}`} aria-current={i + 1 === n ? "step" : undefined} onClick={() => onGo(i + 1)} /></li>
+          ))}
+        </ol>
+      </div>
+      <div className="ws-step-body">
+        <span className="ws-step-n" aria-hidden>{isDone ? "✓" : n}</span>
+        <div>
+          <b>{auto(s.title)}</b>
+          {s.detail[0] && <p className="ws-step-text">{auto(s.detail[0])}</p>}
+          {s.safety?.[0] && <p className="ws-step-safe"><Shield size={14} /> {auto(s.safety[0])}</p>}
+        </div>
+      </div>
+      <div className="ws-step-nav">
+        <button className="lab-btn" disabled={n <= 1} onClick={() => onGo(n - 1)}>‹ {t("ws.step.back")}</button>
+        <button className="lab-link" onClick={onOpen}>{sample ? t("ws.step.startSample") : t("ws.step.all")}</button>
+        {!sample && !isDone
+          ? <button className="lab-btn solid" onClick={() => onDone(n)}>{t("ws.step.did")}</button>
+          : <button className="lab-btn solid" disabled={n >= total} onClick={() => onGo(n + 1)}>{t("ws.step.next")} ›</button>}
+      </div>
+    </section>
+  );
 }
