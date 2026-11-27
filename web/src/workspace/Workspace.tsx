@@ -222,6 +222,20 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [liveFail, setLiveFail] = useState(false);
   const [liveState, setLiveState] = useState<LiveState>("connecting");
   const liveSend = useRef<((text: string) => void) | null>(null);
+  // one live voice per computer: the tab you're looking at takes it, every other RepairMind tab goes quiet
+  const [liveOwner, setLiveOwner] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const me = Math.random().toString(36).slice(2);
+    const ch = new BroadcastChannel("rmx-live-voice");
+    const claim = () => { if (document.visibilityState === "visible") { setLiveOwner(true); ch.postMessage(me); } };
+    ch.onmessage = (e) => { if (e.data !== me) setLiveOwner(false); };
+    const onVis = () => { if (document.visibilityState === "visible") claim(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", claim);
+    claim();
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", claim); ch.close(); };
+  }, []);
   const [check, setCheck] = useState<PhotoCheck | null>(null);
   const [call, setCall] = useState<{ serverUrl: string; token: string; room: string } | null>(null);
   const [callBusy, setCallBusy] = useState(false);
@@ -1057,7 +1071,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
             <span className="ws-ai-name">{t("ws.ai")}</span>
             <span className={`ws-dot ${ready ? "on" : ready === false ? "off" : ""}`} aria-hidden />
           </div>
-          {liveTok && hands && !call && !coach && (
+          {liveTok && hands && liveOwner && !call && !coach && (
             <Suspense fallback={null}>
               <GuideLive serverUrl={liveTok.serverUrl} token={liveTok.token}
                 context={() => ({ state: guideState(), catalog: catalogText() })}
@@ -1125,16 +1139,6 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
           <div className="ws-ai-controls" role="group" aria-label={t("ws.voiceMode")}>
             <Waveform live={hands || speaking} />
-            <div className="ws-ai-row">
-              <button className={`ws-round${voice ? "" : " off"}`} aria-pressed={!voice} onClick={() => { const v = !voice; setVoice(v); write("rmx.guide.voice", v ? 1 : 0); if (!v) try { speechSynthesis.cancel(); } catch { /* */ } }}
-                aria-label={voice ? t("ws.mute") : t("ws.unmute")} title={voice ? t("ws.mute") : t("ws.unmute")}>
-                {voice ? <SpeakerIcon /> : <SpeakerIcon off />}
-              </button>
-              <button className="ws-round" aria-label={t("ws.stop")} title={t("ws.stop")} disabled={!speaking}
-                onClick={() => { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" /></svg>
-              </button>
-            </div>
           </div>
 
           <form className="ws-compose" onSubmit={(e) => { e.preventDefault(); void talk(shown); }}>
