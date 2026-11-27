@@ -93,7 +93,11 @@ elif args[0] == "monitor":
     print("Touch: yes\\nLights on"); sys.stdout.flush()
 """)
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
-    monkeypatch.setenv("RMX_ARDUINO_CLI", str(script))
+    exe = script
+    if os.name == "nt":  # Windows can't run a #! script directly: call it through a .cmd wrapper
+        exe = tmp_path / "arduino-cli.cmd"
+        exe.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
+    monkeypatch.setenv("RMX_ARDUINO_CLI", str(exe))
     monkeypatch.delenv("RMX_LOCAL_BOARD", raising=False)
     return log
 
