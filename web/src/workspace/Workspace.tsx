@@ -15,6 +15,10 @@ import { SAMPLE, SAMPLE_BODY } from "./explode.ts";
 import { canSaveFolder, projectFiles, saveToFolder, slug, zip, type FolderFile } from "./folder.ts";
 import { hoursText, specMarkdown, specSheet } from "../build/spec.ts";
 import { CommandBar, typing, type Cmd } from "./Command.tsx";
+import { briefFor, type AppAction, type Brief } from "./coach.ts";
+import type { LiveState } from "./GuideLive.tsx";
+const GuideLive = lazy(() => import("./GuideLive.tsx").then((m) => ({ default: m.GuideLive })));
+const BuildCall = lazy(() => import("./BuildCall.tsx").then((m) => ({ default: m.BuildCall })));
 import type { ShellSpec } from "../sim/shell.ts";
 import { buildPack, buyCsv, buyList, buyText, readings, toolsFor, wireList, wiresText, type ToolLine } from "./precision.ts";
 import { APPS, isApp, type AppId } from "./apps.ts";
@@ -66,6 +70,18 @@ const write = (k: string, v: unknown) => {
 };
 
 const LAST_ROOM = "rmx.lastRoom";
+
+/**
+ * The three things RepairMind X is for. Every tool lives under one of them: building something new (the workbench,
+ * with the design lab, parts canvas and references), repairing a product (the live call, and redesigning a broken
+ * part), and finding manufacturing defects in bulk.
+ */
+type SectionId = "build" | "repair" | "inspect";
+const SECTIONS: { id: SectionId; icon: string; main: AppId | null; more: AppId[] }[] = [
+  { id: "build", icon: "build", main: null, more: ["design_lab", "builder", "library"] },
+  { id: "repair", icon: "repair_call", main: "repair_call", more: ["redesign"] },
+  { id: "inspect", icon: "inspection", main: "inspection", more: [] },
+];
 
 interface LibHit { ref: string; title: string; source: string; kind: string; text: string }
 interface WireVerdict { n: number; verdict: "ok" | "wrong" | "unclear"; note: string }
@@ -197,10 +213,36 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [wide, setWide] = useState(false);
   const [side, setSide] = useState(false);
   const [camera, setCamera] = useState<{ what: string } | null>(null);
-  const [hands, setHands] = useState(false);
+  // always listening by default: the guide hears you, answers out loud and listens again (tap the orb to pause)
+  // always listening: there is no button to turn it off; a blocked microphone is the only thing that stops it
+  const [hands, setHands] = useState(true);
+  const [micBlocked, setMicBlocked] = useState(false);
+  // the live voice (Gemini Live, like the repair call); the browser's own speech is the fallback when it can't connect
+  const [liveTok, setLive] = useState<{ serverUrl: string; token: string } | null>(null);
+  const [liveFail, setLiveFail] = useState(false);
+  const [liveState, setLiveState] = useState<LiveState>("connecting");
+  const liveSend = useRef<((text: string) => void) | null>(null);
+  // one live voice per computer: the tab you're looking at takes it, every other RepairMind tab goes quiet
+  const [liveOwner, setLiveOwner] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return;
+    const me = Math.random().toString(36).slice(2);
+    const ch = new BroadcastChannel("rmx-live-voice");
+    const claim = () => { if (document.visibilityState === "visible") { setLiveOwner(true); ch.postMessage(me); } };
+    ch.onmessage = (e) => { if (e.data !== me) setLiveOwner(false); };
+    const onVis = () => { if (document.visibilityState === "visible") claim(); };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", claim);
+    claim();
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("focus", claim); ch.close(); };
+  }, []);
   const [check, setCheck] = useState<PhotoCheck | null>(null);
   const [call, setCall] = useState<{ serverUrl: string; token: string; room: string } | null>(null);
   const [callBusy, setCallBusy] = useState(false);
+  const [coach, setCoach] = useState<{ serverUrl: string; token: string; brief: Brief } | null>(null);
+  const [coachBig, setCoachBig] = useState(false);
+  const [coachNote, setCoachNote] = useState("");
+  const [saveAsked, setSaveAsked] = useState(false);
   const [callErr, setCallErr] = useState("");
   const [accepted, setAccepted] = useState(!!callNow);
   // after a call: the repair summary, in the same panel
@@ -261,7 +303,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const say = (s: Said) => setMem({ messages: [...W.current.memory.messages, s].slice(-120) });
 
   function speak(words: string) {
-    if ((!voice && !handsRef.current) || !words) return;
+    if ((!voice && !handsRef.current) || !words || liveSend.current) return;
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(words);
@@ -477,6 +519,37 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       setCallBusy(false);
     }
   }
+  /** The live build coach: the project goes with it, so it guides exactly this build. */
+  async function startCoach() {
+    const p = w.project ?? SAMPLE;
+    setCoachNote("");
+    try {
+      const res = await fetch("/api/token", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accepted_notice: true, mode: "build", language: choice, ui_language: lang }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : res.status >= 500 ? t("common.serverDown") : t("common.error", { n: res.status }));
+      setCoach({ serverUrl: body.server_url, token: body.participant_token, brief: briefFor(p, analyze(p)) });
+    } catch (e) {
+      setCoachNote(e instanceof Error ? e.message : String(e));
+    }
+  }
+  const onCoachAction = (a: AppAction) => {
+    if (a.action === "show_tab") { if (app) setApp(null); else if (view !== "none") setMem({ view: "none" }); setTab(a.target as typeof tab); }
+    else if (a.action === "download_pack") downloadPack(w.project ?? SAMPLE);
+    else if (a.action === "save_folder") setSaveAsked(true); // the browser only opens a folder picker on a tap
+    else if (a.action === "go_to_step") { const n = Number(a.target); if (n > 0) (w.project ? setMem({ step: n }) : setSampleStep(n)); }
+  };
+  async function saveFolderNow() {
+    setSaveAsked(false);
+    const p = w.project ?? SAMPLE;
+    const { root, files } = projectFiles(p, analyze(p), w.project ? w.body : SAMPLE_BODY);
+    if (canSaveFolder()) { try { await saveToFolder(root, files); return; } catch { /* cancelled: fall back to the zip */ } }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([zip(root, files)], { type: "application/zip" })); a.download = `${root}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
   function endCall(finished: boolean) {
     if (finished) rawSet(LAST_ROOM, null);
     if (call) setSummaryRoom(call.room);
@@ -577,7 +650,23 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
   // --- one conversation turn ----------------------------------------------------------------------------------------
 
+  function guideState(): string {
+    const cur = W.current;
+    return stateText({
+      memory: cur.memory, project: cur.project, report: cur.project ? analyze(cur.project) : null, assessment: cur.idea.assessment,
+      idea: cur.idea.input.idea, bench: cur.bench.text, body: cur.project ? bodyText(cur.project, cur.body) : "", design: cur.designText, language: lang,
+    }) + panelState();
+  }
+
   async function talk(words?: string) {
+    // in a live voice conversation, typed words go into it too
+    if (liveSend.current && words?.trim() && !pending.length) {
+      say({ role: "user", text: words.trim(), at: Date.now() });
+      touchChat(words.trim());
+      setText("");
+      liveSend.current(words.trim());
+      return;
+    }
     if (busy) return;
     setError(null);
     const files = pending;
@@ -598,10 +687,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
         const cur = W.current;
         const r = await post<GuideTurn>("/api/guide/turn", {
           messages: forRequest(cur.memory.messages),
-          state: stateText({
-            memory: cur.memory, project: cur.project, report: cur.project ? analyze(cur.project) : null, assessment: cur.idea.assessment,
-            idea: cur.idea.input.idea, bench: cur.bench.text, body: cur.project ? bodyText(cur.project, cur.body) : "", design: cur.designText, language: lang,
-          }) + panelState(),
+          state: guideState(),
           catalog: catalogText(),
           attachment_ids: hop === 0 ? files.map((f) => f.id) : [],
           language: lang,
@@ -674,7 +760,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const [heard, setHeard] = useState("");
   const canListen = recognitionCtor() !== null;
   useEffect(() => {
-    if (!hands || busy || speaking || camera || !canListen) return;
+    if (!hands || !liveFail || busy || speaking || camera || !canListen) return;
     const Ctor = recognitionCtor()!;
     const r = new Ctor();
     r.continuous = false;
@@ -689,7 +775,12 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       }
       setHeard((final + " " + interim).trim());
     };
-    r.onerror = () => { /* no-speech and aborted just restart below */ };
+    let pause = 400;
+    r.onerror = (e: { error?: string }) => {
+      // no microphone permission: stop retrying and say so; no-speech and aborted just restart below
+      if (e?.error === "not-allowed" || e?.error === "service-not-allowed" || e?.error === "audio-capture") { setMicBlocked(true); setHands(false); }
+      else if (e?.error === "network") pause = 3000;
+    };
     let restart: number | undefined;
     r.onend = () => {
       rec.current = null;
@@ -697,16 +788,48 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
       setHeard("");
       if (said) void talkRef.current(said);
       // nothing heard: listen again after a breath, while voice mode stays on
-      else restart = window.setTimeout(() => setTick((n) => n + 1), 400);
+      else restart = window.setTimeout(() => setTick((n) => n + 1), pause);
     };
     rec.current = r;
+    setMicBlocked(false);
     try { r.start(); } catch { /* already running */ }
     return () => { window.clearTimeout(restart); r.onend = null; try { r.stop(); } catch { /* stopped */ } rec.current = null; };
-  }, [hands, busy, speaking, camera, speech, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hands, liveFail, busy, speaking, camera, speech, tick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // listening means a live voice conversation: get it a room when listening starts, drop it when it stops
+  useEffect(() => {
+    if (!hands) { setLive(null); liveSend.current = null; return; }
+    if (liveTok || liveFail || ready === false) { if (ready === false) setLiveFail(true); return; }
+    let gone = false;
+    fetch("/api/token", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accepted_notice: true, mode: "guide", language: choice, ui_language: lang }) })
+      .then(async (r) => { const b = await r.json().catch(() => ({})); if (!r.ok) throw new Error(String(b.detail ?? r.status)); return b; })
+      .then((b) => { if (!gone) setLive({ serverUrl: b.server_url, token: b.participant_token }); })
+      .catch(() => { if (!gone) setLiveFail(true); });
+    return () => { gone = true; };
+  }, [hands, ready, liveTok, liveFail]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // if the voice never joins (the agent worker isn't running), fall back to the browser's own speech
+  useEffect(() => {
+    if (!liveTok || liveState !== "connecting") return;
+    const id = window.setTimeout(() => { setLive(null); liveSend.current = null; setLiveFail(true); }, 20000);
+    return () => window.clearTimeout(id);
+  }, [liveTok, liveState]);
+
+  async function liveTool(call: ToolCall): Promise<{ result: string; state: string }> {
+    const label = call.why || t(`gd.tool.${call.tool}` as Key);
+    setBusy(label);
+    let out: string;
+    try { out = await run(call); } catch (e) { out = `failed: ${e instanceof Error ? e.message : String(e)}`; }
+    finally { setBusy(""); }
+    say({ role: "tool", text: `${call.tool}: ${out}`, brief: label, at: Date.now() });
+    return { result: out, state: guideState() };
+  }
 
   function toggleHands() {
     const on = !hands;
     setHands(on);
+    write("rmx.guide.hands", on ? 1 : 0);
     if (!on) { try { speechSynthesis.cancel(); } catch { /* no speech */ } setSpeaking(false); setHeard(""); }
   }
 
@@ -714,7 +837,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
   const view = m.view;
   const shown = interim ? `${text}${text && !text.endsWith(" ") ? " " : ""}${interim}` : text;
-  const orb = busy ? "thinking" : speaking ? "speaking" : hands ? "listening" : "idle";
+  const orb = liveTok && hands
+    ? (busy ? "thinking" : liveState === "connecting" ? "connecting" : liveState === "idle" ? "listening" : liveState)
+    : busy ? "thinking" : speaking ? "speaking" : hands ? "listening" : "idle";
   const last = [...m.messages].reverse().find((x) => x.role === "guide");
   const welcomeBack = m.messages.length > 0 && !busy && m.messages[m.messages.length - 1].at < Date.now() - 30 * 60_000;
   const steps = report?.steps ?? [];
@@ -737,6 +862,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const commands: Cmd[] = [
     ...TABS.map((k, i) => ({ id: `tab-${k}`, label: t("cmd.show", { what: t(`ws.tab.${k}` as Key) }), hint: String(i + 1), run: () => { closePanel(); setTab(k); } })),
     { id: "ask", label: t("cmd.ask"), hint: "/", run: () => askRef.current?.focus() },
+    { id: "coach", label: t("bc.start"), hint: t("bc.startHint"), run: () => void startCoach() },
     ...(["builder", "design_lab", "repair_call", "redesign", "inspection", "library"] as const).map((id) => ({ id: `app-${id}`, label: t(`ws.app.${id}` as Key), hint: t(`ws.app.${id}.d` as Key), run: () => openApp(id) })),
     ...(w.project ? [{ id: "pack", label: t("ws.pack"), run: () => downloadPack(w.project!) }] : []),
     { id: "new", label: t("ws.newProject"), run: () => switchChat(null) },
@@ -744,6 +870,7 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
   const live = report ?? SAMPLE_REPORT;
   const flags = live.issues.filter((x) => x.level === "fix" || x.level === "block").length + live.issues.filter((x) => x.level === "warn").length;
   const name = profile && !profile.guest ? profile.name.split(" ")[0] : "";
+  const section: SectionId = app === "repair_call" || app === "redesign" || app === "demo" ? "repair" : app === "inspection" ? "inspect" : "build";
   // the step card follows the person's own build, or walks through the example until they start one
   const stepList = w.project ? steps : SAMPLE_REPORT.steps;
   const stepAt = w.project ? Math.min(Math.max(1, m.step || 1), Math.max(1, steps.length)) : sampleStep;
@@ -763,14 +890,27 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
         </div>
 
         <nav className="ws-nav" aria-label={t("ws.tools")}>
-          <button className={!panelOpen ? "on" : ""} aria-current={!panelOpen ? "page" : undefined} onClick={() => { setApp(null); setMem({ view: "none" }); setSide(false); }}>
-            <NavIcon id="home" /><span>{t("ws.home")}</span>
-          </button>
-          {APPS.map((id) => (
-            <button key={id} className={app === id ? "on" : ""} aria-current={app === id ? "page" : undefined} title={t(`ws.app.${id}.d` as Key)} onClick={() => openApp(app === id ? null : id)}>
-              <NavIcon id={id} /><span>{t(`ws.app.${id}` as Key)}</span>
-            </button>
-          ))}
+          {SECTIONS.map((sec) => {
+            const here = section === sec.id;
+            return (
+              <div key={sec.id} className={`ws-sec${here ? " on" : ""}`}>
+                <button className={`ws-sec-main${here ? " on" : ""}`} aria-current={here ? "page" : undefined}
+                  onClick={() => { if (sec.main) openApp(sec.main); else { setApp(null); setMem({ view: "none" }); } setSide(false); }}>
+                  <NavIcon id={sec.icon} />
+                  <span><b>{t(`ws.sec.${sec.id}` as Key)}</b><small>{t(`ws.sec.${sec.id}.d` as Key)}</small></span>
+                </button>
+                {here && sec.more.length > 0 && (
+                  <div className="ws-sub">
+                    {sec.more.map((id) => (
+                      <button key={id} className={app === id ? "on" : ""} aria-current={app === id ? "page" : undefined} title={t(`ws.app.${id}.d` as Key)} onClick={() => openApp(app === id ? null : id)}>
+                        {t(`ws.app.${id}` as Key)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <nav className="ws-chats" aria-label={t("ws.projects")}>
@@ -839,6 +979,13 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
         </header>
 
         <section className="ws-stage" aria-label={panelOpen ? panelTitle : t("xv.title")}>
+          {saveAsked && (
+            <div className="bc-ask" role="alert">
+              <span>{t("bc.saveAsk")}</span>
+              <button className="lab-btn solid" onClick={() => void saveFolderNow()}>{t("bc.saveBtn")}</button>
+              <button className="ws-icon" aria-label={t("ws.close")} onClick={() => setSaveAsked(false)}>×</button>
+            </div>
+          )}
           {panelOpen ? (
             <div className="ws-panel">
               <div className="ws-panel-head">
@@ -903,7 +1050,15 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
         {!panelOpen && (
           <div className="ws-dock">
-            <CameraCard onShow={async (f) => { await attach([f]); setTimeout(() => void talkRef.current(t("ws.cam.look")), 50); }} onCall={() => openApp("repair_call")} />
+            {coach ? (
+              <Suspense fallback={<section className="ws-card ws-camcard"><span className="lab-spin" aria-hidden /></section>}>
+                <BuildCall serverUrl={coach.serverUrl} token={coach.token} brief={coach.brief} big={coachBig}
+                  onBig={() => setCoachBig((x) => !x)} onAction={onCoachAction} onEnd={(problem) => { setCoach(null); setCoachBig(false); if (problem) setCoachNote(t("bc.failed", { msg: problem })); }} />
+              </Suspense>
+            ) : (
+              <CameraCard onShow={async (f) => { await attach([f]); setTimeout(() => void talkRef.current(t("ws.cam.look")), 50); }} onCall={() => openApp("repair_call")}
+                onBuild={() => void startCoach()} note={coachNote} />
+            )}
             <StepCard steps={stepList} at={stepAt} done={w.project ? m.done : []} sample={!w.project}
               onGo={(n) => (w.project ? setMem({ step: n }) : setSampleStep(n))}
               onDone={(n) => { setMem({ done: [...new Set([...m.done, n])], step: n + 1 }); void talk(t("gd.didStep", { n })); }}
@@ -916,13 +1071,24 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
             <span className="ws-ai-name">{t("ws.ai")}</span>
             <span className={`ws-dot ${ready ? "on" : ready === false ? "off" : ""}`} aria-hidden />
           </div>
+          {liveTok && hands && liveOwner && !call && !coach && (
+            <Suspense fallback={null}>
+              <GuideLive serverUrl={liveTok.serverUrl} token={liveTok.token}
+                context={() => ({ state: guideState(), catalog: catalogText() })}
+                onTool={liveTool}
+                onLine={(who, text) => { say({ role: who, text, at: Date.now() }); if (who === "user") touchChat(text); }}
+                onState={setLiveState}
+                onReady={(send) => { liveSend.current = send; }}
+                onEnd={() => { setLive(null); liveSend.current = null; if (handsRef.current) setLiveFail(true); }} />
+            </Suspense>
+          )}
           <div className="ws-ai-me">
-            <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } else toggleHands(); }}
+            <button className="ws-voice-orb" onClick={() => { if (speaking) { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); } else if (!hands) { setMicBlocked(false); setHands(true); } }}
               aria-label={speaking ? t("ws.voice.speaking") : hands ? t("ws.voice.end") : t("ws.talk")}>
               <VoiceOrb2D state={orb} bands={[]} size={96} detail="compact" />
             </button>
-            {(hands || busy || speaking) && (
-              <p className="ws-voice-state" role="status">{hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? t("ws.voice.thinking") : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
+            {(hands || busy || speaking || micBlocked) && (
+              <p className="ws-voice-state" role="status">{micBlocked ? t("ws.voice.blocked") : hands && !canListen ? t("ws.voice.unsupported") : heard || (busy ? busy : liveTok && hands ? t(`ws.live.${liveState}` as Key) : speaking ? t("ws.voice.speaking") : t("ws.voice.listening"))}</p>
             )}
           </div>
 
@@ -933,9 +1099,9 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
                 <h1>{name ? t("home.hiName", { hi: t(greeting()), name }) : t(greeting())}</h1>
                 <p>{t("gd.hello")}</p>
                 <div className="ws-starters">
-                  {(["ws.app.repair_call", "ia.ex2", "ia.ex3", "ia.ex4"] as Key[]).map((k) => (
-                    <button key={k} className="lab-chip" onClick={() => (k === "ws.app.repair_call" ? openApp("repair_call") : void talk(t(k)))}>{t(k)}</button>
-                  ))}
+                  <button className="lab-chip" onClick={() => void talk(t("ws.start.build.say"))}>{t("ws.sec.build")}</button>
+                  <button className="lab-chip" onClick={() => openApp("repair_call")}>{t("ws.sec.repair")}</button>
+                  <button className="lab-chip" onClick={() => openApp("inspection")}>{t("ws.sec.inspect")}</button>
                 </div>
               </div>
             )}
@@ -973,20 +1139,6 @@ export function Workspace({ initialApp = null, appNonce = 0, callNow = null, onT
 
           <div className="ws-ai-controls" role="group" aria-label={t("ws.voiceMode")}>
             <Waveform live={hands || speaking} />
-            <div className="ws-ai-row">
-              <button className={`ws-round${voice ? "" : " off"}`} aria-pressed={!voice} onClick={() => { const v = !voice; setVoice(v); write("rmx.guide.voice", v ? 1 : 0); if (!v) try { speechSynthesis.cancel(); } catch { /* */ } }}
-                aria-label={voice ? t("ws.mute") : t("ws.unmute")} title={voice ? t("ws.mute") : t("ws.unmute")}>
-                {voice ? <SpeakerIcon /> : <SpeakerIcon off />}
-              </button>
-              <button className={`ws-talkbtn${hands ? " on" : ""}`} aria-pressed={hands} onClick={toggleHands}>
-                {hands ? <MicOff size={26} /> : <Mic size={26} />}
-                <span>{hands ? t("ws.voice.end") : t("ws.talk")}</span>
-              </button>
-              <button className="ws-round" aria-label={t("ws.stop")} title={t("ws.stop")} disabled={!speaking && !hands}
-                onClick={() => { try { speechSynthesis.cancel(); } catch { /* */ } setSpeaking(false); if (hands) toggleHands(); }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" /></svg>
-              </button>
-            </div>
           </div>
 
           <form className="ws-compose" onSubmit={(e) => { e.preventDefault(); void talk(shown); }}>
@@ -1381,6 +1533,7 @@ function closeDetails(e: { currentTarget: HTMLElement }) {
 function NavIcon({ id }: { id: string }) {
   const d: Record<string, string> = {
     home: "M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z",
+    build: "M12 3v2M5.6 5.6l1.4 1.4M3 12h2M18.4 5.6 17 7M21 12h-2M9 18h6M10 21h4M12 7a5 5 0 0 0-3 9v2h6v-2a5 5 0 0 0-3-9Z",
     repair_call: "M3 7a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM16 10l5-3v10l-5-3",
     design_lab: "M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M7.5 15h9",
     builder: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM16.5 13v7M13 16.5h7",
@@ -1432,11 +1585,12 @@ function Waveform({ live }: { live: boolean }) {
  * The camera, small, under the 3D view. Off until the person turns it on; nothing is sent until they tap
  * "Show the assistant", and the full live call (where the assistant watches continuously) is one tap away.
  */
-function CameraCard({ onShow, onCall }: { onShow: (f: File) => void | Promise<void>; onCall: () => void }) {
+function CameraCard({ onShow, onCall, onBuild, note }: { onShow: (f: File) => void | Promise<void>; onCall: () => void; onBuild: () => void; note: string }) {
   const { t } = useI18n();
   const [on, setOn] = useState(false);
   const [err, setErr] = useState(false);
   const [sending, setSending] = useState(false);
+  const [big, setBig] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (!on) return;
@@ -1454,13 +1608,15 @@ function CameraCard({ onShow, onCall }: { onShow: (f: File) => void | Promise<vo
     setSending(false);
   }
   return (
-    <section className="ws-card ws-camcard" aria-label={t("ws.cam.live")}>
+    <section className={`ws-card ws-camcard${big ? " big" : ""}`} aria-label={t("ws.cam.live")}>
       <div className="ws-card-head">
         <span className="ws-card-title"><Camera2 /> {t("ws.cam.live")}</span>
         {on && <span className="ws-pill"><i aria-hidden /> {t("ws.cam.on")}</span>}
         <span className="ws-grow" />
-        <button className="ws-icon" onClick={onCall} aria-label={t("ws.cam.call")} title={t("ws.cam.call")}>
-          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg>
+        <button className="ws-icon" onClick={() => setBig((x) => !x)} aria-label={big ? t("ws.shrink") : t("ws.expand")} title={big ? t("ws.shrink") : t("ws.expand")}>
+          <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d={big ? "M10 4v6H4M14 20v-6h6M4 10l6-6M20 14l-6 6" : "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"} />
+          </svg>
         </button>
       </div>
       <div className="ws-cam-view">
@@ -1474,8 +1630,9 @@ function CameraCard({ onShow, onCall }: { onShow: (f: File) => void | Promise<vo
           </>
         ) : (
           <div className="ws-cam-off">
+            <button className="lab-btn solid bc-start" onClick={onBuild}><i className="bc-live" aria-hidden />{t("bc.start")}</button>
             <button className="lab-btn" onClick={() => { setErr(false); setOn(true); }}>{t("ws.cam.turnOn")}</button>
-            <small>{err ? t("ws.cam.blocked") : t("ws.cam.private")}</small>
+            <small>{note || (err ? t("ws.cam.blocked") : t("bc.startHint"))}</small>
           </div>
         )}
       </div>

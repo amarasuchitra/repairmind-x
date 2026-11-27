@@ -325,6 +325,20 @@ Optional settings: `RMX_TRANSLATE_MODEL` (Claude model for interface translation
 `RMX_GEMINI_SET_LANGUAGE=1` (also pass the speech language code to Gemini Live; off by default because native-audio
 models choose the language themselves).
 
+## Live build coach
+
+You build the hardware; the coach does the rest. Press **Build with me live** in the camera card (or Ctrl+K, "Build with me live").
+The coach gets the project's exact wires, pins, steps and code, then, one wire at a time:
+
+- circles where the wire goes on your live camera (the circle follows the board as the camera moves),
+- checks on camera that it's in the right hole before moving on, and ticks it off,
+- runs the screen on request: shows the Spec, Code, Tools or Shop tab, saves the project folder, goes to a step,
+- compiles and uploads the code to your board over USB, then reads what the board prints to confirm it works.
+
+Uploading uses `arduino-cli` on the computer that runs the agent (see `RMX_ARDUINO_CLI` in `agent/.env.example`).
+It only ever writes the sketch into its own folder under `sessions/builds/` and runs fixed `arduino-cli` commands.
+It does not control anything else on the computer.
+
 ## Run it
 
 You need: a free LiveKit Cloud project (URL, API key, secret) and a free Google AI Studio API key. That's all; the app runs entirely on free tiers.

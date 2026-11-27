@@ -54,3 +54,19 @@ test("tools follow the parts: a multimeter always, soldering when parts need it,
   assert.ok(!toolsFor(bare, analyze(bare)).some((x) => /Soldering iron/.test(x.name)));
   for (const x of toolsFor(SAMPLE, r)) assert.ok(x.shops.every((s) => s.url.startsWith("https://")));
 });
+
+test("the live build coach gets the same wires, pins and code the person sees", async () => {
+  const { briefFor, readAction } = await import("../src/workspace/coach.ts");
+  const { wireList } = await import("../src/workspace/precision.ts");
+  const { firmware } = await import("../src/build/firmware.ts");
+  const report = analyze(SAMPLE);
+  const b = briefFor(SAMPLE, report);
+  assert.equal(b.board, "nano");
+  assert.deepEqual(b.wires.map((w) => w.text), wireList(report).map((w) => w.text));
+  assert.equal(b.code, firmware(SAMPLE, report).code);
+  assert.ok(b.sketch.endsWith(".ino") && !b.sketch.endsWith(".ino.ino"));
+  assert.ok(b.parts.length === SAMPLE.parts.length);
+  assert.deepEqual(readAction('{"action":"show_tab","target":"code"}'), { action: "show_tab", target: "code" });
+  assert.equal(readAction('{"action":"rm -rf"}'), null);
+  assert.equal(readAction("nope"), null);
+});

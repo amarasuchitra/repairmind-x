@@ -35,6 +35,18 @@
 .ws-brand em { font-style: normal; color: var(--ws-accent); }
 .ws-brand small { color: var(--ws-dim); font-size: 0.72rem; letter-spacing: 0.04em; }
 .ws-nav { display: flex; flex-direction: column; gap: 3px; }
+.ws-nav { gap: 6px; }
+.ws-sec { border-radius: 12px; border: 1px solid transparent; }
+.ws-sec.on { border-color: rgba(70, 226, 255, 0.28); background: linear-gradient(180deg, rgba(70, 226, 255, 0.1), rgba(47, 125, 255, 0.03)); }
+.ws-nav .ws-sec-main { width: 100%; align-items: flex-start; padding: 11px 12px; border: 0; background: transparent; }
+.ws-nav .ws-sec-main.on { background: transparent; border: 0; }
+.ws-sec-main > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ws-sec-main b { font-size: 0.95rem; font-weight: 600; }
+.ws-sec-main small { color: var(--ws-dim); font-size: 0.75rem; font-weight: 400; line-height: 1.35; }
+.ws-sec-main svg { margin-top: 1px; }
+.ws-sub { display: flex; flex-direction: column; gap: 1px; padding: 0 8px 8px 42px; }
+.ws-nav .ws-sub button { padding: 6px 10px; font-size: 0.84rem; border-radius: 8px; color: #a9b8d2; }
+.ws-nav .ws-sub button.on { color: var(--ws-ink); background: rgba(70, 226, 255, 0.14); border-color: rgba(70, 226, 255, 0.3); }
 .ws-nav button { display: flex; align-items: center; gap: 12px; text-align: left; background: transparent; color: #b9c6dd; border-radius: 10px; padding: 9px 12px; font-size: 0.93rem; font-weight: 500; border: 1px solid transparent; }
 .ws-nav button svg { flex: 0 0 auto; color: #7f93b6; }
 .ws-nav button:hover { background: rgba(255, 255, 255, 0.04); color: var(--ws-ink); }
@@ -441,3 +453,45 @@ kbd { font: 600 0.68rem/1 ui-monospace, "JetBrains Mono", Menlo, monospace; padd
 .ws-top > .ws-status { flex-shrink: 0; }
 .ws-top > .ws-proj { min-width: 0; flex-shrink: 1; }
 .ws-top > .ws-proj select { width: 100%; min-width: 120px; }
+
+/* --- live build coach in the camera card -------------------------------------------------------------------- */
+.bc { display: contents; }
+.bc-live { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #ff4d6a; box-shadow: 0 0 0 3px rgba(255, 77, 106, 0.18), 0 0 12px rgba(255, 77, 106, 0.8); animation: bc-pulse 1.6s ease-in-out infinite; vertical-align: middle; }
+@keyframes bc-pulse { 50% { box-shadow: 0 0 0 6px rgba(255, 77, 106, 0.06), 0 0 18px rgba(255, 77, 106, 0.9); } }
+.bc-start { display: inline-flex; align-items: center; }
+.bc-card { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.bc-view { position: relative; flex: 1; min-height: 150px; border-radius: 12px; overflow: hidden; background: #02060f; border: 1px solid var(--ws-line); }
+.bc-view video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bc-wait { display: grid; place-items: center; height: 100%; color: var(--ws-dim); font-size: 0.85rem; padding: 12px; text-align: center; }
+.bc-wire { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; gap: 8px; align-items: center; padding: 8px 10px; border-radius: 10px; background: rgba(3, 8, 18, 0.82); backdrop-filter: blur(6px); border: 1px solid rgba(70, 226, 255, 0.3); font-size: 0.82rem; line-height: 1.35; }
+.bc-wire b { color: var(--ws-accent); font: 700 0.72rem/1 ui-monospace, Menlo, monospace; letter-spacing: 0.06em; text-transform: uppercase; margin-right: 4px; }
+.bc-dot { flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.6); }
+.bc-still { position: absolute; inset: 0; padding: 0; border: 0; background: #000; cursor: pointer; }
+.bc-still img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bc-ring { position: absolute; transform: translate(-50%, -50%); min-width: 28px; min-height: 28px; border-radius: 50%; border: 3px solid var(--ws-accent); box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.45), 0 0 22px rgba(70, 226, 255, 0.9); animation: bc-ring 1.2s ease-in-out infinite; }
+@keyframes bc-ring { 50% { transform: translate(-50%, -50%) scale(1.12); } }
+.bc-ring-label { position: absolute; transform: translate(-50%, 8px); padding: 4px 8px; border-radius: 6px; background: var(--ws-accent); color: #021018; font-size: 0.78rem; white-space: nowrap; }
+.bc-progress { display: flex; gap: 3px; }
+.bc-progress i { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, 0.08); }
+.bc-progress i.done { background: #2f7dff; }
+.bc-progress i.seen { background: #5cf0b0; box-shadow: 0 0 6px rgba(92, 240, 176, 0.6); }
+.bc-progress i.now { background: var(--ws-accent); animation: bc-pulse-bar 1.2s ease-in-out infinite; }
+@keyframes bc-pulse-bar { 50% { opacity: 0.45; } }
+.bc-said { margin: 0; font-size: 0.82rem; color: var(--ws-ink); line-height: 1.4; max-height: 3.6em; overflow: hidden; }
+.bc-log { margin: 0; max-height: 90px; overflow: auto; padding: 8px; border-radius: 8px; background: rgba(0, 0, 0, 0.35); border: 1px solid var(--ws-line); font: 0.72rem/1.4 ui-monospace, Menlo, monospace; color: #b9c8e2; white-space: pre-wrap; }
+.bc-actions { display: flex; align-items: center; gap: 8px; }
+.bc-count { flex: 1; text-align: center; color: var(--ws-dim); font: 600 0.72rem/1.2 ui-monospace, Menlo, monospace; }
+.bc-end { color: #ff8a9b; border-color: rgba(255, 90, 110, 0.4); }
+.bc.big .bc-card { position: fixed; z-index: 70; left: calc(var(--ws-side) + 16px); bottom: 16px; width: min(720px, calc(100vw - var(--ws-side) - var(--ws-ai) - 48px)); height: min(620px, calc(100vh - 120px)); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+@media (max-width: 1100px) { .bc.big .bc-card { left: 12px; right: 12px; width: auto; } }
+.bc-ask { position: absolute; z-index: 20; top: 64px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 14px; background: rgba(8, 18, 38, 0.96); border: 1px solid rgba(70, 226, 255, 0.4); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); font-size: 0.88rem; max-width: calc(100% - 32px); }
+@media (prefers-reduced-motion: reduce) { .bc-live, .bc-ring, .bc-progress i.now { animation: none; } }
+
+.ws-stage { position: relative; }
+
+/* the camera card, made bigger in place (it stays the camera, not a call) */
+.ws-camcard.big { position: fixed; z-index: 70; left: calc(var(--ws-side) + 16px); bottom: 16px; width: min(720px, calc(100vw - var(--ws-side) - var(--ws-ai) - 48px)); display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6); }
+.ws-camcard.big .ws-cam-view { height: auto; aspect-ratio: 16 / 10; }
+@media (max-width: 1100px) { .ws-camcard.big { left: 12px; right: 12px; width: auto; } }
+.ws-dock:has(.ws-camcard.big), .ws-dock:has(.bc.big) { position: relative; z-index: 90; }
+.ws-camcard.big, .bc.big .bc-card { background: #081325; width: min(600px, calc(100vw - var(--ws-side) - var(--ws-ai) - 48px)); }

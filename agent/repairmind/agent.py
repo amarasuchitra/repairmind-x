@@ -582,6 +582,16 @@ class Mechanic(Agent):
         return await self._done(result)
 
 
+def _mode(metadata: str) -> str:
+    """ "build" for a live build call, anything else is a repair call."""
+    try:
+        data = json.loads(metadata) if metadata else {}
+    except json.JSONDecodeError:
+        return "repair"
+    mode = data.get("mode") if isinstance(data, dict) else None
+    return mode if mode in ("build", "guide") else "repair"
+
+
 def _languages(metadata: str) -> tuple[str, str]:
     """(language, ui_language) from the dispatch metadata; anything unreadable means "auto"."""
     try:
@@ -601,6 +611,37 @@ async def entrypoint(ctx: JobContext) -> None:
     # Must run before any audio stream exists; see audio_warmup.py (Windows crash).
     warm_up_resampler()
     await ctx.connect()
+
+    metadata = getattr(ctx.job, "metadata", "") or ""
+    log.info("call started in room %s, mode %s", ctx.room.name, _mode(metadata))
+    if _mode(metadata) == "guide":
+        from .guide import live as guide_live
+
+        language, ui_language = _languages(metadata)
+        speech_code = i18n.gemini_language_code(language)
+        session = AgentSession(
+            llm=google.realtime.RealtimeModel(model=GEMINI_MODEL, voice=GEMINI_VOICE, api_version=GEMINI_API_VERSION,
+                                              temperature=0.5, **({"language": speech_code} if speech_code else {})),
+            max_tool_steps=8,
+        )
+        await guide_live.run(ctx, session, language, ui_language)
+        return
+    if _mode(metadata) == "build":
+        from .coach import entry as coach_entry
+
+        frames = FrameGrabber()
+        frames.attach(ctx.room)
+        language, ui_language = _languages(metadata)
+        speech_code = i18n.gemini_language_code(language)
+        session = AgentSession(
+            llm=google.realtime.RealtimeModel(model=GEMINI_MODEL, voice=GEMINI_VOICE, api_version=GEMINI_API_VERSION,
+                                              temperature=0.4, **({"language": speech_code} if speech_code else {})),
+            video_sampler=VoiceActivityVideoSampler(speaking_fps=1.0, silent_fps=0.5),
+            max_tool_steps=8,
+        )
+        safe = re.sub(r"[^a-zA-Z0-9_-]", "", ctx.room.name)[:64] or "room"
+        await coach_entry.run(ctx, session, frames, language, ui_language, SESSIONS_DIR / "builds" / safe)
+        return
 
     # Resume a dropped call: the web app reuses the room name for the same repair.
     safe_name = re.sub(r"[^a-zA-Z0-9_-]", "", ctx.room.name)[:64] or "room"
